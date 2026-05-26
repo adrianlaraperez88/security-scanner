@@ -29,9 +29,9 @@ jobs:
           node-version: '20'
 
       - name: Install Security Scanner
-        run: npm install -g security-scanner
-        # OR if using local dev version:
-        # run: cd /path/to/scanner && npm link
+        run: |
+          npm ci
+          npm link
 
       - name: Run Security Scan
         run: |
@@ -55,14 +55,14 @@ jobs:
             scan-report.json
           retention-days: 90
 
-      - name: Notify on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "🚨 Security scan failed for ${{ matrix.target }} — check the workflow for findings."
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      # - name: Notify on failure
+      #   if: failure()
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     payload: |
+      #       {
+      #         "text": "🚨 Security scan failed for ${{ matrix.target }} — check the workflow for findings."
+      #       }
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK }}
+      #     SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
