@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node bin/cli.js",
     "scan": "node bin/cli.js",
-    "test": "node --test tests/core/ tests/checks/"
+    "test": "node --test"
   },
   "dependencies": {
     "p-limit": "^5.0.0"
