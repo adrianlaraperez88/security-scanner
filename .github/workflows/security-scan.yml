@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'          # Every Monday at 08:00 UTC
+  push:
+    branches: [main, master]
+  workflow_dispatch:              # Allow manual trigger
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        target:
+          - https://api-prod.infsalesgroup.com
+          # Add more targets here:
+          # - https://api-dev.infsalesgroup.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Security Scanner
+        run: npm install -g security-scanner
+        # OR if using local dev version:
+        # run: cd /path/to/scanner && npm link
+
+      - name: Run Security Scan
+        run: |
+          secscan ${{ matrix.target }} \
+            --profile full \
+            --json \
+            --html \
+            --output scan-report \
+            --timeout 15000
+        # Exit code 2 = VULNERABLE findings (job fails)
+        # Exit code 1 = HIGH risk (job fails)
+        # Exit code 0 = all clear
+
+      - name: Upload HTML Report
+        if: always()               # Upload even if scan found vulnerabilities
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ strategy.job-index }}
+          path: |
+            scan-report.html
+            scan-report.json
+          retention-days: 90
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🚨 Security scan failed for ${{ matrix.target }} — check the workflow for findings."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

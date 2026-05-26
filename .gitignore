@@ -1,0 +1,21 @@
+# Secrets & environment
+.env
+.env.*
+!.env.example
+
+# Generated reports
+report.json
+report.html
+php-scan.json
+php-scan.html
+scan_api_dev_verification.html
+verif-report-260421.html
+*.report.json
+
+# Scan history
+.secscan-history/
+
+# Node
+node_modules/
+npm-debug.log*
+
