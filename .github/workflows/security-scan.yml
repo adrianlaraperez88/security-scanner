@@ -15,9 +15,9 @@ jobs:
     strategy:
       matrix:
         target:
-          - https://api-prod.infsalesgroup.com
+          - https://example.com
           # Add more targets here:
-          # - https://api-dev.infsalesgroup.com
+          # - https://httpbin.org
 
     steps:
       - name: Checkout
