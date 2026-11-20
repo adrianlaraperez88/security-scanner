@@ -42,12 +42,17 @@ export default async function run(target, fetchWithRetry) {
     }
 
     const maxSev = issues.some(i => i.severity === 'HIGH') ? 'HIGH' : 'MEDIUM';
+    const evidenceQuotes = issues.map(i => `${i.header}: ${i.value}`).filter(q => q.length >= 8);
 
     return {
       name    : 'server version disclosure',
       status  : 'SUSPICIOUS',
       severity: maxSev,
+      path    : '/',
+      detail  : issues.map(i => `${i.header}: ${i.value} (${i.detail})`).join('; '),
       issues,
+      ...(evidenceQuotes.length > 0 ? { evidenceQuotes } : {}),
+      ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {}),
       fix     : "Disable server signatures (e.g., 'ServerTokens Prod' in Apache, 'server_tokens off' in Nginx) and remove headers like 'X-Powered-By' to prevent version disclosure."
     };
 

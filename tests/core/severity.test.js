@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert    from 'node:assert/strict';
 import { calculateRisk } from '../../core/severity.js';
+import { groupFindings, generateHtmlReport } from '../../core/html-report.js';
 
 test('calculateRisk: empty results → LOW score 0', () => {
   const r = calculateRisk([]);
@@ -42,4 +43,30 @@ test('calculateRisk: score >= 40 → CRITICAL level', () => {
 test('calculateRisk: unknown severity treated as 0', () => {
   const r = calculateRisk([{ severity: 'UNKNOWN' }]);
   assert.equal(r.score, 0);
+});
+
+test('calculateRisk & groupFindings: deduplicates same vulnerability across multiple pages', () => {
+  const multiPageResults = [
+    { target: 'https://example.com/a', name: 'cors misconfiguration', status: 'VULNERABLE', severity: 'MEDIUM' },
+    { target: 'https://example.com/b', name: 'cors misconfiguration', status: 'VULNERABLE', severity: 'MEDIUM' },
+    { target: 'https://example.com/c', name: 'cors misconfiguration', status: 'VULNERABLE', severity: 'MEDIUM' },
+  ];
+
+  const risk = calculateRisk(multiPageResults);
+  assert.equal(risk.score, 5); // counted once (5), not 3x (15)
+
+  const grouped = groupFindings(multiPageResults);
+  assert.equal(grouped.length, 1);
+  assert.deepEqual(grouped[0].pages, [
+    'https://example.com/a',
+    'https://example.com/b',
+    'https://example.com/c',
+  ]);
+  assert.equal(grouped[0].pageCount, 3);
+
+  const html = generateHtmlReport(multiPageResults, risk);
+  assert.ok(html.includes('Pages (3):'));
+  assert.ok(html.includes('https://example.com/a'));
+  assert.ok(html.includes('https://example.com/b'));
+  assert.ok(html.includes('https://example.com/c'));
 });

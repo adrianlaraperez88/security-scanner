@@ -2,19 +2,58 @@ import { Fuzzer } from '../core/fuzzer.js';
 
 export const tags = ['all'];
 
-export default async function run(target, fetchWithRetry) {
+export default async function run(target, fetchWithRetry, options = {}) {
   const fuzzer = new Fuzzer(fetchWithRetry);
-  
-  // 1. Error-based probe (Single quote)
-  const errorFindings = await fuzzer.fuzz(target, "'", 'SQLI_ERROR');
-  
-  // 2. Time-based blind probe (Sleep)
-  // We use a 5-second sleep. Fuzzer detects vulnerable if > 4.5s
-  const timeFindings = await fuzzer.fuzz(target, "') OR SLEEP(5) --", 'SQLI_TIME');
 
-  const allFindings = [...errorFindings, ...timeFindings];
+  let errorResult;
+  let timeResult;
+  try {
+    // 1. Error-based probe (Single quote)
+    errorResult = await fuzzer.fuzzDetailed(target, "'", 'SQLI_ERROR', options);
+    if (errorResult.governanceError) {
+      return {
+        name: 'sql injection',
+        status: 'ERROR',
+        severity: 'NONE',
+        reason: errorResult.governanceError.message || 'Blocked by governance policy'
+      };
+    }
+
+    // 2. Time-based blind probe (Sleep) using baseline-adjusted latency
+    timeResult = await fuzzer.fuzzDetailed(target, "') OR SLEEP(5) --", 'SQLI_TIME', options);
+    if (timeResult.governanceError) {
+      return {
+        name: 'sql injection',
+        status: 'ERROR',
+        severity: 'NONE',
+        reason: timeResult.governanceError.message || 'Blocked by governance policy'
+      };
+    }
+  } catch (err) {
+    return {
+      name: 'sql injection',
+      status: 'ERROR',
+      severity: 'NONE',
+      reason: err?.message || 'Invalid target URL'
+    };
+  }
+
+  const allFindings = [...errorResult.findings, ...timeResult.findings];
+  const totalAttempted = errorResult.attempted + timeResult.attempted;
+  const anyNetworkSuccess =
+    (errorResult.attempted > 0 && errorResult.networkSuccess) ||
+    (timeResult.attempted > 0 && timeResult.networkSuccess);
 
   if (allFindings.length === 0) {
+    if (totalAttempted > 0 && !anyNetworkSuccess) {
+      const err = timeResult.lastError || errorResult.lastError;
+      return {
+        name: 'sql injection',
+        status: 'ERROR',
+        severity: 'NONE',
+        reason: err?.message || 'Target unreachable'
+      };
+    }
     return { name: 'sql injection', status: 'SAFE', severity: 'NONE' };
   }
 

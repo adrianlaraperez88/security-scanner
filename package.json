@@ -1,7 +1,7 @@
 {
   "name": "security-scanner",
-  "version": "1.2.0",
-  "description": "Modular CLI security scanner — Laravel, PHP, WordPress, REST APIs. HTML + JSON reports.",
+  "version": "2.2.0",
+  "description": "Modular CLI & Web UI security scanner — Next.js, Spring Boot, AI/LLM & MCP exposure, SRI Supply Chain, Laravel, PHP, WordPress. Real-time dashboard and dark-mode HTML reports.",
   "type": "module",
   "bin": {
     "secscan": "./bin/cli.js"
@@ -9,6 +9,15 @@
   "scripts": {
     "start": "node bin/cli.js",
     "scan": "node bin/cli.js",
+    "ui": "node bin/cli.js --ui",
+    "ui:watch": "node --watch core/server.js",
+    "cve:audit": "node bin/cli.js --cve-audit",
+    "cve:confirm": "node bin/cli.js --cve-audit --cve-db osv",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:watch": "docker compose up --watch",
+    "docker:logs": "docker compose logs -f secscan",
+    "docker:down": "docker compose down",
     "test": "node --test"
   },
   "dependencies": {

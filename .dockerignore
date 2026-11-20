@@ -1,0 +1,12 @@
+node_modules
+.git
+.gitignore
+.secscan-history
+reports
+*.log
+npm-debug.log*
+.env
+.env.*
+coverage
+.DS_Store
+Thumbs.db

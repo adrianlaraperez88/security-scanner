@@ -1,76 +1,103 @@
-export const tags = ['magento', 'all'];
+import {
+  isHtmlOrScript,
+  isRedirectedToDifferentPath,
+  isFrameworkRouteErrorResponse,
+  extractVerbatimSnippet,
+  confirmReproducible
+} from '../core/check-verify.js';
 
-/**
- * Magento Admin Panel + Credential File Exposure
- *
- * Checks for misconfigured Magento installations where:
- *  - Admin panels are accessible to the public
- *  - Database credential files are web-accessible
- *  - Debug/health endpoints leak server information
- *  - Log files containing stack traces are readable
- */
+export const tags = ['magento'];
 
 const CHECKS = [
-  // ── Credential files (CRITICAL) ─────────────────────────────────────────
   {
     path    : '/app/etc/local.xml',
-    signals : ['<connection>', '<host>', '<username>', '<password>'],
     severity: 'CRITICAL',
-    detail  : 'Magento 1 config — DB credentials in plaintext XML'
+    detail  : 'Magento 1 config — DB credentials in plaintext XML',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text : '';
+      return !isHtmlOrScript(res, text) && text.includes('<connection>') && (text.includes('<password>') || text.includes('<host>'));
+    },
+    signalDesc: 'Magento local.xml DB credentials'
   },
   {
     path    : '/app/etc/env.php',
-    signals : ['db', 'host', 'password', 'crypt', '<?php'],
     severity: 'CRITICAL',
-    detail  : 'Magento 2 config — credentials and encryption key'
+    detail  : 'Magento 2 config — credentials and encryption key',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text : '';
+      return !isHtmlOrScript(res, text) && text.includes('<?php') && text.includes("'crypt'") && text.includes("'db'");
+    },
+    signalDesc: 'Magento env.php crypt/db array'
   },
-
-  // ── Admin panels (HIGH) ───────────────────────────────────────────────────
   {
     path    : '/downloader/',
-    signals : ['magento connect', 'downloader', 'package'],
     severity: 'HIGH',
-    detail  : 'Magento Connect installer/admin panel accessible'
+    detail  : 'Magento Connect installer/admin panel accessible',
+    validate: (res) => {
+      const lower = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return lower.includes('magento connect');
+    },
+    signalDesc: 'Magento Connect panel'
   },
   {
     path    : '/admin/dashboard',
-    signals : ['magento', 'dashboard', 'admin'],
     severity: 'HIGH',
-    detail  : 'Magento admin panel accessible at /admin'
+    detail  : 'Magento admin panel accessible at /admin/dashboard',
+    validate: (res) => {
+      const lower = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return lower.includes('magento') && lower.includes('dashboard');
+    },
+    signalDesc: 'Magento admin dashboard'
   },
   {
     path    : '/backend/',
-    signals : ['magento', 'dashboard'],
     severity: 'HIGH',
-    detail  : 'Magento admin panel accessible at /backend'
+    detail  : 'Magento admin panel accessible at /backend/',
+    validate: (res) => {
+      const lower = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return lower.includes('magento') && (lower.includes('dashboard') || lower.includes('adminhtml'));
+    },
+    signalDesc: 'Magento backend adminhtml'
   },
-
-  // ── Version/info disclosure (MEDIUM) ─────────────────────────────────────
   {
     path    : '/magento_version',
-    signals : ['magento', '.'],      // any version string "x.y.z"
     severity: 'MEDIUM',
-    detail  : 'Magento version disclosed — enables targeted CVE exploitation'
+    detail  : 'Magento version disclosed — enables targeted CVE exploitation',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text : '';
+      return !isHtmlOrScript(res, text) && /\bMagento\/\d+\.\d+/i.test(text);
+    },
+    signalDesc: 'Magento version banner'
   },
   {
     path    : '/pub/health_check.php',
-    signals : ['ok', 'maintenance', 'magento'],
     severity: 'LOW',
-    detail  : 'Magento health check accessible — leaks environment status'
+    detail  : 'Magento health check accessible — leaks environment status',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text.trim() : '';
+      return !isHtmlOrScript(res, text) && (text === '' || text.toLowerCase() === 'ok' || text.toLowerCase().includes('maintenance'));
+    },
+    signalDesc: 'Magento health check status'
   },
-
-  // ── Log files (HIGH) ──────────────────────────────────────────────────────
   {
     path    : '/var/log/system.log',
-    signals : ['magento', 'exception', 'error', 'warning', 'critical'],
     severity: 'HIGH',
-    detail  : 'Magento system log readable — may contain credentials or internal paths'
+    detail  : 'Magento system log readable — may contain credentials or internal paths',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text : '';
+      return !isHtmlOrScript(res, text) && /\[\d{4}-\d{2}-\d{2}|main\.(CRITICAL|ERROR|WARNING)/i.test(text);
+    },
+    signalDesc: 'Magento system.log entries'
   },
   {
     path    : '/var/log/exception.log',
-    signals : ['exception', 'stack trace', '#0', 'vendor/magento'],
     severity: 'HIGH',
-    detail  : 'Magento exception log readable — stack traces expose internal paths'
+    detail  : 'Magento exception log readable — stack traces expose internal paths',
+    validate: (res) => {
+      const text = typeof res?.text === 'string' ? res.text : '';
+      return !isHtmlOrScript(res, text) && (text.includes('vendor/magento') || (text.includes('Stack trace:') && text.includes('#0 ')));
+    },
+    signalDesc: 'Magento exception.log stack traces'
   },
 ];
 
@@ -79,14 +106,40 @@ export default async function run(target, fetchWithRetry) {
 
   for (const check of CHECKS) {
     try {
-      const res = await fetchWithRetry(`${target}${check.path}`);
-      if (res.status !== 200) continue;
-
-      const body     = res.text.toLowerCase();
-      const hasSignal = check.signals.some(s => body.includes(s.toLowerCase()));
-      if (hasSignal) {
-        found.push({ path: check.path, severity: check.severity, detail: check.detail });
+      const url = `${target}${check.path}`;
+      const res = await fetchWithRetry(url, { followRedirects: false });
+      if (
+        res?.status !== 200 ||
+        isRedirectedToDifferentPath(res, url) ||
+        isFrameworkRouteErrorResponse(res, res?.text) ||
+        !check.validate(res)
+      ) {
+        continue;
       }
+
+      const { confirmed, res: cRes } = await confirmReproducible(
+        url,
+        fetchWithRetry,
+        { followRedirects: false },
+        (r) => r?.status === 200 && !isRedirectedToDifferentPath(r, url) && check.validate(r)
+      );
+      if (!confirmed) continue;
+
+      const finalRes = cRes || res;
+      const preview = extractVerbatimSnippet(finalRes.text || res.text || '', /Magento|<connection>|'crypt'|CRITICAL|ERROR|Stack trace|ok/i)
+        || check.signalDesc;
+      found.push({
+        path         : check.path,
+        url,
+        method       : 'GET',
+        status       : 200,
+        severity     : check.severity,
+        matchedSignal: check.signalDesc,
+        reproducible : true,
+        preview,
+        detail       : check.detail,
+        ...(finalRes?.trafficId !== undefined ? { trafficId: finalRes.trafficId } : {})
+      });
     } catch { /* unreachable */ }
   }
 
@@ -97,13 +150,21 @@ export default async function run(target, fetchWithRetry) {
   const maxSev = found.some(f => f.severity === 'CRITICAL') ? 'CRITICAL'
                : found.some(f => f.severity === 'HIGH')     ? 'HIGH'
                : 'MEDIUM';
+  const primary = found[0];
+  const evidenceQuotes = found.map(f => f.preview).filter(q => typeof q === 'string' && q.length >= 8).slice(0, 5);
 
   return {
-    name    : 'magento exposure',
-    status  : 'VULNERABLE',
-    severity: maxSev,
-    findings: found,
-    detail  : `${found.length} Magento misconfiguration(s) found`,
-    fix     : "Secure your Magento installation by denying access to the 'app/etc/', 'var/log/', and 'downloader/' directories. Move the admin panel to a non-default URL and restrict it to trusted IPs."
+    name          : 'magento exposure',
+    status        : 'VULNERABLE',
+    severity      : maxSev,
+    path          : primary.path,
+    findings      : found,
+    files         : found,
+    detail        : `Confirmed ${found.length} Magento misconfiguration(s): ${found.map(f => f.path).join(', ')}`,
+    reproVerified : true,
+    poeLevel      : evidenceQuotes.length > 0 ? 3 : 2,
+    ...(evidenceQuotes.length > 0 ? { evidenceQuotes } : {}),
+    ...(primary.trafficId !== undefined ? { trafficId: primary.trafficId } : {}),
+    fix           : "Secure your Magento installation by denying access to the 'app/etc/', 'var/log/', and 'downloader/' directories. Move the admin panel to a non-default URL and restrict it to trusted IPs."
   };
 }

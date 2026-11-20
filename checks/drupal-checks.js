@@ -1,30 +1,19 @@
-export const tags = ['drupal', 'php', 'all'];
+import {
+  getHeader,
+  isHtmlOrScript,
+  extractVerbatimSnippet,
+  confirmReproducible
+} from '../core/check-verify.js';
 
-/**
- * Drupal Security Checks
- *
- * CVEs covered:
- *   CVE-2025-13081 — Drupal Core object injection
- *   CVE-2024-55638 — Deserialization of untrusted data
- *   Drupal 7 EOL  — January 5, 2025 (CRITICAL — no more security patches)
- *   Drupal 9 EOL  — November 2023
- *
- * Detection approach (passive):
- *   1. Detect Drupal via headers (X-Generator, X-Drupal-Cache)
- *   2. Extract version from CHANGELOG.txt or meta generator tag
- *   3. Flag EOL versions as CRITICAL/HIGH
- *   4. Check exposed admin paths and file directories
- */
+export const tags = ['drupal'];
 
 const CHANGELOG_PATHS = [
-  '/CHANGELOG.txt',          // Drupal 7
-  '/core/CHANGELOG.txt',     // Drupal 8/9/10/11
+  '/CHANGELOG.txt',
+  '/core/CHANGELOG.txt',
 ];
 
-// Version extracted from "Drupal X.Y.Z, YYYY-MM-DD"
 const VERSION_RE = /Drupal\s+([\d]+\.[\d.]+)/i;
 
-// Drupal 7 EOL: Jan 2025 | Drupal 9 EOL: Nov 2023
 function evaluateVersion(version) {
   const maj = parseInt(version?.split('.')[0] ?? '0', 10);
   if (maj <= 7)  return { eol: true,  severity: 'CRITICAL', label: `Drupal ${version} — EOL, no security patches` };
@@ -36,74 +25,109 @@ function evaluateVersion(version) {
 const PATH_CHECKS = [
   {
     path    : '/user/register',
-    signals : ['create new account', 'register', 'username', 'email address'],
     severity: 'MEDIUM',
-    detail  : 'Drupal open user registration — verify CAPTCHA and email verification are enforced'
+    detail  : 'Drupal open user registration — verify CAPTCHA and email verification are enforced',
+    validate: (res) => {
+      const text = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return text.includes('user-register-form') || (text.includes('create new account') && text.includes('drupal'));
+    },
+    signalDesc: 'Drupal user-register-form'
   },
   {
     path    : '/sites/default/files/',
-    signals : ['index of', 'parent directory', '.php', '.tar'],
     severity: 'HIGH',
-    detail  : 'Drupal files directory browsable — may expose uploaded files or PHP scripts'
+    detail  : 'Drupal files directory browsable — may expose uploaded files or PHP scripts',
+    validate: (res) => {
+      const text = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return text.includes('index of') && (text.includes('parent directory') || text.includes('.tar') || text.includes('.php'));
+    },
+    signalDesc: 'Directory listing in /sites/default/files/'
   },
   {
     path    : '/admin/reports/status',
-    signals : ['site status', 'drupal', 'database', 'php version'],
     severity: 'HIGH',
-    detail  : 'Drupal admin status report accessible without authentication'
+    detail  : 'Drupal admin status report accessible without authentication',
+    validate: (res) => {
+      const text = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
+      return text.includes('drupal') && text.includes('system-status-report');
+    },
+    signalDesc: 'Drupal system-status-report'
   },
 ];
 
 async function detectDrupal(target, fetchWithRetry) {
   try {
     const res  = await fetchWithRetry(target);
-    const h    = res.headers ?? {};
-    const html = res.text.toLowerCase();
+    const xGen = getHeader(res?.headers, 'x-generator').toLowerCase();
+    const html = (typeof res?.text === 'string' ? res.text : '').toLowerCase();
 
-    const byHeader = h['x-generator']?.toLowerCase().includes('drupal')
-                  || !!h['x-drupal-cache']
-                  || !!h['x-drupal-dynamic-cache'];
+    const byHeader = xGen.includes('drupal')
+                  || Boolean(getHeader(res?.headers, 'x-drupal-cache'))
+                  || Boolean(getHeader(res?.headers, 'x-drupal-dynamic-cache'));
 
-    const byHtml   = html.includes('drupal')
-                  || html.includes('/sites/default/files');
+    const byHtml   = html.includes('/sites/default/files')
+                  || html.includes('/core/misc/drupal.js')
+                  || html.includes('drupal.settings')
+                  || /<meta[^>]+name=["']generator["'][^>]+drupal/i.test(html);
 
-    return byHeader || byHtml;
+    return { detected: byHeader || byHtml, trafficId: res?.trafficId };
   } catch {
-    return false;
+    return { detected: false, trafficId: undefined };
   }
 }
 
 async function getVersion(target, fetchWithRetry) {
   for (const p of CHANGELOG_PATHS) {
     try {
-      const res = await fetchWithRetry(`${target}${p}`);
-      if (res.status !== 200) continue;
+      const url = `${target}${p}`;
+      const res = await fetchWithRetry(url);
+      if (res?.status !== 200 || isHtmlOrScript(res, res.text)) continue;
 
-      const m = res.text.match(VERSION_RE);
-      if (m) return { version: m[1], path: p };
+      const text = typeof res.text === 'string' ? res.text : '';
+      const m = text.match(VERSION_RE);
+      if (m) {
+        const { confirmed, res: cRes } = await confirmReproducible(
+          url,
+          fetchWithRetry,
+          {},
+          (r) => r?.status === 200 && !isHtmlOrScript(r, r.text) && VERSION_RE.test(r.text || '')
+        );
+        if (confirmed) {
+          return {
+            version: m[1],
+            path: p,
+            url,
+            preview: extractVerbatimSnippet(text, VERSION_RE) || `Drupal ${m[1]}`,
+            trafficId: cRes?.trafficId ?? res.trafficId
+          };
+        }
+      }
     } catch { /* skip */ }
   }
   return { version: null, path: null };
 }
 
 export default async function run(target, fetchWithRetry) {
-  // ── Step 1: Detect Drupal ─────────────────────────────────────────────────
-  const isDrupal = await detectDrupal(target, fetchWithRetry);
+  const { detected: isDrupal, trafficId: rootTrafficId } = await detectDrupal(target, fetchWithRetry);
   if (!isDrupal) {
     return { name: 'drupal exposure', status: 'SAFE', severity: 'NONE' };
   }
 
   const findings = [];
-
-  // ── Step 2: Version extraction ────────────────────────────────────────────
-  const { version, path: changelogPath } = await getVersion(target, fetchWithRetry);
+  const { version, path: changelogPath, url: clUrl, preview: clPreview, trafficId: clTrafficId } = await getVersion(target, fetchWithRetry);
 
   if (changelogPath) {
-    // CHANGELOG.txt itself being accessible is an info leak
     findings.push({
-      path    : changelogPath,
-      severity: 'LOW',
-      detail  : `CHANGELOG.txt accessible — reveals exact Drupal version${version ? ` (${version})` : ''}`
+      path         : changelogPath,
+      url          : clUrl,
+      method       : 'GET',
+      status       : 200,
+      severity     : 'LOW',
+      matchedSignal: clPreview || 'Drupal CHANGELOG.txt',
+      reproducible : true,
+      preview      : clPreview || `Drupal CHANGELOG.txt at ${changelogPath}`,
+      detail       : `CHANGELOG.txt accessible — reveals exact Drupal version${version ? ` (${version})` : ''}`,
+      ...(clTrafficId !== undefined ? { trafficId: clTrafficId } : {})
     });
   }
 
@@ -111,33 +135,63 @@ export default async function run(target, fetchWithRetry) {
     const vEval = evaluateVersion(version);
     if (vEval.eol || vEval.severity !== 'LOW') {
       findings.push({
-        path    : changelogPath ?? '/',
-        severity: vEval.severity,
-        detail  : vEval.label,
-        cve     : vEval.severity === 'CRITICAL' ? 'EOL + CVE-2025-13081, CVE-2024-55638'
-                : vEval.severity === 'HIGH'     ? 'EOL + last patch cycle ended'
-                : 'CVE-2025-13081, CVE-2024-55638'
+        path         : changelogPath ?? '/',
+        url          : clUrl || target,
+        method       : 'GET',
+        status       : 200,
+        severity     : vEval.severity,
+        matchedSignal: `Drupal ${version}`,
+        reproducible : true,
+        preview      : clPreview || `Drupal ${version}`,
+        detail       : vEval.label,
+        cve          : vEval.severity === 'CRITICAL' ? 'EOL + CVE-2025-13081, CVE-2024-55638'
+                     : vEval.severity === 'HIGH'     ? 'EOL + last patch cycle ended'
+                     : 'CVE-2025-13081, CVE-2024-55638',
+        ...(clTrafficId ?? rootTrafficId !== undefined ? { trafficId: clTrafficId ?? rootTrafficId } : {})
       });
     }
   } else {
-    // Drupal found but no version — still a risk signal
     findings.push({
-      path    : '/',
-      severity: 'LOW',
-      detail  : 'Drupal detected — could not determine version. Verify it is fully patched.'
+      path         : '/',
+      url          : target,
+      method       : 'GET',
+      status       : 200,
+      severity     : 'LOW',
+      matchedSignal: 'Drupal header/asset signature',
+      reproducible : true,
+      preview      : 'Drupal framework signature detected',
+      detail       : 'Drupal detected — could not determine version. Verify it is fully patched.',
+      ...(rootTrafficId !== undefined ? { trafficId: rootTrafficId } : {})
     });
   }
 
-  // ── Step 3: Admin/file path checks ───────────────────────────────────────
   for (const check of PATH_CHECKS) {
     try {
-      const res = await fetchWithRetry(`${target}${check.path}`);
-      if (res.status !== 200) continue;
+      const url = `${target}${check.path}`;
+      const res = await fetchWithRetry(url);
+      if (res?.status !== 200 || !check.validate(res)) continue;
 
-      const body = res.text.toLowerCase();
-      if (check.signals.some(s => body.includes(s))) {
-        findings.push({ path: check.path, severity: check.severity, detail: check.detail });
-      }
+      const { confirmed, res: cRes } = await confirmReproducible(
+        url,
+        fetchWithRetry,
+        {},
+        (r) => r?.status === 200 && check.validate(r)
+      );
+      if (!confirmed) continue;
+
+      const finalRes = cRes || res;
+      findings.push({
+        path         : check.path,
+        url,
+        method       : 'GET',
+        status       : 200,
+        severity     : check.severity,
+        matchedSignal: check.signalDesc,
+        reproducible : true,
+        preview      : extractVerbatimSnippet(finalRes.text || res.text || '', /user-register-form|index of|system-status-report|drupal/i) || check.signalDesc,
+        detail       : check.detail,
+        ...(finalRes?.trafficId !== undefined ? { trafficId: finalRes.trafficId } : {})
+      });
     } catch { /* unreachable */ }
   }
 
@@ -145,14 +199,22 @@ export default async function run(target, fetchWithRetry) {
                : findings.some(f => f.severity === 'HIGH')     ? 'HIGH'
                : findings.some(f => f.severity === 'MEDIUM')   ? 'MEDIUM'
                : 'LOW';
+  const primary = findings[0];
+  const evidenceQuotes = findings.map(f => f.preview).filter(q => typeof q === 'string' && q.length >= 8).slice(0, 5);
 
   return {
-    name    : 'drupal exposure',
-    status  : maxSev === 'LOW' ? 'SUSPICIOUS' : 'VULNERABLE',
-    severity: maxSev,
-    version : version ?? 'unknown',
+    name          : 'drupal exposure',
+    status        : maxSev === 'LOW' ? 'SUSPICIOUS' : 'VULNERABLE',
+    severity      : maxSev,
+    path          : changelogPath || primary.path,
+    version       : version ?? 'unknown',
     findings,
-    detail  : `${findings.length} Drupal security issue(s) found`,
-    fix     : "Upgrade Drupal to a supported version (10.x or 11.x) immediately, as Drupal 7 and 9 are EOL. Patch for CVE-2025-13081 and CVE-2024-55638, and restrict access to 'CHANGELOG.txt' and 'sites/default/files' browsing."
+    files         : findings,
+    detail        : `Confirmed ${findings.length} Drupal security issue(s)`,
+    reproVerified : true,
+    poeLevel      : evidenceQuotes.length > 0 ? 3 : 2,
+    ...(evidenceQuotes.length > 0 ? { evidenceQuotes } : {}),
+    ...(primary.trafficId !== undefined ? { trafficId: primary.trafficId } : {}),
+    fix           : "Upgrade Drupal to a supported version (10.x or 11.x) immediately, as Drupal 7 and 9 are EOL. Patch for CVE-2025-13081 and CVE-2024-55638, and restrict access to 'CHANGELOG.txt' and 'sites/default/files' browsing."
   };
 }

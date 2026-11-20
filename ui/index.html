@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Scanner 2.2 · Autonomous Security Verification Platform</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation Header -->
+    <header class="top-nav">
+      <div class="nav-brand">
+        <span class="brand-icon">🛡️</span>
+        <div class="brand-info">
+          <span class="brand-title">Security Scanner <span class="version-tag">v2.2</span></span>
+          <span class="brand-subtitle">Autonomous Web Security &amp; Verification Platform</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" role="tablist" aria-label="Dashboard Sections">
+        <button type="button" class="tab-btn active" data-tab="new-scan" role="tab" aria-selected="true" aria-controls="tab-new-scan" tabindex="0" id="tab-btn-new-scan">
+          <span class="tab-icon">🚀</span>
+          <span>New Scan</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="scan-results" role="tab" aria-selected="false" aria-controls="tab-scan-results" tabindex="-1" id="tab-btn-scan-results">
+          <span class="tab-icon">📊</span>
+          <span>Scan Results &amp; Evidence</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="tasks-sessions" role="tab" aria-selected="false" aria-controls="tab-tasks-sessions" tabindex="-1" id="tab-btn-tasks-sessions">
+          <span class="tab-icon">🤖</span>
+          <span>Tasks &amp; Sessions</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="dual-graph" role="tab" aria-selected="false" aria-controls="tab-dual-graph" tabindex="-1" id="tab-btn-dual-graph">
+          <span class="tab-icon">🕸️</span>
+          <span>Dual-Graph Explorer</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="traffic-replay" role="tab" aria-selected="false" aria-controls="tab-traffic-replay" tabindex="-1" id="tab-btn-traffic-replay">
+          <span class="tab-icon">📡</span>
+          <span>Traffic &amp; Replay</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="history" role="tab" aria-selected="false" aria-controls="tab-history" tabindex="-1" id="tab-btn-history">
+          <span class="tab-icon">🕓</span>
+          <span>Past Scans &amp; Compare</span>
+          <span class="tab-badge" id="history-badge">0</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="catalog" role="tab" aria-selected="false" aria-controls="tab-catalog" tabindex="-1" id="tab-btn-catalog">
+          <span class="tab-icon">🛠️</span>
+          <span>Checks &amp; System Guardrails</span>
+          <span class="tab-badge" id="catalog-badge">0</span>
+        </button>
+      </nav>
+
+      <div class="header-right">
+        <button type="button" id="btn-open-system-doctor" class="btn-secondary btn-small">🩺 System Doctor</button>
+        <div class="nav-status">
+          <span class="status-indicator online" id="server-status-dot"></span>
+          <span class="status-text" id="server-status-text">Server Connected</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Application Views -->
+    <main class="main-content">
+      <!-- ================================================================= -->
+      <!-- TAB 1: NEW SCAN (Guided Wizard + Agentic Mode)                    -->
+      <!-- ================================================================= -->
+      <section id="tab-new-scan" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-new-scan">
+        <div class="hero-container">
+          <div class="hero-header">
+            <h1 class="hero-title">Check Your Website's Security in Seconds</h1>
+            <p class="hero-description">
+              Autonomous vulnerability discovery, configuration audits, and plain-English fix recommendations for regular people and developers.
+            </p>
+          </div>
+
+          <!-- Target Input Form -->
+          <form id="scan-form" class="scan-form" novalidate>
+            <div class="input-card">
+              <label for="target-url" class="input-label">Enter the website address you want to check</label>
+              <div class="url-input-wrapper">
+                <span class="url-input-icon">🌐</span>
+                <input
+                  type="text"
+                  id="target-url"
+                  name="target-url"
+                  class="url-input"
+                  placeholder="https://example.com"
+                  spellcheck="false"
+                  autocomplete="off"
+                  required
+                >
+                <button type="button" id="detect-stack-btn" class="btn-secondary btn-large">
+                  <span class="btn-spinner hidden" id="detect-stack-spinner"></span>
+                  <span class="btn-text" id="detect-stack-btn-text">🔎 Detect Tech Stack</span>
+                </button>
+                <button type="submit" id="btn-start-scan" class="btn-primary btn-large">
+                  <span class="btn-spinner hidden" id="scan-spinner"></span>
+                  <span class="btn-text" id="btn-start-text">🚀 Start Security Scan</span>
+                </button>
+              </div>
+
+              <!-- Optional Agentic Mode & Noise Governor Controls -->
+              <div class="agentic-options-bar">
+                <label class="checkbox-label agentic-toggle-label">
+                  <input type="checkbox" id="opt-agent-mode">
+                  <span>🤖 Enable Agentic Verification Mode (<code>--agent</code>)</span>
+                </label>
+
+                <div class="agentic-goal-wrap">
+                  <label for="opt-agent-goal" class="form-label-inline">
+                    Goal:
+                    <input
+                      type="text"
+                      id="opt-agent-goal"
+                      class="form-input form-input-compact"
+                      placeholder="Optional verification goal (e.g. Verify auth &amp; API exposure)"
+                    >
+                  </label>
+                </div>
+
+                <div class="noise-profile-wrap">
+                  <label for="opt-noise-profile" class="form-label-inline">
+                    Noise Governor:
+                    <select id="opt-noise-profile" class="form-select form-select-compact">
+                      <option value="balanced" selected>balanced</option>
+                      <option value="quiet">quiet</option>
+                      <option value="aggressive">aggressive</option>
+                      <option value="off">off</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="agentic-options-bar">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="allow-private-toggle">
+                  <span>🏢 Allow Authorized Internal / Private Targets (<code>--allow-private</code>)</span>
+                  <span class="form-hint">Permits RFC1918 &amp; internal hosts; cloud metadata stays blocked</span>
+                </label>
+              </div>
+
+              <!-- Detected Tech Stack & Audit Plan Preview Banner -->
+              <div id="tech-detect-banner" class="tech-detect-banner hidden" role="region" aria-label="Detected Technology Stack and Audit Plan">
+                <div class="tech-detect-header">
+                  <div class="tech-detect-title-wrap">
+                    <span class="tech-detect-icon">🧠</span>
+                    <div>
+                      <h3 class="tech-detect-title">Detected Technology Stack &amp; Audit Plan</h3>
+                      <p class="tech-detect-target-meta" id="tech-detect-target">Target: <span id="tech-detect-target-text">—</span></p>
+                    </div>
+                  </div>
+                  <button type="button" class="tech-detect-close" id="btn-close-tech-detect" aria-label="Close preview">✕</button>
+                </div>
+                <div class="tech-detect-body">
+                  <div class="tech-detect-summary-row">
+                    <span class="tech-detect-label">Detected Stack:</span>
+                    <strong class="tech-detect-summary-text" id="tech-detect-summary-text">Analyzing...</strong>
+                  </div>
+                  <div class="tech-detect-badges-row">
+                    <span class="tech-detect-label">Ecosystem Badges:</span>
+                    <div class="tech-badges-container" id="tech-detect-badges">
+                      <!-- Badges populated dynamically -->
+                    </div>
+                  </div>
+                  <div class="tech-detect-api-row" id="tech-detect-api-row">
+                    <div class="tech-detect-api-header-line">
+                      <div class="tech-detect-api-title-group">
+                        <span class="tech-detect-label">API Communication:</span>
+                        <span class="badge badge-api-status badge-api-inactive" id="tech-detect-api-badge">Not Detected</span>
+                      </div>
+                      <button type="button" class="btn-secondary btn-small" id="btn-analyze-detect-api">
+                        🤖 Ask AI About APIs
+                      </button>
+                    </div>
+                    <div class="tech-detect-api-details" id="tech-detect-api-details"></div>
+                    <div class="tech-detect-api-endpoints" id="tech-detect-api-endpoints"></div>
+                    <div class="api-ai-output-card hidden" id="tech-detect-api-ai-output"></div>
+                  </div>
+                  <div class="tech-detect-strategy-row">
+                    <div class="tech-strategy-counter" id="tech-detect-counter">
+                      <strong>0 Relevant Checks Selected · 0 Irrelevant Framework Checks Skipped</strong>
+                    </div>
+                  </div>
+                  <div class="tech-detect-recommendation-row">
+                    <div class="tech-recommend-info">
+                      <span class="tech-detect-label">Recommended Profile:</span>
+                      <span class="badge badge-profile" id="tech-detect-profile-badge">smart</span>
+                      <span class="tech-recommend-note">Smart Auto-Detect automatically runs the right checks!</span>
+                    </div>
+                    <button type="button" class="btn-secondary btn-small" id="btn-apply-recommended-profile">
+                      Apply Recommended Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Inline Validation Warning Banner -->
+              <div id="url-validation-banner" class="validation-banner hidden" role="alert">
+                <span class="validation-icon">⚠️</span>
+                <div class="validation-text" id="url-validation-text">
+                  SSRF Protection: Localhost and private network IPs cannot be scanned. Please enter a public domain.
+                </div>
+              </div>
+            </div>
+
+            <!-- 1-Click Preset Cards -->
+            <div class="presets-section">
+              <div class="section-header">
+                <h2 class="section-title">1-Click Scan Presets</h2>
+                <span class="section-subtitle">Choose the scan depth that matches your needs</span>
+              </div>
+              <div class="preset-cards-grid" id="preset-cards">
+                <!-- Dynamically populated from /api/meta or fallback -->
+              </div>
+            </div>
+
+            <!-- Collapsible Advanced Drawer -->
+            <div class="advanced-section">
+              <button type="button" id="btn-toggle-advanced" class="advanced-toggle-btn" aria-expanded="false">
+                <span class="toggle-icon" id="advanced-toggle-icon">▶</span>
+                <span class="toggle-label">⚙️ Advanced Options (For Technical Users)</span>
+              </button>
+
+              <div id="advanced-drawer" class="advanced-drawer hidden">
+                <div class="advanced-grid">
+                  <div class="form-group">
+                    <label for="adv-depth" class="form-label">
+                      Max Crawl Depth
+                      <span class="form-hint">(1 to 5 levels)</span>
+                    </label>
+                    <input type="number" id="adv-depth" class="form-input" min="1" max="5" value="3">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="adv-concurrency" class="form-label">
+                      Concurrency Limit
+                      <span class="form-hint">(1 to 10 workers)</span>
+                    </label>
+                    <input type="number" id="adv-concurrency" class="form-input" min="1" max="10" value="5">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="adv-timeout" class="form-label">
+                      Request Timeout
+                      <span class="form-hint">(Milliseconds)</span>
+                    </label>
+                    <select id="adv-timeout" class="form-select">
+                      <option value="5000">5,000 ms (Fast)</option>
+                      <option value="10000" selected>10,000 ms (Recommended)</option>
+                      <option value="20000">20,000 ms (Slow Networks)</option>
+                      <option value="30000">30,000 ms (Extended)</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="adv-auth" class="form-label">
+                      Custom Authorization Header
+                      <span class="form-hint">(Optional)</span>
+                    </label>
+                    <input type="text" id="adv-auth" class="form-input" placeholder="Bearer eyJhbGci... or Basic dXNlcjpwYXNz">
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="adv-tech" class="form-label">
+                      Tech Stack Override
+                      <span class="form-hint">(Comma-separated tags e.g. laravel,php,nginx — leave empty for auto-detection)</span>
+                    </label>
+                    <input type="text" id="adv-tech" class="form-input" placeholder="Auto-detected during fingerprinting">
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="custom-headers-input" class="form-label">
+                      Custom HTTP Headers (Pro — one <code>Name: Value</code> per line)
+                      <span class="form-hint">(Optional — sent on scan requests alongside Authorization)</span>
+                    </label>
+                    <textarea
+                      id="custom-headers-input"
+                      class="form-textarea mono-textarea"
+                      rows="3"
+                      placeholder="X-Api-Key: your-token&#10;X-Custom-Header: value"
+                    ></textarea>
+                  </div>
+
+                  <div class="form-group full-width checkbox-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="opt-force-all">
+                      <span>Force <span id="force-all-count">All</span> Checks (Disable Smart Stack Filtering)</span>
+                    </label>
+                  </div>
+
+                  <div class="form-group full-width checkbox-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="adv-save-history" checked>
+                      <span>Save scan results to history archive for diff comparisons</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+
+          <!-- Live Scan Progress Panel -->
+          <div id="scan-progress-panel" class="progress-panel hidden" aria-live="polite">
+            <div class="progress-header">
+              <div class="progress-target-info">
+                <span class="live-pulse"></span>
+                <span class="progress-title">Live Scan in Progress:</span>
+                <strong class="progress-url" id="live-target-url">https://example.com</strong>
+              </div>
+              <div class="progress-badges">
+                <span class="phase-badge" id="live-phase-badge">Initializing</span>
+                <span class="pct-badge" id="live-progress-pct">0%</span>
+              </div>
+            </div>
+
+            <!-- Animated Progress Bar -->
+            <div class="progress-track">
+              <div class="progress-fill" id="live-progress-fill" style="width: 0%;"></div>
+            </div>
+
+            <!-- Discovered Metadata Bar -->
+            <div class="progress-stats-grid">
+              <div class="stat-box">
+                <span class="stat-label">Detected Tech Stack</span>
+                <div class="tech-chips-list" id="live-tech-chips">
+                  <span class="chip-muted">Analyzing stack...</span>
+                </div>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Pages Discovered</span>
+                <span class="stat-value" id="live-pages-count">0</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Findings Detected</span>
+                <div class="findings-mini-counts">
+                  <span class="badge-mini danger" id="live-vuln-pill">🚨 0 Vulnerable</span>
+                  <span class="badge-mini warning" id="live-suspicious-pill">⚠️ 0 Suspicious</span>
+                  <span class="badge-mini success" id="live-safe-pill">✅ 0 Safe</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Activity Log Feed -->
+            <div class="activity-feed-section">
+              <div class="feed-header">
+                <span class="feed-title">Real-Time Check Activity</span>
+                <span class="feed-counter" id="live-checks-counter">0 events</span>
+              </div>
+              <div id="live-sse-banner" class="feedback-banner warning hidden" role="status"></div>
+              <div class="activity-feed-list" id="live-activity-feed">
+                <!-- Live check entries appended here -->
+              </div>
+            </div>
+
+            <!-- Scan Complete Call-To-Action Banner -->
+            <div id="scan-complete-banner" class="scan-complete-banner hidden">
+              <div class="complete-message">
+                <span class="complete-icon">🎉</span>
+                <div class="complete-text">
+                  <strong>Scan Completed Successfully!</strong>
+                  <p id="scan-complete-summary">Full report generated with security score and remediation guidance.</p>
+                </div>
+              </div>
+              <button type="button" id="btn-goto-results" class="btn-success">
+                View Full Scan Results 👉
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 2: SCAN RESULTS & EVIDENCE                                    -->
+      <!-- ================================================================= -->
+      <section id="tab-scan-results" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-scan-results">
+        <div class="results-layout">
+          <div id="results-status-banner" class="feedback-banner hidden" role="status"></div>
+          <!-- Empty State (No scan yet) -->
+          <div id="results-empty-state" class="empty-state">
+            <span class="empty-icon">🛡️</span>
+            <h2 class="empty-title">No Scan Results Loaded Yet</h2>
+            <p class="empty-text">Run a new website scan or load an audit from the Past Scans tab to review vulnerabilities and evidence receipts.</p>
+            <button type="button" id="btn-empty-start" class="btn-primary">
+              🚀 Start a New Scan
+            </button>
+          </div>
+
+          <!-- Active Results View -->
+          <div id="results-content" class="results-content hidden">
+            <!-- Overall Health Card -->
+            <div class="health-card" id="health-card">
+              <div class="health-grade-col">
+                <div class="grade-circle grade-a" id="result-grade-circle">
+                  <span class="grade-letter" id="result-grade-letter">A+</span>
+                </div>
+                <div class="risk-meta">
+                  <span class="risk-pill" id="result-risk-pill">LOW RISK</span>
+                  <span class="risk-score-text" id="result-score-text">Score: 0 / 60</span>
+                </div>
+              </div>
+
+              <div class="health-summary-col">
+                <div class="summary-meta-header">
+                  <h2 class="summary-headline">Executive Security Summary</h2>
+                  <div class="summary-target-tag">
+                    <span class="meta-label">Target:</span>
+                    <strong id="result-target-name">https://example.com</strong>
+                  </div>
+                </div>
+                <p class="summary-body" id="result-summary-text">
+                  Outstanding security posture. No critical vulnerabilities or suspicious findings were identified.
+                </p>
+                <div class="summary-footer-meta">
+                  <span id="result-date-text">Audited on: Apr 21, 2026</span>
+                  <span class="dot-separator">•</span>
+                  <span id="result-history-file-text">Archive: saved</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Detected Tech Stack & Audit Strategy Card -->
+            <div id="results-stack-card" class="stack-strategy-card hidden">
+              <div class="stack-card-header">
+                <div class="stack-card-title-group">
+                  <span class="stack-card-icon">🧠</span>
+                  <div>
+                    <h3 class="stack-card-title">Detected Tech Stack &amp; Audit Strategy</h3>
+                    <p class="stack-card-subtitle" id="results-stack-summary">Generic Web Application</p>
+                  </div>
+                </div>
+                <div class="stack-strategy-counter" id="results-stack-counter">
+                  <strong>0 Relevant Checks Executed · 0 Irrelevant Framework Checks Skipped</strong>
+                </div>
+              </div>
+              <div class="stack-card-body">
+                <div class="stack-tags-section">
+                  <span class="stack-label">Ecosystem Tags:</span>
+                  <div class="tech-badges-container" id="results-stack-badges">
+                    <!-- Badges populated dynamically -->
+                  </div>
+                </div>
+                <div class="stack-strategy-explanation" id="results-stack-explanation">
+                  Smart stack filtering intelligently skipped irrelevant framework checks for this website, optimizing speed and eliminating false alarms.
+                </div>
+              </div>
+            </div>
+
+            <!-- Discovered SPA / API Communication Card -->
+            <div id="results-api-card" class="stack-strategy-card api-card hidden">
+              <div class="stack-card-header">
+                <div class="stack-card-title-group">
+                  <span class="stack-card-icon">🔌</span>
+                  <div>
+                    <h3 class="stack-card-title">Discovered SPA &amp; Backend API Communication</h3>
+                    <p class="stack-card-subtitle" id="results-api-summary">Single Page Application API Client</p>
+                  </div>
+                </div>
+                <div class="api-card-actions">
+                  <button type="button" class="btn-secondary btn-small" id="btn-analyze-results-api">
+                    🤖 Ask AI About APIs
+                  </button>
+                </div>
+              </div>
+              <div class="stack-card-body">
+                <div class="api-endpoints-container" id="results-api-endpoints">
+                  <!-- Endpoints and external origins populated dynamically -->
+                </div>
+                <div class="api-ai-output-card hidden" id="results-api-ai-output"></div>
+              </div>
+            </div>
+
+            <!-- CVE Coverage Summary Banner -->
+            <div id="results-cve-coverage-banner" class="cve-coverage-banner hidden" role="region" aria-label="Target CVE Coverage Summary">
+              <div class="cve-banner-header">
+                <div class="cve-banner-title-group">
+                  <span class="cve-banner-icon">🎯</span>
+                  <div>
+                    <h3 class="cve-banner-title">Target CVE Advisory Coverage</h3>
+                    <p class="cve-banner-subtitle" id="results-cve-coverage-summary">Checking CVE advisory coverage...</p>
+                  </div>
+                </div>
+                <div class="cve-banner-actions">
+                  <div class="cve-banner-kpis" id="results-cve-coverage-kpis"></div>
+                  <button type="button" id="btn-open-cve-audit-from-results" class="btn-secondary btn-small">Open CVE Audit</button>
+                </div>
+              </div>
+              <div class="cve-banner-missing hidden" id="results-cve-coverage-missing"></div>
+            </div>
+
+            <!-- Key Metrics Counter Row -->
+            <div class="metrics-row">
+              <div class="metric-card danger">
+                <div class="metric-icon">🚨</div>
+                <div class="metric-info">
+                  <span class="metric-num" id="metric-vulns">0</span>
+                  <span class="metric-label">Vulnerabilities (Urgent)</span>
+                </div>
+              </div>
+              <div class="metric-card warning">
+                <div class="metric-icon">⚠️</div>
+                <div class="metric-info">
+                  <span class="metric-num" id="metric-suspicious">0</span>
+                  <span class="metric-label">Warnings &amp; Suspicious</span>
+                </div>
+              </div>
+              <div class="metric-card success">
+                <div class="metric-icon">✅</div>
+                <div class="metric-info">
+                  <span class="metric-num" id="metric-safe">0</span>
+                  <span class="metric-label">Passed Checks (Safe)</span>
+                </div>
+              </div>
+              <div class="metric-card info">
+                <div class="metric-icon">🕸️</div>
+                <div class="metric-info">
+                  <span class="metric-num" id="metric-pages">1</span>
+                  <span class="metric-label">Pages Discovered</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top Priority Action Plan -->
+            <div class="action-plan-section" id="action-plan-section">
+              <div class="section-header action-plan-header">
+                <div>
+                  <h3 class="section-title">🎯 Top Priority Action Plan</h3>
+                  <span class="section-subtitle">Fix these highest-impact issues first to protect your website</span>
+                </div>
+                <button type="button" id="btn-generate-ai-summary" class="btn-secondary btn-small">
+                  🤖 AI Action Roadmap
+                </button>
+              </div>
+              <div id="ai-summary-container" class="ai-summary-container hidden"></div>
+              <div class="priority-cards-grid" id="priority-cards-container">
+                <!-- Priority fix cards inserted dynamically -->
+              </div>
+            </div>
+
+            <!-- Filters, Search, Mode Toggle & Export Bar -->
+            <div class="findings-toolbar">
+              <div class="filter-status-buttons" role="group" aria-label="Status filters">
+                <button type="button" class="filter-btn active" data-filter-status="all" id="filter-status-all">
+                  All (<span id="count-all">0</span>)
+                </button>
+                <button type="button" class="filter-btn btn-danger-soft" data-filter-status="VULNERABLE" id="filter-status-vuln">
+                  🚨 Vulnerable (<span id="count-vuln">0</span>)
+                </button>
+                <button type="button" class="filter-btn btn-warning-soft" data-filter-status="SUSPICIOUS" id="filter-status-suspicious">
+                  ⚠️ Warnings (<span id="count-suspicious">0</span>)
+                </button>
+                <button type="button" class="filter-btn btn-success-soft" data-filter-status="SAFE" id="filter-status-safe">
+                  ✅ Passed (<span id="count-safe">0</span>)
+                </button>
+              </div>
+
+              <div class="toolbar-controls">
+                <select id="filter-severity-select" class="severity-select" aria-label="Filter by severity">
+                  <option value="all">All Severities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                </select>
+
+                <div class="search-input-wrapper">
+                  <input
+                    type="search"
+                    id="findings-search"
+                    class="search-input"
+                    placeholder="Search findings, titles, URLs, CVE IDs..."
+                    aria-label="Search scan results"
+                  >
+                </div>
+
+                <!-- Simple vs Developer Mode Toggle -->
+                <button type="button" id="btn-toggle-view-mode" class="mode-toggle-btn" title="Toggle Regular Person View vs Developer View">
+                  <span class="mode-icon" id="mode-toggle-icon">👤</span>
+                  <span class="mode-text" id="mode-toggle-text">Regular Person View</span>
+                </button>
+
+                <!-- Report Export Buttons -->
+                <div class="export-btn-group">
+                  <button type="button" id="btn-export-json" class="btn-secondary btn-small" title="Download raw JSON report">
+                    💾 JSON
+                  </button>
+                  <button type="button" id="btn-export-html" class="btn-secondary btn-small" title="Download standalone HTML report">
+                    📥 HTML
+                  </button>
+                  <button type="button" id="btn-export-markdown" class="btn-secondary btn-small" title="Download Markdown report">
+                    📝 Markdown
+                  </button>
+                  <button type="button" id="btn-export-csv" class="btn-secondary btn-small" title="Download CSV report (UTF-8 BOM)">
+                    📊 CSV
+                  </button>
+                  <button type="button" id="btn-export-sarif" class="btn-secondary btn-small" title="Download SARIF 2.1.0 report">
+                    📋 SARIF
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Detailed Findings List -->
+            <div class="findings-list-section">
+              <div class="findings-list-header">
+                <span class="list-title">Detailed Security Checks (<span id="visible-findings-count">0</span> matching)</span>
+              </div>
+              <div class="findings-cards-container" id="findings-container">
+                <!-- Check finding cards inserted dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Evidence & Retest Slide-over Drawer -->
+        <div id="evidence-drawer-backdrop" class="drawer-backdrop hidden" role="dialog" aria-modal="true" aria-label="Evidence Receipts and Retest">
+          <div class="drawer-panel" id="evidence-drawer-body"></div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 3: TASKS & SESSIONS                                           -->
+      <!-- ================================================================= -->
+      <section id="tab-tasks-sessions" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-tasks-sessions">
+        <div id="session-explorer-root"></div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 4: DUAL-GRAPH EXPLORER                                        -->
+      <!-- ================================================================= -->
+      <section id="tab-dual-graph" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-dual-graph">
+        <div class="dual-graph-layout">
+          <div class="dual-graph-header">
+            <div>
+              <h2 class="section-title">Dual-Graph Explorer (Exploration DAG &amp; Asset Coverage)</h2>
+              <p class="section-subtitle">Inspect reasoning lineage, fold/unfold digest nodes, query 19-field Asset DSL, and ingest external scan outputs</p>
+            </div>
+            <div class="dual-graph-controls">
+              <select id="dg-task-select" class="form-select" aria-label="Select Task">
+                <option value="">All / Global Graph</option>
+              </select>
+              <div class="catalog-view-switches">
+                <button type="button" id="btn-dg-view-exploration" class="tab-pill active">🧭 Exploration DAG</button>
+                <button type="button" id="btn-dg-view-coverage" class="tab-pill">🕸️ Asset Coverage &amp; DSL</button>
+              </div>
+              <button type="button" id="btn-dg-refresh" class="btn-secondary">🔄 Refresh</button>
+            </div>
+          </div>
+
+          <div id="dg-exploration-view" class="dg-subview">
+            <div id="dg-exploration-graph-root"></div>
+          </div>
+
+          <div id="dg-coverage-view" class="dg-subview hidden">
+            <div id="dg-dsl-search-root"></div>
+            <div id="dg-coverage-graph-root"></div>
+            <div class="dg-assets-table-section">
+              <div class="pane-title">Queried Assets (<span id="dg-assets-count">0</span>)</div>
+              <div class="history-table-container">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Key / Host</th>
+                      <th>URL / Path</th>
+                      <th>IP / Port</th>
+                      <th>Status</th>
+                      <th>Source</th>
+                      <th>Verified</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dg-assets-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 5: TRAFFIC & REPLAY                                           -->
+      <!-- ================================================================= -->
+      <section id="tab-traffic-replay" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-traffic-replay">
+        <div id="traffic-inspector-root"></div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 6: PAST SCANS & COMPARE (History & Diff)                      -->
+      <!-- ================================================================= -->
+      <section id="tab-history" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-history">
+        <div class="history-layout">
+          <div class="history-header">
+            <div>
+              <h2 class="section-title">Past Security Scans Archive</h2>
+              <p class="section-subtitle">Browse audit history and compare scans to identify new and resolved vulnerabilities</p>
+            </div>
+            <div class="history-actions">
+              <button type="button" id="btn-refresh-history" class="btn-secondary">
+                🔄 Refresh History
+              </button>
+            </div>
+          </div>
+          <div id="history-status-banner" class="feedback-banner hidden" role="status"></div>
+
+          <!-- Comparison Selection Tray -->
+          <div class="diff-selection-tray">
+            <div class="diff-slots">
+              <div class="diff-slot" id="diff-slot-a">
+                <span class="slot-badge">Scan A (Baseline)</span>
+                <span class="slot-text" id="diff-slot-a-label">None selected (choose below)</span>
+                <button type="button" class="btn-clear-slot hidden" id="btn-clear-slot-a">✕</button>
+              </div>
+              <div class="diff-vs-divider">VS</div>
+              <div class="diff-slot" id="diff-slot-b">
+                <span class="slot-badge">Scan B (Current / Compare)</span>
+                <span class="slot-text" id="diff-slot-b-label">None selected (choose below)</span>
+                <button type="button" class="btn-clear-slot hidden" id="btn-clear-slot-b">✕</button>
+              </div>
+            </div>
+            <button type="button" id="btn-run-diff" class="btn-primary" disabled>
+              🔍 Compare Scans (Diff)
+            </button>
+          </div>
+
+          <!-- Diff Results Container -->
+          <div id="diff-results-container" class="diff-results-card hidden">
+            <div class="diff-card-header">
+              <h3 class="diff-card-title">Scan Comparison Results</h3>
+              <button type="button" id="btn-close-diff" class="btn-close-diff">✕ Close Diff</button>
+            </div>
+
+            <!-- Diff Metrics -->
+            <div class="diff-metrics-grid">
+              <div class="diff-metric-box danger">
+                <span class="diff-metric-icon">🆕</span>
+                <div>
+                  <strong class="diff-metric-val" id="diff-count-new">0</strong>
+                  <span class="diff-metric-lbl">New Findings (Introduced)</span>
+                </div>
+              </div>
+              <div class="diff-metric-box success">
+                <span class="diff-metric-icon">✅</span>
+                <div>
+                  <strong class="diff-metric-val" id="diff-count-fixed">0</strong>
+                  <span class="diff-metric-lbl">Fixed Findings (Resolved!)</span>
+                </div>
+              </div>
+              <div class="diff-metric-box warning">
+                <span class="diff-metric-icon">↕️</span>
+                <div>
+                  <strong class="diff-metric-val" id="diff-count-changed">0</strong>
+                  <span class="diff-metric-lbl">Status Changed</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Diff Findings Lists -->
+            <div class="diff-details-section" id="diff-details-container">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- History Records List -->
+          <div class="history-table-container">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Date &amp; Time</th>
+                  <th>Target Host</th>
+                  <th>Security Grade</th>
+                  <th>Vulnerable</th>
+                  <th>Suspicious</th>
+                  <th>Checks</th>
+                  <th>Actions</th>
+                  <th>Compare</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 7: CHECKS & SYSTEM GUARDRAILS                                 -->
+      <!-- ================================================================= -->
+      <section id="tab-catalog" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-catalog">
+        <div class="catalog-layout">
+          <div class="catalog-header">
+            <div>
+              <h2 class="section-title">Checks Catalog, CVE Coverage &amp; System Guardrails</h2>
+              <p class="section-subtitle">Explore <span id="catalog-total-text">all</span> built-in checks, scaffold custom modules, audit CVE coverage, or configure Multi-LLM Pool &amp; Guardrails</p>
+            </div>
+            <div class="catalog-view-switches">
+              <button type="button" id="btn-view-catalog-browse" class="tab-pill active">
+                📚 Browse Catalog (<span id="total-checks-badge">0</span>)
+              </button>
+              <button type="button" id="btn-view-catalog-cve-coverage" class="tab-pill">
+                🎯 CVE Coverage Audit
+              </button>
+              <button type="button" id="btn-view-catalog-builder" class="tab-pill">
+                ✨ New Check Builder
+              </button>
+              <button type="button" id="btn-view-catalog-guardrails" class="tab-pill">
+                🛡️ System Guardrails &amp; Multi-LLM Pool
+              </button>
+            </div>
+          </div>
+
+          <!-- VIEW A: BROWSE CATALOG -->
+          <div id="catalog-browse-view" class="catalog-view-content">
+            <!-- Category Filter Pills & Search -->
+            <div class="catalog-filter-bar">
+              <div class="category-pills" id="category-pills-container">
+                <button type="button" class="category-pill active" data-category="all">All</button>
+                <button type="button" class="category-pill" data-category="Access Control">Access Control</button>
+                <button type="button" class="category-pill" data-category="API Security">API Security</button>
+                <button type="button" class="category-pill" data-category="Authentication &amp; Session">Authentication &amp; Session</button>
+                <button type="button" class="category-pill" data-category="CMS Security">CMS Security</button>
+                <button type="button" class="category-pill" data-category="Framework Security">Framework Security</button>
+                <button type="button" class="category-pill" data-category="HTTP Headers">HTTP Headers</button>
+                <button type="button" class="category-pill" data-category="Information Disclosure">Information Disclosure</button>
+                <button type="button" class="category-pill" data-category="Injection &amp; Input">Injection &amp; Input</button>
+                <button type="button" class="category-pill" data-category="Input Validation">Input Validation</button>
+                <button type="button" class="category-pill" data-category="Known Vulnerabilities">Known Vulnerabilities</button>
+                <button type="button" class="category-pill" data-category="Network &amp; Transport">Network &amp; Transport</button>
+                <button type="button" class="category-pill" data-category="Secrets &amp; Exposure">Secrets &amp; Exposure</button>
+                <button type="button" class="category-pill" data-category="Supply Chain Security">Supply Chain Security</button>
+                <button type="button" class="category-pill" data-category="AI &amp; Machine Learning">AI &amp; Machine Learning</button>
+              </div>
+
+              <div class="catalog-search-wrapper">
+                <input
+                  type="search"
+                  id="catalog-search-input"
+                  class="search-input"
+                  placeholder="Search check ID, title, tags..."
+                >
+              </div>
+            </div>
+
+            <!-- Checks Grid -->
+            <div class="checks-grid" id="checks-catalog-grid">
+              <!-- Dynamically populated check cards -->
+            </div>
+          </div>
+
+          <!-- VIEW B: NEW CHECK BUILDER -->
+          <div id="catalog-builder-view" class="catalog-view-content hidden">
+            <div class="builder-card">
+              <div class="builder-header">
+                <h3 class="builder-title">Security Check Scaffolder</h3>
+                <p class="builder-subtitle">
+                  Create a production-ready security check module and unit test file conforming to project standards.
+                </p>
+              </div>
+
+              <form id="builder-form" class="builder-form" novalidate>
+                <div class="builder-form-grid">
+                  <div class="form-group">
+                    <label for="scaffold-name" class="form-label">
+                      Check Identifier (ID) <span class="required">*</span>
+                      <span class="form-hint">(2-40 lowercase letters, numbers, hyphens)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="scaffold-name"
+                      class="form-input"
+                      placeholder="e.g. cve-2026-example or fastapi-debug"
+                      required
+                      pattern="^[a-z0-9-]{2,40}$"
+                    >
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scaffold-title" class="form-label">
+                      Check Title <span class="required">*</span>
+                      <span class="form-hint">(Human-readable name)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="scaffold-title"
+                      class="form-input"
+                      placeholder="e.g. FastAPI Debug Documentation Exposure"
+                      required
+                    >
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scaffold-category" class="form-label">Category</label>
+                    <select id="scaffold-category" class="form-select">
+                      <option value="General Security">General Security</option>
+                      <option value="Access Control">Access Control</option>
+                      <option value="API Security">API Security</option>
+                      <option value="Secrets &amp; Exposure">Secrets &amp; Exposure</option>
+                      <option value="Known Vulnerabilities">Known Vulnerabilities</option>
+                      <option value="HTTP Headers">HTTP Headers</option>
+                      <option value="Framework Security">Framework Security</option>
+                      <option value="CMS Security">CMS Security</option>
+                      <option value="Information Disclosure">Information Disclosure</option>
+                      <option value="Authentication &amp; Session">Authentication &amp; Session</option>
+                      <option value="Injection &amp; Input">Injection &amp; Input</option>
+                      <option value="Input Validation">Input Validation</option>
+                      <option value="Network &amp; Transport">Network &amp; Transport</option>
+                      <option value="Supply Chain Security">Supply Chain Security</option>
+                      <option value="AI &amp; Machine Learning">AI &amp; Machine Learning</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scaffold-tags" class="form-label">
+                      Technology Tags
+                      <span class="form-hint">(Comma-separated, e.g. python,api,fastapi)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="scaffold-tags"
+                      class="form-input"
+                      placeholder="e.g. python,fastapi,api or all"
+                    >
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="scaffold-plain-explanation" class="form-label">
+                      Plain-English Explanation (What is this?)
+                      <span class="form-hint">(Clear 1-2 sentence description for non-technical users)</span>
+                    </label>
+                    <textarea
+                      id="scaffold-plain-explanation"
+                      class="form-textarea"
+                      rows="2"
+                      placeholder="Scans for publicly exposed interactive API documentation and debug routes."
+                    ></textarea>
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="scaffold-why-it-matters" class="form-label">
+                      Why It Matters (Real-World Danger)
+                      <span class="form-hint">(Explains the attacker impact if vulnerable)</span>
+                    </label>
+                    <textarea
+                      id="scaffold-why-it-matters"
+                      class="form-textarea"
+                      rows="2"
+                      placeholder="Attackers can map internal schema definitions, discover hidden parameters, and test unauthorized endpoints."
+                    ></textarea>
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="scaffold-default-fix" class="form-label">
+                      Recommended Fix (How to Resolve)
+                      <span class="form-hint">(Actionable remediation steps)</span>
+                    </label>
+                    <textarea
+                      id="scaffold-default-fix"
+                      class="form-textarea"
+                      rows="2"
+                      placeholder="Disable interactive docs in production (docs_url=None, redoc_url=None) and require authentication."
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div class="builder-actions">
+                  <button type="button" id="btn-builder-preview" class="btn-secondary">
+                    👁️ Preview Generated Code
+                  </button>
+                  <button type="button" id="btn-builder-create" class="btn-primary">
+                    💾 Create Check &amp; Unit Test Files
+                  </button>
+                </div>
+              </form>
+
+              <!-- Builder Feedback Banner -->
+              <div id="builder-feedback" class="feedback-banner hidden"></div>
+
+              <!-- Code Preview Drawer -->
+              <div id="builder-preview-box" class="preview-box hidden">
+                <div class="preview-header">
+                  <div class="preview-tabs">
+                    <button type="button" class="preview-tab-btn active" id="btn-preview-check">
+                      Scanner Code: <code id="preview-check-filename">check.js</code>
+                    </button>
+                    <button type="button" class="preview-tab-btn" id="btn-preview-test">
+                      Unit Test: <code id="preview-test-filename">check.test.js</code>
+                    </button>
+                  </div>
+                  <button type="button" id="btn-copy-code" class="btn-secondary btn-small">
+                    📋 Copy Code
+                  </button>
+                </div>
+                <pre class="code-block"><code id="builder-code-display"></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW C: SYSTEM GUARDRAILS & MULTI-LLM POOL -->
+          <div id="catalog-guardrails-view" class="catalog-view-content hidden">
+            <div id="system-guardrails-root"></div>
+          </div>
+
+          <!-- VIEW D: CVE COVERAGE AUDIT -->
+          <div id="catalog-cve-coverage-view" class="catalog-view-content hidden">
+            <div id="cve-coverage-root"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>Security Scanner 2.3 • Zero External Dependencies • Local Host Hardened</span>
+        <span class="footer-links">
+          <span>Bound to 127.0.0.1</span>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- System Doctor Diagnostic Modal -->
+  <div id="system-doctor-backdrop" class="drawer-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="system-doctor-title">
+    <div class="modal-card doctor-modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="evidence-eyebrow">Local Preflight &amp; Connectivity Triage</div>
+          <h2 id="system-doctor-title" class="modal-title">🩺 System Doctor</h2>
+        </div>
+        <div class="doctor-header-actions">
+          <button type="button" id="btn-refresh-system-doctor" class="btn-secondary btn-small">🔄 Refresh</button>
+          <button type="button" id="btn-close-system-doctor" class="btn-secondary btn-small" aria-label="Close System Doctor">✕ Close</button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div id="doctor-feedback" class="feedback-banner hidden" role="status"></div>
+
+        <section class="doctor-section">
+          <h3 class="doctor-section-title">Local Environment &amp; Readiness</h3>
+          <div id="doctor-preflight-panel" class="doctor-preflight-panel">
+            <div class="empty-muted">Running system preflight checks...</div>
+          </div>
+        </section>
+
+        <section class="doctor-section">
+          <h3 class="doctor-section-title">Diagnose Target URL (PC vs Policy vs Website Issue)</h3>
+          <form id="doctor-diagnose-form" class="doctor-diagnose-form" novalidate>
+            <div class="doctor-diagnose-row">
+              <input
+                type="text"
+                id="doctor-target-input"
+                class="form-input"
+                placeholder="https://example.com"
+                spellcheck="false"
+                autocomplete="off"
+                required
+              >
+              <button type="submit" id="btn-run-target-diagnose" class="btn-primary btn-small">
+                🔍 Diagnose Target
+              </button>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="doctor-allow-private">
+              <span>Allow Authorized Internal / Private Targets</span>
+            </label>
+          </form>
+          <div id="doctor-diagnose-result" class="doctor-diagnose-result hidden"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

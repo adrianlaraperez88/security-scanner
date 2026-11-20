@@ -1,0 +1,872 @@
+{
+  "generatedAt": "2026-11-13T21:12:21.601Z",
+  "summary": {
+    "score": 15,
+    "level": "MEDIUM",
+    "grade": "C",
+    "summary": "Moderate risk detected. Notable security gaps require remediation before production use.",
+    "totalChecks": 24,
+    "totalExecutions": 24,
+    "vulnerable": 0,
+    "suspicious": 3,
+    "errors": 0
+  },
+  "stacks": [
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "primary": "nginx",
+      "confidence": 3,
+      "summary": "Nginx",
+      "stack": [
+        {
+          "tech": "nginx",
+          "score": 3,
+          "rank": 3
+        }
+      ],
+      "detectedTags": [
+        "nginx"
+      ],
+      "recommendedProfile": "smart",
+      "categories": {
+        "frameworks": [],
+        "frontend": [],
+        "runtimes": [],
+        "servers": [
+          "nginx"
+        ]
+      },
+      "activeChecksCount": 24,
+      "skippedChecksCount": 27,
+      "skippedChecks": [
+        "codeigniter-checks",
+        "cve-2024-4577",
+        "drupal-checks",
+        "frontend-checks",
+        "ignition",
+        "laravel-auth",
+        "laravel-debug",
+        "laravel-env-manipulation",
+        "laravel-livewire",
+        "laravel-storage",
+        "laravel-telescope",
+        "magento-checks",
+        "magento-cosmicsting",
+        "nextjs-checks",
+        "node-checks",
+        "php-backup",
+        "php-cgi-exposure",
+        "php-config",
+        "php-errors",
+        "php-info",
+        "php-lfi",
+        "php-version",
+        "phpunit-rce",
+        "python-checks",
+        "spring-checks",
+        "symfony-checks",
+        "wp-checks"
+      ]
+    }
+  ],
+  "groupedFindings": [
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA)."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "ai & llm exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "ai-llm-exposure",
+        "title": "AI & LLM Endpoint Exposure",
+        "category": "AI & Machine Learning",
+        "plainExplanation": "Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.",
+        "whyItMatters": "Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.",
+        "defaultFix": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "clickjacking protection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "clickjacking",
+        "title": "Clickjacking Protection",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks if your web pages can be embedded in an iframe on third-party websites.",
+        "whyItMatters": "Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.",
+        "defaultFix": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "directory listing",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "directory-listing",
+        "title": "Directory Indexing / Listing",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if web server directories without index files display automatic file listings.",
+        "whyItMatters": "Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.",
+        "defaultFix": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx)."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "env file exposure",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "path": "/.env",
+      "detail": "Path exists but access is forbidden (403)",
+      "fix": "Ensure the .env file is moved out of the web root or permanently blocked in the web server configuration.",
+      "meta": {
+        "id": "env",
+        "title": "Environment File Exposure (.env)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.",
+        "whyItMatters": ".env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.",
+        "defaultFix": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": ".git exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "git",
+        "title": "Git Repository Exposure (.git)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if the .git folder or .git/HEAD is publicly accessible on the web server.",
+        "whyItMatters": "Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.",
+        "defaultFix": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "graphql introspection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "graphql",
+        "title": "GraphQL Introspection & Security",
+        "category": "API Security",
+        "plainExplanation": "Checks if GraphQL schema introspection is enabled in production environments.",
+        "whyItMatters": "Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.",
+        "defaultFix": "Disable GraphQL schema introspection in production deployments."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "HTTP → HTTPS redirect in place (301 permanent)",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "jwt security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No JWT tokens found in probed endpoints",
+      "meta": {
+        "id": "jwt-security",
+        "title": "JSON Web Token (JWT) Security",
+        "category": "Authentication & Session",
+        "plainExplanation": "Audits JWT implementations for \"none\" algorithm flaws, weak secret keys, and exposed token endpoints.",
+        "whyItMatters": "Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.",
+        "defaultFix": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\"."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "open redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "open-redirect",
+        "title": "Open Redirect Vulnerability",
+        "category": "Input Validation",
+        "plainExplanation": "Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.",
+        "whyItMatters": "Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.",
+        "defaultFix": "Validate target URLs against a strict whitelist of internal relative paths or approved domains."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "rate limiting",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "detail": "15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+      "fix": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "robots.txt disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "robots-sitemap",
+        "title": "Robots.txt & Sitemap Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.",
+        "whyItMatters": "Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.",
+        "defaultFix": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "missing": [
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sql error disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sql-errors",
+        "title": "Database Error Disclosure",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).",
+        "whyItMatters": "Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.",
+        "defaultFix": "Disable detailed database error output in production and use generic error messages."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sql injection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sqli",
+        "title": "SQL Injection (SQLi)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests input fields and parameters for SQL syntax manipulation and time-based delays.",
+        "whyItMatters": "SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.",
+        "defaultFix": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "supply chain & sri",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sri-supply-chain",
+        "title": "Supply Chain & Subresource Integrity (SRI)",
+        "category": "Supply Chain Security",
+        "plainExplanation": "Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).",
+        "whyItMatters": "If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors' browsers.",
+        "defaultFix": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "ssl/tls check",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "TLSv1.3 | expires: Dec 25 16:15:26 2026 GMT",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "reflected xss",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "xss",
+        "title": "Cross-Site Scripting (XSS)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.",
+        "whyItMatters": "XSS allows attackers to execute malicious JavaScript in victims' browsers, stealing cookies and session tokens.",
+        "defaultFix": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP."
+      },
+      "pages": [
+        "https://www.robertbinnsroofing.com"
+      ],
+      "pageCount": 1
+    }
+  ],
+  "findings": [
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA)."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "ai & llm exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "ai-llm-exposure",
+        "title": "AI & LLM Endpoint Exposure",
+        "category": "AI & Machine Learning",
+        "plainExplanation": "Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.",
+        "whyItMatters": "Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.",
+        "defaultFix": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "clickjacking protection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "clickjacking",
+        "title": "Clickjacking Protection",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks if your web pages can be embedded in an iframe on third-party websites.",
+        "whyItMatters": "Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.",
+        "defaultFix": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "directory listing",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "directory-listing",
+        "title": "Directory Indexing / Listing",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if web server directories without index files display automatic file listings.",
+        "whyItMatters": "Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.",
+        "defaultFix": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx)."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "env file exposure",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "path": "/.env",
+      "detail": "Path exists but access is forbidden (403)",
+      "fix": "Ensure the .env file is moved out of the web root or permanently blocked in the web server configuration.",
+      "meta": {
+        "id": "env",
+        "title": "Environment File Exposure (.env)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.",
+        "whyItMatters": ".env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.",
+        "defaultFix": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": ".git exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "git",
+        "title": "Git Repository Exposure (.git)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if the .git folder or .git/HEAD is publicly accessible on the web server.",
+        "whyItMatters": "Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.",
+        "defaultFix": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "graphql introspection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "graphql",
+        "title": "GraphQL Introspection & Security",
+        "category": "API Security",
+        "plainExplanation": "Checks if GraphQL schema introspection is enabled in production environments.",
+        "whyItMatters": "Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.",
+        "defaultFix": "Disable GraphQL schema introspection in production deployments."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "HTTP → HTTPS redirect in place (301 permanent)",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "jwt security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No JWT tokens found in probed endpoints",
+      "meta": {
+        "id": "jwt-security",
+        "title": "JSON Web Token (JWT) Security",
+        "category": "Authentication & Session",
+        "plainExplanation": "Audits JWT implementations for \"none\" algorithm flaws, weak secret keys, and exposed token endpoints.",
+        "whyItMatters": "Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.",
+        "defaultFix": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\"."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "open redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "open-redirect",
+        "title": "Open Redirect Vulnerability",
+        "category": "Input Validation",
+        "plainExplanation": "Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.",
+        "whyItMatters": "Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.",
+        "defaultFix": "Validate target URLs against a strict whitelist of internal relative paths or approved domains."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "rate limiting",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "detail": "15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+      "fix": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "robots.txt disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "robots-sitemap",
+        "title": "Robots.txt & Sitemap Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.",
+        "whyItMatters": "Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.",
+        "defaultFix": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "missing": [
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sql error disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sql-errors",
+        "title": "Database Error Disclosure",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).",
+        "whyItMatters": "Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.",
+        "defaultFix": "Disable detailed database error output in production and use generic error messages."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "sql injection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sqli",
+        "title": "SQL Injection (SQLi)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests input fields and parameters for SQL syntax manipulation and time-based delays.",
+        "whyItMatters": "SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.",
+        "defaultFix": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "supply chain & sri",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sri-supply-chain",
+        "title": "Supply Chain & Subresource Integrity (SRI)",
+        "category": "Supply Chain Security",
+        "plainExplanation": "Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).",
+        "whyItMatters": "If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors' browsers.",
+        "defaultFix": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "ssl/tls check",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "TLSv1.3 | expires: Dec 25 16:15:26 2026 GMT",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1."
+      }
+    },
+    {
+      "target": "https://www.robertbinnsroofing.com",
+      "name": "reflected xss",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "xss",
+        "title": "Cross-Site Scripting (XSS)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.",
+        "whyItMatters": "XSS allows attackers to execute malicious JavaScript in victims' browsers, stealing cookies and session tokens.",
+        "defaultFix": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP."
+      }
+    }
+  ]
+}

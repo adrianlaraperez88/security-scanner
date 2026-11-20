@@ -1,0 +1,2029 @@
+{
+  "generatedAt": "2026-11-19T13:05:12.449Z",
+  "summary": {
+    "score": 15,
+    "level": "MEDIUM",
+    "grade": "C",
+    "summary": "Moderate risk detected. Notable security gaps require remediation before production use.",
+    "totalChecks": 24,
+    "totalExecutions": 24,
+    "vulnerable": 0,
+    "suspicious": 2,
+    "errors": 0
+  },
+  "stacks": [
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "primary": "unknown",
+      "confidence": 0,
+      "summary": "Generic Web Application",
+      "stack": [],
+      "detectedTags": [],
+      "recommendedProfile": "smart",
+      "categories": {
+        "frameworks": [],
+        "frontend": [],
+        "runtimes": [],
+        "servers": []
+      },
+      "activeChecksCount": 24,
+      "skippedChecksCount": 30,
+      "skippedChecks": [
+        "codeigniter-checks",
+        "cve-2024-4577",
+        "cve-2026-114938",
+        "cve-2026-123007",
+        "cve-2026-123633",
+        "drupal-checks",
+        "frontend-checks",
+        "ignition",
+        "laravel-auth",
+        "laravel-debug",
+        "laravel-env-manipulation",
+        "laravel-livewire",
+        "laravel-storage",
+        "laravel-telescope",
+        "magento-checks",
+        "magento-cosmicsting",
+        "nextjs-checks",
+        "node-checks",
+        "php-backup",
+        "php-cgi-exposure",
+        "php-config",
+        "php-errors",
+        "php-info",
+        "php-lfi",
+        "php-version",
+        "phpunit-rce",
+        "python-checks",
+        "spring-checks",
+        "symfony-checks",
+        "wp-checks"
+      ]
+    }
+  ],
+  "groupedFindings": [
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "admin-panels",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "cwe": "CWE-284",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "title": "Administrative Panels Exposure",
+      "category": "Access Control",
+      "cwe": "CWE-284",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "ai-llm-exposure",
+      "name": "ai & llm exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "ai-llm-exposure",
+        "title": "AI & LLM Endpoint Exposure",
+        "category": "AI & Machine Learning",
+        "plainExplanation": "Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.",
+        "whyItMatters": "Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.",
+        "defaultFix": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+        "remediation": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+        "cwe": "CWE-306",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/306.html",
+          "https://genai.owasp.org/"
+        ]
+      },
+      "title": "AI & LLM Endpoint Exposure",
+      "category": "AI & Machine Learning",
+      "cwe": "CWE-306",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/306.html",
+        "https://genai.owasp.org/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "clickjacking",
+      "name": "clickjacking protection",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "issues": [
+        {
+          "issue": "No X-Frame-Options or CSP frame-ancestors — iframe embedding possible",
+          "severity": "MEDIUM"
+        }
+      ],
+      "fix": "Add 'X-Frame-Options: DENY' (or SAMEORIGIN) and 'Content-Security-Policy: frame-ancestors none' (or 'self') headers to prevent unauthorized embedding in iframes.",
+      "meta": {
+        "id": "clickjacking",
+        "title": "Clickjacking Protection",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks if your web pages can be embedded in an iframe on third-party websites.",
+        "whyItMatters": "Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.",
+        "defaultFix": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header.",
+        "remediation": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header.",
+        "cwe": "CWE-1021",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 4.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/1021.html",
+          "https://owasp.org/www-community/attacks/Clickjacking"
+        ]
+      },
+      "title": "Clickjacking Protection",
+      "category": "HTTP Headers",
+      "cwe": "CWE-1021",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 4.3,
+      "cveIds": [],
+      "remediation": "Add 'X-Frame-Options: DENY' (or SAMEORIGIN) and 'Content-Security-Policy: frame-ancestors none' (or 'self') headers to prevent unauthorized embedding in iframes.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/1021.html",
+        "https://owasp.org/www-community/attacks/Clickjacking"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "cookie-security",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "cwe": "CWE-614",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/614.html",
+          "https://owasp.org/www-community/controls/SecureCookieAttribute"
+        ]
+      },
+      "title": "Cookie Security Attributes",
+      "category": "Authentication & Session",
+      "cwe": "CWE-614",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/614.html",
+        "https://owasp.org/www-community/controls/SecureCookieAttribute"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "cors",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "cwe": "CWE-942",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/942.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "CORS Configuration",
+      "category": "API Security",
+      "cwe": "CWE-942",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/942.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "directory-listing",
+      "name": "directory listing",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "directory-listing",
+        "title": "Directory Indexing / Listing",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if web server directories without index files display automatic file listings.",
+        "whyItMatters": "Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.",
+        "defaultFix": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+        "remediation": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+        "cwe": "CWE-548",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/548.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Directory Indexing / Listing",
+      "category": "Information Disclosure",
+      "cwe": "CWE-548",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/548.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "env",
+      "name": "env file exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "env",
+        "title": "Environment File Exposure (.env)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.",
+        "whyItMatters": ".env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.",
+        "defaultFix": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+        "remediation": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 9.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Environment File Exposure (.env)",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 9.1,
+      "cveIds": [],
+      "remediation": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "git",
+      "name": ".git exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "git",
+        "title": "Git Repository Exposure (.git)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if the .git folder or .git/HEAD is publicly accessible on the web server.",
+        "whyItMatters": "Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.",
+        "defaultFix": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+        "remediation": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+        "cwe": "CWE-527",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/527.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Git Repository Exposure (.git)",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-527",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/527.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "graphql",
+      "name": "graphql introspection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "graphql",
+        "title": "GraphQL Introspection & Security",
+        "category": "API Security",
+        "plainExplanation": "Checks if GraphQL schema introspection is enabled in production environments.",
+        "whyItMatters": "Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.",
+        "defaultFix": "Disable GraphQL schema introspection in production deployments.",
+        "remediation": "Disable GraphQL schema introspection in production deployments.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+        ]
+      },
+      "title": "GraphQL Introspection & Security",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable GraphQL schema introspection in production deployments.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "HTTP port appears closed (HTTPS-only)",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "jwt-security",
+      "name": "jwt security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No JWT tokens found in probed endpoints",
+      "meta": {
+        "id": "jwt-security",
+        "title": "JSON Web Token (JWT) Security",
+        "category": "Authentication & Session",
+        "plainExplanation": "Audits JWT implementations for \"none\" algorithm flaws, weak secret keys, and exposed token endpoints.",
+        "whyItMatters": "Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.",
+        "defaultFix": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+        "remediation": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+        "cwe": "CWE-347",
+        "owasp": "A07:2021-Identification and Authentication Failures",
+        "cvssScore": 9.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/347.html",
+          "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+        ]
+      },
+      "title": "JSON Web Token (JWT) Security",
+      "category": "Authentication & Session",
+      "cwe": "CWE-347",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "cvssScore": 9.1,
+      "cveIds": [],
+      "remediation": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/347.html",
+        "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "open-redirect",
+      "name": "open redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "open-redirect",
+        "title": "Open Redirect Vulnerability",
+        "category": "Input Validation",
+        "plainExplanation": "Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.",
+        "whyItMatters": "Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.",
+        "defaultFix": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+        "remediation": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+        "cwe": "CWE-601",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 6.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/601.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "title": "Open Redirect Vulnerability",
+      "category": "Input Validation",
+      "cwe": "CWE-601",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 6.1,
+      "cveIds": [],
+      "remediation": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/601.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "rate-limit",
+      "name": "rate limiting",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "cwe": "CWE-770",
+        "owasp": "A04:2021-Insecure Design",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/770.html",
+          "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+        ]
+      },
+      "title": "Rate Limiting & Abuse Prevention",
+      "category": "API Security",
+      "cwe": "CWE-770",
+      "owasp": "A04:2021-Insecure Design",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/770.html",
+        "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "robots-sitemap",
+      "name": "robots.txt disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "robots-sitemap",
+        "title": "Robots.txt & Sitemap Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.",
+        "whyItMatters": "Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.",
+        "defaultFix": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+        "remediation": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Robots.txt & Sitemap Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Content-Security-Policy",
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sensitive-files",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "cwe": "CWE-538",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/538.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Sensitive Files & Configurations",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-538",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/538.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sql-errors",
+      "name": "sql error disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sql-errors",
+        "title": "Database Error Disclosure",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).",
+        "whyItMatters": "Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.",
+        "defaultFix": "Disable detailed database error output in production and use generic error messages.",
+        "remediation": "Disable detailed database error output in production and use generic error messages.",
+        "cwe": "CWE-209",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/209.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "Database Error Disclosure",
+      "category": "Injection & Input",
+      "cwe": "CWE-209",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable detailed database error output in production and use generic error messages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/209.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sqli",
+      "name": "sql injection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sqli",
+        "title": "SQL Injection (SQLi)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests input fields and parameters for SQL syntax manipulation and time-based delays.",
+        "whyItMatters": "SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.",
+        "defaultFix": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+        "remediation": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+        "cwe": "CWE-89",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 9.8,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/89.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "SQL Injection (SQLi)",
+      "category": "Injection & Input",
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 9.8,
+      "cveIds": [],
+      "remediation": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/89.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sri-supply-chain",
+      "name": "supply chain & sri",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sri-supply-chain",
+        "title": "Supply Chain & Subresource Integrity (SRI)",
+        "category": "Supply Chain Security",
+        "plainExplanation": "Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).",
+        "whyItMatters": "If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors' browsers.",
+        "defaultFix": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+        "remediation": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+        "cwe": "CWE-829",
+        "owasp": "A08:2021-Software and Data Integrity Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/829.html",
+          "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/"
+        ]
+      },
+      "title": "Supply Chain & Subresource Integrity (SRI)",
+      "category": "Supply Chain Security",
+      "cwe": "CWE-829",
+      "owasp": "A08:2021-Software and Data Integrity Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/829.html",
+        "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "TLSv1.3 | expires: Feb  6 03:54:52 2027 GMT",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "xss",
+      "name": "reflected xss",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "xss",
+        "title": "Cross-Site Scripting (XSS)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.",
+        "whyItMatters": "XSS allows attackers to execute malicious JavaScript in victims' browsers, stealing cookies and session tokens.",
+        "defaultFix": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+        "remediation": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+        "cwe": "CWE-79",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/79.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "Cross-Site Scripting (XSS)",
+      "category": "Injection & Input",
+      "cwe": "CWE-79",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/79.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "https://rtc.multiscreensite.com/performance/metrics"
+      ],
+      "pageCount": 1
+    }
+  ],
+  "findings": [
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "admin-panels",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "cwe": "CWE-284",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "title": "Administrative Panels Exposure",
+      "category": "Access Control",
+      "cwe": "CWE-284",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "ai-llm-exposure",
+      "name": "ai & llm exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "ai-llm-exposure",
+        "title": "AI & LLM Endpoint Exposure",
+        "category": "AI & Machine Learning",
+        "plainExplanation": "Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.",
+        "whyItMatters": "Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.",
+        "defaultFix": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+        "remediation": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+        "cwe": "CWE-306",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/306.html",
+          "https://genai.owasp.org/"
+        ]
+      },
+      "title": "AI & LLM Endpoint Exposure",
+      "category": "AI & Machine Learning",
+      "cwe": "CWE-306",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/306.html",
+        "https://genai.owasp.org/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "clickjacking",
+      "name": "clickjacking protection",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "issues": [
+        {
+          "issue": "No X-Frame-Options or CSP frame-ancestors — iframe embedding possible",
+          "severity": "MEDIUM"
+        }
+      ],
+      "fix": "Add 'X-Frame-Options: DENY' (or SAMEORIGIN) and 'Content-Security-Policy: frame-ancestors none' (or 'self') headers to prevent unauthorized embedding in iframes.",
+      "meta": {
+        "id": "clickjacking",
+        "title": "Clickjacking Protection",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks if your web pages can be embedded in an iframe on third-party websites.",
+        "whyItMatters": "Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.",
+        "defaultFix": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header.",
+        "remediation": "Add the \"X-Frame-Options: DENY\" or \"Content-Security-Policy: frame-ancestors 'none'\" HTTP header.",
+        "cwe": "CWE-1021",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 4.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/1021.html",
+          "https://owasp.org/www-community/attacks/Clickjacking"
+        ]
+      },
+      "title": "Clickjacking Protection",
+      "category": "HTTP Headers",
+      "cwe": "CWE-1021",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 4.3,
+      "cveIds": [],
+      "remediation": "Add 'X-Frame-Options: DENY' (or SAMEORIGIN) and 'Content-Security-Policy: frame-ancestors none' (or 'self') headers to prevent unauthorized embedding in iframes.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/1021.html",
+        "https://owasp.org/www-community/attacks/Clickjacking"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "cookie-security",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "cwe": "CWE-614",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/614.html",
+          "https://owasp.org/www-community/controls/SecureCookieAttribute"
+        ]
+      },
+      "title": "Cookie Security Attributes",
+      "category": "Authentication & Session",
+      "cwe": "CWE-614",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/614.html",
+        "https://owasp.org/www-community/controls/SecureCookieAttribute"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "cors",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "cwe": "CWE-942",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/942.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "CORS Configuration",
+      "category": "API Security",
+      "cwe": "CWE-942",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/942.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "directory-listing",
+      "name": "directory listing",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "directory-listing",
+        "title": "Directory Indexing / Listing",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if web server directories without index files display automatic file listings.",
+        "whyItMatters": "Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.",
+        "defaultFix": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+        "remediation": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+        "cwe": "CWE-548",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/548.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Directory Indexing / Listing",
+      "category": "Information Disclosure",
+      "cwe": "CWE-548",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable directory browsing in web server configuration (e.g., \"Options -Indexes\" in Apache, \"autoindex off\" in Nginx).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/548.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "env",
+      "name": "env file exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "env",
+        "title": "Environment File Exposure (.env)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.",
+        "whyItMatters": ".env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.",
+        "defaultFix": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+        "remediation": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 9.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Environment File Exposure (.env)",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 9.1,
+      "cveIds": [],
+      "remediation": "Block web server access to all dotfiles (e.g. location ~ /\\. { deny all; }) and store sensitive configs outside web roots.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "git",
+      "name": ".git exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "git",
+        "title": "Git Repository Exposure (.git)",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Checks if the .git folder or .git/HEAD is publicly accessible on the web server.",
+        "whyItMatters": "Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.",
+        "defaultFix": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+        "remediation": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+        "cwe": "CWE-527",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/527.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Git Repository Exposure (.git)",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-527",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Configure your web server to strictly block access to the .git directory or exclude .git during deployment.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/527.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "graphql",
+      "name": "graphql introspection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "graphql",
+        "title": "GraphQL Introspection & Security",
+        "category": "API Security",
+        "plainExplanation": "Checks if GraphQL schema introspection is enabled in production environments.",
+        "whyItMatters": "Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.",
+        "defaultFix": "Disable GraphQL schema introspection in production deployments.",
+        "remediation": "Disable GraphQL schema introspection in production deployments.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+        ]
+      },
+      "title": "GraphQL Introspection & Security",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable GraphQL schema introspection in production deployments.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "HTTP port appears closed (HTTPS-only)",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "jwt-security",
+      "name": "jwt security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No JWT tokens found in probed endpoints",
+      "meta": {
+        "id": "jwt-security",
+        "title": "JSON Web Token (JWT) Security",
+        "category": "Authentication & Session",
+        "plainExplanation": "Audits JWT implementations for \"none\" algorithm flaws, weak secret keys, and exposed token endpoints.",
+        "whyItMatters": "Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.",
+        "defaultFix": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+        "remediation": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+        "cwe": "CWE-347",
+        "owasp": "A07:2021-Identification and Authentication Failures",
+        "cvssScore": 9.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/347.html",
+          "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+        ]
+      },
+      "title": "JSON Web Token (JWT) Security",
+      "category": "Authentication & Session",
+      "cwe": "CWE-347",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "cvssScore": 9.1,
+      "cveIds": [],
+      "remediation": "Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with \"alg\": \"none\".",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/347.html",
+        "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "open-redirect",
+      "name": "open redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "open-redirect",
+        "title": "Open Redirect Vulnerability",
+        "category": "Input Validation",
+        "plainExplanation": "Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.",
+        "whyItMatters": "Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.",
+        "defaultFix": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+        "remediation": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+        "cwe": "CWE-601",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 6.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/601.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "title": "Open Redirect Vulnerability",
+      "category": "Input Validation",
+      "cwe": "CWE-601",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 6.1,
+      "cveIds": [],
+      "remediation": "Validate target URLs against a strict whitelist of internal relative paths or approved domains.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/601.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "rate-limit",
+      "name": "rate limiting",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "cwe": "CWE-770",
+        "owasp": "A04:2021-Insecure Design",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/770.html",
+          "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+        ]
+      },
+      "title": "Rate Limiting & Abuse Prevention",
+      "category": "API Security",
+      "cwe": "CWE-770",
+      "owasp": "A04:2021-Insecure Design",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/770.html",
+        "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "robots-sitemap",
+      "name": "robots.txt disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "robots-sitemap",
+        "title": "Robots.txt & Sitemap Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.",
+        "whyItMatters": "Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.",
+        "defaultFix": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+        "remediation": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Robots.txt & Sitemap Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Content-Security-Policy",
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sensitive-files",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "cwe": "CWE-538",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/538.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Sensitive Files & Configurations",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-538",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/538.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sql-errors",
+      "name": "sql error disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sql-errors",
+        "title": "Database Error Disclosure",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).",
+        "whyItMatters": "Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.",
+        "defaultFix": "Disable detailed database error output in production and use generic error messages.",
+        "remediation": "Disable detailed database error output in production and use generic error messages.",
+        "cwe": "CWE-209",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/209.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "Database Error Disclosure",
+      "category": "Injection & Input",
+      "cwe": "CWE-209",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable detailed database error output in production and use generic error messages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/209.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sqli",
+      "name": "sql injection",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sqli",
+        "title": "SQL Injection (SQLi)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests input fields and parameters for SQL syntax manipulation and time-based delays.",
+        "whyItMatters": "SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.",
+        "defaultFix": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+        "remediation": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+        "cwe": "CWE-89",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 9.8,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/89.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "SQL Injection (SQLi)",
+      "category": "Injection & Input",
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 9.8,
+      "cveIds": [],
+      "remediation": "Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/89.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "sri-supply-chain",
+      "name": "supply chain & sri",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sri-supply-chain",
+        "title": "Supply Chain & Subresource Integrity (SRI)",
+        "category": "Supply Chain Security",
+        "plainExplanation": "Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).",
+        "whyItMatters": "If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors' browsers.",
+        "defaultFix": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+        "remediation": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+        "cwe": "CWE-829",
+        "owasp": "A08:2021-Software and Data Integrity Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/829.html",
+          "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/"
+        ]
+      },
+      "title": "Supply Chain & Subresource Integrity (SRI)",
+      "category": "Supply Chain Security",
+      "cwe": "CWE-829",
+      "owasp": "A08:2021-Software and Data Integrity Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Include cryptographic integrity hashes (e.g., integrity=\"sha384-...\") on all external script and link tags.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/829.html",
+        "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "TLSv1.3 | expires: Feb  6 03:54:52 2027 GMT",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "https://rtc.multiscreensite.com/performance/metrics",
+      "checkId": "xss",
+      "name": "reflected xss",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "xss",
+        "title": "Cross-Site Scripting (XSS)",
+        "category": "Injection & Input",
+        "plainExplanation": "Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.",
+        "whyItMatters": "XSS allows attackers to execute malicious JavaScript in victims' browsers, stealing cookies and session tokens.",
+        "defaultFix": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+        "remediation": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+        "cwe": "CWE-79",
+        "owasp": "A03:2021-Injection",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/79.html",
+          "https://owasp.org/Top10/A03_2021-Injection/"
+        ]
+      },
+      "title": "Cross-Site Scripting (XSS)",
+      "category": "Injection & Input",
+      "cwe": "CWE-79",
+      "owasp": "A03:2021-Injection",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/79.html",
+        "https://owasp.org/Top10/A03_2021-Injection/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    }
+  ]
+}

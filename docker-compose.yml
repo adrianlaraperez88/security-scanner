@@ -1,0 +1,43 @@
+services:
+  secscan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: security-scanner:latest
+    container_name: security-scanner
+    ports:
+      - "${PORT:-4321}:4321"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=4321
+      - NODE_ENV=development
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    # node --watch automatically reloads the server in <1s whenever bind-mounted files change
+    command: ["node", "--watch", "core/server.js"]
+    volumes:
+      - ./checks:/app/checks
+      - ./core:/app/core
+      - ./ui:/app/ui
+      - ./bin:/app/bin
+      - ./scan.js:/app/scan.js
+      - ./reports:/app/reports
+      - ./.secscan-history:/app/.secscan-history
+    develop:
+      watch:
+        - action: sync
+          path: ./checks
+          target: /app/checks
+        - action: sync
+          path: ./core
+          target: /app/core
+        - action: sync
+          path: ./ui
+          target: /app/ui
+        - action: sync
+          path: ./bin
+          target: /app/bin
+        - action: rebuild
+          path: ./package.json
+    restart: unless-stopped

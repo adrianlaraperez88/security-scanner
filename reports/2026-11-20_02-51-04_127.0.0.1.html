@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Security Scan Report · November 19, 2026 at 9:51 PM</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+    --border:#30363d;--text:#c9d1d9;--text2:#e6edf3;--muted:#6e7681;
+    --blue:#58a6ff;--risk:#e05f00;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem}
+  .container{max-width:1200px;margin:0 auto}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:flex-start;
+          padding-bottom:1.5rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+  .header-left h1{font-size:1.3rem;font-weight:700;color:var(--text2)}
+  .header-left h1 .accent{color:var(--blue)}
+  .header-left .meta{font-size:0.78rem;color:var(--muted);margin-top:0.25rem}
+  .grade-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+              letter-spacing:0.05em;align-self:center}
+  .risk-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+             background:#e05f0022;color:#e05f00;border:1px solid #e05f0055;
+             align-self:center;letter-spacing:0.05em}
+
+  /* Stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:2rem}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+        padding:1.1rem 1rem;text-align:center}
+  .card .val{font-size:2rem;font-weight:800;line-height:1.1}
+  .card .lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;
+             letter-spacing:0.09em;margin-top:0.2rem}
+
+  /* Risk gauge */
+  .gauge-section{margin-bottom:2rem}
+  .section-title{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;
+                 color:var(--muted);font-weight:600;margin-bottom:0.8rem;
+                 padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+  .gauge-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
+  .gauge-fill{height:100%;width:58%;background:linear-gradient(90deg,#3fb950,#d29922,#e05f00,#ff4444);
+              border-radius:5px;transition:width .6s ease}
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+                margin-top:4px;padding:0 2px}
+
+  /* Target summary */
+  .targets-grid{display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:2rem}
+  .target-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+               padding:0.7rem 1rem}
+  .target-host{font-family:monospace;font-size:0.82rem;color:var(--blue);margin-bottom:0.3rem}
+  .target-stats{display:flex;gap:0.8rem;font-size:0.75rem;font-weight:600}
+
+  /* Table */
+  .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;background:var(--bg2)}
+  thead tr{background:var(--bg3)}
+  th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;
+     letter-spacing:0.08em;color:var(--muted);font-weight:600;white-space:nowrap}
+  td{padding:12px 14px;border-top:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:rgba(88,166,255,0.04)}
+  .check-title{font-weight:600;color:var(--text2);margin-bottom:4px;font-size:13px}
+  .check-badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cat-badge{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;
+             background:var(--bg3);color:var(--muted);border:1px solid var(--border);text-transform:uppercase;letter-spacing:0.04em}
+  .cve-badge{background:rgba(255,68,68,0.14);color:#ff7b72;border-color:rgba(255,68,68,0.4)}
+  .cvss-badge{background:rgba(88,166,255,0.14);color:var(--blue);border-color:rgba(88,166,255,0.4)}
+  .td-host code{font-size:11px}
+  .td-detail{font-size:11px;max-width:360px}
+  .td-muted{color:var(--muted)}
+  .meaning-box{margin-top:6px;font-size:11px;line-height:1.45;color:var(--text)}
+  .meaning-lbl{color:var(--blue);font-weight:700;display:inline-block;margin-right:4px}
+  .why-box{margin-top:5px;font-size:11px;line-height:1.45;color:var(--text)}
+  .why-lbl{color:#d29922;font-weight:700;display:inline-block;margin-right:4px}
+  .fix-box{margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;
+           border-left:3px solid var(--blue);font-size:11px;color:var(--text)}
+  .fix-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--blue);
+           font-weight:800;margin-bottom:3px}
+  .repro-box{margin-top:8px;padding:8px 12px;background:rgba(210,153,34,0.08);border-radius:6px;
+             border-left:3px solid #d29922;font-size:11px;color:var(--text)}
+  .repro-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:#d29922;
+             font-weight:800;margin-bottom:4px}
+  .repro-steps{margin:4px 0 6px 16px;padding:0;line-height:1.45}
+  .repro-cmd{margin:4px 0 0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);
+             border-radius:4px;overflow-x:auto;font-size:10px;white-space:pre-wrap;word-break:break-all}
+  .badge{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;
+         letter-spacing:0.06em;white-space:nowrap}
+  .muted{color:var(--muted)}
+
+  /* Footer */
+  .footer{margin-top:2.5rem;font-size:0.72rem;color:var(--muted);text-align:center;
+          padding-top:1.5rem;border-top:1px solid var(--border)}
+
+  @media print{
+    body{background:#fff;color:#000;padding:1rem}
+    .card,.target-card,.table-wrap{border-color:#ccc}
+    table,thead tr{background:#f6f8fa}
+    :root{--bg2:#f6f8fa;--bg3:#eaeef2;--text2:#24292f;--text:#57606a;--muted:#57606a;--border:#d0d7de;--blue:#0969da}
+    .fix-box{background:#fff;border:1px solid #ddd;border-left:3px solid #0969da}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🔍 Security Scan Report · <span class="accent">November 19, 2026 at 9:51 PM</span></h1>
+      <div class="meta">Security Scanner v2.2 · 36 checks executed</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="grade-pill" style="background:#e05f0022;color:#e05f00;border:1px solid #e05f0055">
+        GRADE D
+      </div>
+      <div class="risk-pill">HIGH RISK</div>
+    </div>
+  </div>
+
+  
+  <div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid #e05f00;border-radius:8px;padding:0.9rem 1.2rem;margin-bottom:1.8rem">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:700;margin-bottom:4px">Security Posture Assessment</div>
+    <div style="color:var(--text2);font-size:0.92rem;line-height:1.5">High security risk. Significant vulnerabilities were detected that expose the system to attack.</div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#e05f00">D</div><div class="lbl">Security Grade</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">HIGH</div><div class="lbl">Risk Level</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">35<span style="font-size:1rem;font-weight:400;color:var(--muted)">/60</span></div><div class="lbl">Risk Score</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Vulnerable</div></div>
+    <div class="card"><div class="val" style="color:#d29922">5</div><div class="lbl">Suspicious</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">22</div><div class="lbl">Safe</div></div>
+    <div class="card"><div class="val" style="color:var(--muted)">0</div><div class="lbl">Errors</div></div>
+  </div>
+
+  <!-- Gauge -->
+  <div class="gauge-section">
+    <div class="section-title">Risk Score — 35 / 60</div>
+    <div class="gauge-track"><div class="gauge-fill"></div></div>
+    <div class="gauge-labels"><span>LOW</span><span>MEDIUM</span><span>HIGH</span><span>CRITICAL</span></div>
+  </div>
+
+  <!-- Target summary -->
+  <div class="section-title">Targets</div>
+  <div class="targets-grid">
+    <div class="target-card">
+      <div class="target-host">127.0.0.1</div>
+      <div class="target-stats">
+        <span style="color:#ff4444">0 vuln</span>
+        <span style="color:#d29922">5 susp</span>
+        <span style="color:#3fb950">22 safe</span>
+        
+      </div>
+    </div></div>
+
+  
+  <!-- Detected Technology Stack & Audit Strategy -->
+  <div class="section-title">🧠 Detected Technology Stack & Audit Strategy</div>
+  <div class="targets-grid">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div class="target-host">http://127.0.0.1:4398</div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">
+        <strong>Stack:</strong> Angular
+        <span class="muted" style="font-size:11px">(12% confidence)</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Ecosystem Tags:</span>
+        <span class="cat-badge">angular</span> <span class="cat-badge">frontend</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Recommended Profile:</span>
+        <strong style="color:var(--blue)">frontend</strong>
+      </div>
+      <div class="target-stats" style="margin-top:8px">
+        <span style="color:#3fb950">27 relevant checks executed</span>
+        <span style="color:var(--muted)">37 skipped</span>
+      </div>
+    </div></div>
+
+  
+  <!-- API Communication Summary -->
+  <div class="section-title">🔌 API Communication &amp; Discovered Endpoints</div>
+  <div class="targets-grid" style="margin-bottom:1.8rem">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <strong style="color:#3fb950;font-size:12px">YES — SPA / Client-Side API</strong>
+        <span class="cat-badge">spa_api_client</span>
+      </div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">spa_api_client — Clients: Angular HttpClient, Fetch API, GraphQL | 3 same-origin route(s), 1 external origin(s)</div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">API Clients:</span>
+        <span class="cat-badge">Angular HttpClient</span> <span class="cat-badge">Fetch API</span> <span class="cat-badge">GraphQL</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Protocols:</span>
+        <span class="cat-badge">HTTP/REST</span> <span class="cat-badge">GraphQL</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Same-Origin Routes (3):</span>
+        <code class="muted" style="margin-right:6px">/api/v1/users</code> <code class="muted" style="margin-right:6px">/graphql</code> <code class="muted" style="margin-right:6px">/assets/config.json</code>
+      </div>
+      <div style="font-size:11px;margin-bottom:4px">
+        <span class="muted">External API Origins (1):</span>
+        <code style="color:var(--blue);margin-right:6px">https://api.angular-demo.example</code>
+      </div>
+      <div style="font-size:11px;margin-top:6px">
+         <span class="muted">Runtime Config Files:</span>
+         <code class="muted" style="margin-left:4px">/assets/config.json</code>
+       </div>
+      
+    </div>
+  </div>
+
+  
+  <!-- CVE Coverage Summary -->
+  <div class="section-title">🛡️ CVE Coverage Audit Summary (angular, frontend)</div>
+  <div class="cards" style="margin-bottom:1.8rem">
+    <div class="card"><div class="val" style="color:var(--blue)">100%</div><div class="lbl">CVE Coverage</div></div>
+    <div class="card"><div class="val" style="color:var(--text2)">1</div><div class="lbl">Advisories</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">1</div><div class="lbl">Covered</div></div>
+    <div class="card"><div class="val" style="color:#d29922">0</div><div class="lbl">Partial</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Missing</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">1/1</div><div class="lbl">KEV Covered</div></div>
+  </div>
+
+  <!-- Findings table -->
+  <div class="section-title" style="margin-bottom:0.8rem">Findings (Grouped by Vulnerability)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Severity</th>
+          <th>Check</th>
+          <th>Affected Pages</th>
+          <th>Findings & Remediation</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#e05f00;color:#fff">HIGH</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Security Headers</div>
+        <div class="check-badges">
+          <code>security headers</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-693</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, X-Frame-Options, Content-Security-Policy…</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix</div>
+          <ol class="repro-steps"><li>Send GET request to http://127.0.0.1:4398/.</li><li>Observe the indicator (HTTP 200 — &lt;!doctype html&gt;     &lt;html&gt;       &lt;head&gt;&lt;title&gt;Angular Enterprise Portal&lt;/title&gt;&lt;/head&gt;       &lt;body&gt;         &lt;app-root ng-version=&quot;19.1.0&quot;&gt;&lt;/app-root&gt;         &lt;s) on HTTP 200.</li><li>Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check &quot;security-headers&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://127.0.0.1:4398/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement the missing security headers in your web server configuration (e.g., in Nginx &#39;add_header&#39; or Apache &#39;Header set&#39;) to protect against XSS, clickjacking, and mime-type sniffing.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#e05f00;color:#fff">HIGH</span></td>
+      <td class="td-name">
+        <div class="check-title">SSL / TLS Certificate &amp; Encryption</div>
+        <div class="check-badges">
+          <code>ssl/tls check</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-295</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Server not using HTTPS at all</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix</div>
+          <ol class="repro-steps"><li>Send GET request to http://127.0.0.1:4398/.</li><li>Observe the indicator (Server not using HTTPS at all).</li><li>Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check &quot;ssl-tls&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://127.0.0.1:4398/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let&#39;s Encrypt for a free, trusted certificate.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Client-Side API Communication &amp; Endpoint Discovery</div>
+        <div class="check-badges">
+          <code>api communication</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Unauthenticated GET /api/v1/users returned HTTP 200 JSON exposing sensitive field(s): email. (spa_api_client — Clients: Angular HttpClient, Fetch API, GraphQL | 3 same-origin route(s), 1 external origin(s))</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects Single Page Application (SPA) HTML, JavaScript bundles (Angular, React, Vue, Next.js), runtime configuration files (/assets/config.json, /config.json, /env.js), and CSP connect-src directives to map client-to-API communication, discover backend REST/GraphQL/WebSocket endpoints, and detect unauthenticated API data exposure or insecure API configurations.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Modern SPAs communicate directly with same-origin or external backend APIs via Angular HttpClient, Fetch, Axios, or GraphQL. Hardcoded development/localhost API URLs, plaintext HTTP API endpoints on HTTPS pages, exposed runtime config files, or unauthenticated JSON API endpoints can leak sensitive customer data, credentials, and internal service topology.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix</div>
+          <ol class="repro-steps"><li>Send GET request to http://127.0.0.1:4398/.</li><li>Observe the indicator (HTTP 200 — Unauthenticated GET /api/v1/users returned HTTP 200 JSON exposing sensitive field(s): email. (spa_api_client — Clients: Angular HttpClient, Fetch API, GraphQL | 3 same-origin route(s), 1 external orig) on HTTP 200.</li><li>Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check &quot;api-communication&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://127.0.0.1:4398/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use environment-specific production builds (e.g., Angular environment.prod.ts without dev proxy.conf.json localhost URLs), enforce HTTPS for all API origins, require authentication on sensitive REST/GraphQL endpoints, remove secrets from public /assets/config.json files, and restrict allowed API origins via Content-Security-Policy connect-src and strict CORS policies.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Clickjacking Protection</div>
+        <div class="check-badges">
+          <code>clickjacking protection</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-1021</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 4.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No X-Frame-Options or CSP frame-ancestors — iframe embedding possible</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if your web pages can be embedded in an iframe on third-party websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix</div>
+          <ol class="repro-steps"><li>Send GET request to http://127.0.0.1:4398/.</li><li>Observe the indicator (HTTP 200 — &lt;!doctype html&gt;     &lt;html&gt;       &lt;head&gt;&lt;title&gt;Angular Enterprise Portal&lt;/title&gt;&lt;/head&gt;       &lt;body&gt;         &lt;app-root ng-version=&quot;19.1.0&quot;&gt;&lt;/app-root&gt;         &lt;s) on HTTP 200.</li><li>Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check &quot;clickjacking&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://127.0.0.1:4398/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Add &#39;X-Frame-Options: DENY&#39; (or SAMEORIGIN) and &#39;Content-Security-Policy: frame-ancestors none&#39; (or &#39;self&#39;) headers to prevent unauthorized embedding in iframes.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Rate Limiting &amp; Abuse Prevention</div>
+        <div class="check-badges">
+          <code>rate limiting</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-770</span>
+          <span class="cat-badge owasp-badge">A04:2021-Insecure Design</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">15/15 burst requests succeeded — no rate limiting detected (brute-force risk)</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix</div>
+          <ol class="repro-steps"><li>Send GET request to http://127.0.0.1:4398/.</li><li>Observe the indicator (HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk)) on HTTP 200.</li><li>Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check &quot;rate-limit&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://127.0.0.1:4398/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement rate limiting at the application level (e.g., Laravel&#39;s ThrottleRequests) or web server level (e.g., Nginx &#39;limit_req&#39;) to protect against brute-force and DoS attacks.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Administrative Panels Exposure</div>
+        <div class="check-badges">
+          <code>admin panel exposure</code>
+          <span class="cat-badge">Access Control</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed admin interfaces attract automated brute-force attacks and credential stuffing.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">AI &amp; LLM Endpoint Exposure</div>
+        <div class="check-badges">
+          <code>ai &amp; llm exposure</code>
+          <span class="cat-badge">AI &amp; Machine Learning</span>
+          <span class="cat-badge cwe-badge">CWE-306</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive API Endpoints</div>
+        <div class="check-badges">
+          <code>api docs exposure</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cookie Security Attributes</div>
+        <div class="check-badges">
+          <code>cookie security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-614</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No cookies set</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">CORS Configuration</div>
+        <div class="check-badges">
+          <code>cors misconfiguration</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-942</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Directory Indexing / Listing</div>
+        <div class="check-badges">
+          <code>directory listing</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-548</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if web server directories without index files display automatic file listings.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Environment File Exposure (.env)</div>
+        <div class="check-badges">
+          <code>env file exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>.env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Frontend Source Maps &amp; Dev Artifacts</div>
+        <div class="check-badges">
+          <code>frontend security</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-540</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for exposed production JavaScript source maps (.js.map), debug modes, and hardcoded API tokens.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Source maps reconstruct original client-side source code, revealing internal endpoints, comments, and architectural flaws.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Git Repository Exposure (.git)</div>
+        <div class="check-badges">
+          <code>.git exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-527</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if the .git folder or .git/HEAD is publicly accessible on the web server.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">GraphQL Introspection &amp; Security</div>
+        <div class="check-badges">
+          <code>graphql introspection</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if GraphQL schema introspection is enabled in production environments.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Dangerous HTTP Methods</div>
+        <div class="check-badges">
+          <code>http methods</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-749</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP to HTTPS Redirection</div>
+        <div class="check-badges">
+          <code>https redirect</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-319</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target is already HTTP — HTTPS check skipped</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">JSON Web Token (JWT) Security</div>
+        <div class="check-badges">
+          <code>jwt security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-347</span>
+          <span class="cat-badge owasp-badge">A07:2021-Identification and Authentication Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No JWT tokens found in probed endpoints</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Audits JWT implementations for &quot;none&quot; algorithm flaws, weak secret keys, and exposed token endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Open Redirect Vulnerability</div>
+        <div class="check-badges">
+          <code>open redirect</code>
+          <span class="cat-badge">Input Validation</span>
+          <span class="cat-badge cwe-badge">CWE-601</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 6.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (4):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/api/v1/users</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/graphql</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/main.12345.js</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Robots.txt &amp; Sitemap Disclosure</div>
+        <div class="check-badges">
+          <code>robots.txt disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive Files &amp; Configurations</div>
+        <div class="check-badges">
+          <code>sensitive files</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-538</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Leaked configuration and database dump files grant instant access to sensitive databases.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Server Software Disclosure</div>
+        <div class="check-badges">
+          <code>server version disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Detailed version information allows attackers to look up specific CVE exploits for that exact version.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Database Error Disclosure</div>
+        <div class="check-badges">
+          <code>sql error disclosure</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-209</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">SQL Injection (SQLi)</div>
+        <div class="check-badges">
+          <code>sql injection</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-89</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (4):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/api/v1/users</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/graphql</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/main.12345.js</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests input fields and parameters for SQL syntax manipulation and time-based delays.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Supply Chain &amp; Subresource Integrity (SRI)</div>
+        <div class="check-badges">
+          <code>supply chain &amp; sri</code>
+          <span class="cat-badge">Supply Chain Security</span>
+          <span class="cat-badge cwe-badge">CWE-829</span>
+          <span class="cat-badge owasp-badge">A08:2021-Software and Data Integrity Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors&#39; browsers.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">System &amp; Operational Health Exposure</div>
+        <div class="check-badges">
+          <code>system-health</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.</span>
+        </div>
+        
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cross-Site Scripting (XSS)</div>
+        <div class="check-badges">
+          <code>reflected xss</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-79</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (4):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/api/v1/users</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/graphql</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://127.0.0.1:4398/main.12345.js</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>XSS allows attackers to execute malicious JavaScript in victims&#39; browsers, stealing cookies and session tokens.</span>
+        </div>
+        
+        
+      </td>
+    </tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">Security Scanner v2.2 · Generated November 19, 2026 at 9:51 PM</div>
+</div>
+</body>
+</html>

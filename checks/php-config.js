@@ -1,122 +1,85 @@
-export const tags = ['php', 'all'];
+import { redactSecretsInText } from '../core/ai-advisor.js';
+import {
+  isHtmlOrScript,
+  isRedirectedToDifferentPath,
+  isFrameworkRouteErrorResponse,
+  extractVerbatimSnippet,
+  confirmReproducible
+} from '../core/check-verify.js';
 
-/**
- * Checks for PHP application config files exposed at common paths.
- * These files typically contain database credentials, API keys, or secrets.
- *
- * Covers:
- *  - Generic PHP (config.php, database.php, db.php)
- *  - Symfony (parameters.yml, doctrine.yaml)
- *  - Magento 1.x (app/etc/local.xml)
- *  - Magento 2.x (app/etc/env.php)
- *  - Drupal (sites/default/settings.php)
- *  - CakePHP (config/app.php)
- *  - CodeIgniter (application/config/database.php)
- */
+export const tags = ['php', 'laravel', 'wordpress', 'drupal', 'magento', 'symfony', 'codeigniter', 'joomla'];
+
 const CONFIG_FILES = [
-  // ── Generic PHP ───────────────────────────────────────────────────────────
-  {
-    path   : '/config.php',
-    signals: ['<?php', 'password', 'database', 'host', 'DB_'],
-    severity: 'HIGH'
-  },
-  {
-    path   : '/configuration.php',
-    signals: ['<?php', 'password', 'database'],
-    severity: 'HIGH'
-  },
-  {
-    path   : '/config/database.php',
-    signals: ['<?php', 'password', 'host', 'database'],
-    severity: 'HIGH'
-  },
-  {
-    path   : '/includes/config.php',
-    signals: ['<?php', 'password', 'DB_', 'database'],
-    severity: 'HIGH'
-  },
-  {
-    path   : '/include/config.php',
-    signals: ['<?php', 'password', 'DB_', 'database'],
-    severity: 'HIGH'
-  },
-  {
-    path   : '/db.php',
-    signals: ['<?php', 'password', 'mysql', 'pgsql', 'mysqli'],
-    severity: 'HIGH'
-  },
-
-  // ── Symfony ───────────────────────────────────────────────────────────────
-  {
-    path   : '/app/config/parameters.yml',
-    signals: ['database_host', 'database_password', 'secret', 'mailer_'],
-    severity: 'CRITICAL',
-    note   : 'Symfony parameters file — contains DB credentials and app secret'
-  },
-  {
-    path   : '/config/packages/doctrine.yaml',
-    signals: ['doctrine', 'database', 'driver', 'dsn'],
-    severity: 'MEDIUM'
-  },
-
-  // ── Magento 1.x ──────────────────────────────────────────────────────────
-  {
-    path   : '/app/etc/local.xml',
-    signals: ['<connection>', '<host>', '<username>', '<password>'],
-    severity: 'CRITICAL',
-    note   : 'Magento 1 config — DB credentials in plaintext XML'
-  },
-
-  // ── Magento 2.x ──────────────────────────────────────────────────────────
-  {
-    path   : '/app/etc/env.php',
-    signals: ['<?php', 'db', 'host', 'password', 'crypt'],
-    severity: 'CRITICAL',
-    note   : 'Magento 2 config — credentials and encryption key'
-  },
-
-  // ── Drupal ────────────────────────────────────────────────────────────────
-  {
-    path   : '/sites/default/settings.php',
-    signals: ['<?php', 'database', 'drupal', 'username', 'password'],
-    severity: 'HIGH'
-  },
-
-  // ── CakePHP ───────────────────────────────────────────────────────────────
-  {
-    path   : '/config/app.php',
-    signals: ['<?php', 'password', 'host', 'database', 'SecuritySalt'],
-    severity: 'HIGH'
-  },
-
-  // ── CodeIgniter ────────────────────────────────────────────────────────────
-  {
-    path   : '/application/config/database.php',
-    signals: ['<?php', 'hostname', 'password', 'database', 'dbdriver'],
-    severity: 'HIGH'
-  },
+  { path: '/config.php',                      type: 'php', severity: 'HIGH' },
+  { path: '/configuration.php',               type: 'php', severity: 'HIGH' },
+  { path: '/config/database.php',             type: 'php', severity: 'HIGH' },
+  { path: '/includes/config.php',             type: 'php', severity: 'HIGH' },
+  { path: '/include/config.php',              type: 'php', severity: 'HIGH' },
+  { path: '/db.php',                          type: 'php', severity: 'HIGH' },
+  { path: '/app/config/parameters.yml',       type: 'yaml', severity: 'CRITICAL', note: 'Symfony parameters file — contains DB credentials and app secret', keys: ['database_host:', 'database_password:', 'secret:'] },
+  { path: '/config/packages/doctrine.yaml',   type: 'yaml', severity: 'MEDIUM', keys: ['doctrine:', 'dbal:'] },
+  { path: '/app/etc/local.xml',               type: 'xml', severity: 'CRITICAL', note: 'Magento 1 config — DB credentials in plaintext XML', keys: ['<connection>', '<password>'] },
+  { path: '/app/etc/env.php',                 type: 'php', severity: 'CRITICAL', note: 'Magento 2 config — credentials and encryption key' },
+  { path: '/sites/default/settings.php',      type: 'php', severity: 'HIGH' },
+  { path: '/config/app.php',                  type: 'php', severity: 'HIGH' },
+  { path: '/application/config/database.php', type: 'php', severity: 'HIGH' },
 ];
+
+function validateConfigResponse(file, res, reqUrl) {
+  if (res?.status !== 200 || (reqUrl && isRedirectedToDifferentPath(res, reqUrl))) return null;
+  const text = typeof res.text === 'string' ? res.text : '';
+  if (!text || isHtmlOrScript(res, text) || isFrameworkRouteErrorResponse(res, text)) return null;
+
+  if (file.type === 'php') {
+    if (text.includes('<?php') && /password|secret|db_|database|\$db|\$databases|crypt/i.test(text)) {
+      return 'PHP source configuration array';
+    }
+    return null;
+  }
+  if (file.type === 'yaml') {
+    const matched = file.keys.filter(k => text.includes(k));
+    return matched.length >= 2 ? `YAML keys (${matched.join(', ')})` : null;
+  }
+  if (file.type === 'xml') {
+    return file.keys.every(k => text.includes(k)) ? 'XML <connection><password> config' : null;
+  }
+  return null;
+}
 
 export default async function run(target, fetchWithRetry) {
   const found = [];
 
   for (const file of CONFIG_FILES) {
     try {
-      const res = await fetchWithRetry(`${target}${file.path}`);
+      const url = `${target}${file.path}`;
+      const res = await fetchWithRetry(url, { followRedirects: false });
+      const signal = validateConfigResponse(file, res, url);
+      if (!signal) continue;
 
-      if (res.status !== 200) continue;
+      const { confirmed, res: cRes } = await confirmReproducible(
+        url,
+        fetchWithRetry,
+        { followRedirects: false },
+        (r) => Boolean(validateConfigResponse(file, r, url))
+      );
+      if (!confirmed) continue;
 
-      const body      = res.text;
-      const hasSignal = file.signals.some(s => body.includes(s));
-
-      if (hasSignal) {
-        found.push({
-          path    : file.path,
-          severity: file.severity,
-          detail  : file.note ?? 'Config file with credentials accessible'
-        });
-      }
-
+      const finalRes = cRes || res;
+      const preview = redactSecretsInText(
+        extractVerbatimSnippet(finalRes.text || res.text || '', /<\?php|database_password:|database_host:|<connection>|doctrine:/i) || signal
+      );
+      found.push({
+        path         : file.path,
+        url,
+        method       : 'GET',
+        status       : 200,
+        severity     : file.severity,
+        matchedSignal: signal,
+        reproducible : true,
+        preview,
+        detail       : file.note ?? 'Config file with credentials exposed as source text',
+        ...(finalRes?.trafficId !== undefined ? { trafficId: finalRes.trafficId } : {})
+      });
     } catch { /* path unreachable */ }
   }
 
@@ -125,13 +88,20 @@ export default async function run(target, fetchWithRetry) {
   }
 
   const maxSev = found.some(f => f.severity === 'CRITICAL') ? 'CRITICAL' : 'HIGH';
+  const primary = found[0];
+  const evidenceQuotes = found.map(f => f.preview).filter(q => typeof q === 'string' && q.length >= 8).slice(0, 5);
 
   return {
-    name    : 'php config exposure',
-    status  : 'VULNERABLE',
-    severity: maxSev,
-    files   : found,
-    detail  : `${found.length} config file(s) with credentials publicly accessible`,
-    fix     : 'IMMEDIATELY move configuration files out of the web root or deny all public access via server configuration. Rotate all database passwords and API keys found in these files.'
+    name          : 'php config exposure',
+    status        : 'VULNERABLE',
+    severity      : maxSev,
+    path          : primary.path,
+    files         : found,
+    detail        : `Confirmed ${found.length} exposed config file(s): ${found.map(f => f.path).join(', ')}`,
+    reproVerified : true,
+    poeLevel      : evidenceQuotes.length > 0 ? 3 : 2,
+    ...(evidenceQuotes.length > 0 ? { evidenceQuotes } : {}),
+    ...(primary.trafficId !== undefined ? { trafficId: primary.trafficId } : {}),
+    fix           : 'IMMEDIATELY move configuration files out of the web root or deny all public access via server configuration. Rotate all database passwords and API keys found in these files.'
   };
 }

@@ -1,0 +1,1076 @@
+{
+  "generatedAt": "2026-11-19T21:08:01.921Z",
+  "summary": {
+    "score": 25,
+    "level": "HIGH",
+    "grade": "D",
+    "summary": "High security risk. Significant vulnerabilities were detected that expose the system to attack.",
+    "totalChecks": 8,
+    "totalExecutions": 8,
+    "vulnerable": 0,
+    "suspicious": 3,
+    "errors": 0
+  },
+  "stacks": [
+    {
+      "target": "http://127.0.0.1:4398",
+      "primary": "unknown",
+      "confidence": 0,
+      "summary": "Generic Web Application",
+      "stack": [],
+      "detectedTags": [],
+      "recommendedProfile": "smart",
+      "categories": {
+        "frameworks": [],
+        "frontend": [],
+        "runtimes": [],
+        "servers": []
+      },
+      "activeChecksCount": 8,
+      "skippedChecksCount": 55,
+      "skippedChecks": [
+        "admin-panels",
+        "ai-llm-exposure",
+        "clickjacking",
+        "codeigniter-checks",
+        "cookie-security",
+        "cors",
+        "cve-2024-4577",
+        "cve-2026-114938",
+        "cve-2026-123007",
+        "cve-2026-123633",
+        "cve-apache-httpd",
+        "cve-nextjs-react",
+        "cve-node-express",
+        "cve-php-ecosystem",
+        "cve-python-web",
+        "cve-spring-framework",
+        "cve-tomcat",
+        "cve-wordpress-ecosystem",
+        "directory-listing",
+        "drupal-checks",
+        "env",
+        "frontend-checks",
+        "git",
+        "graphql",
+        "ignition",
+        "jwt-security",
+        "laravel-auth",
+        "laravel-debug",
+        "laravel-env-manipulation",
+        "laravel-livewire",
+        "laravel-storage",
+        "laravel-telescope",
+        "magento-checks",
+        "magento-cosmicsting",
+        "nextjs-checks",
+        "node-checks",
+        "open-redirect",
+        "php-backup",
+        "php-cgi-exposure",
+        "php-config",
+        "php-errors",
+        "php-info",
+        "php-lfi",
+        "php-version",
+        "phpunit-rce",
+        "python-checks",
+        "robots-sitemap",
+        "sensitive-files",
+        "spring-checks",
+        "sql-errors",
+        "sqli",
+        "sri-supply-chain",
+        "symfony-checks",
+        "wp-checks",
+        "xss"
+      ]
+    }
+  ],
+  "cveCoverage": {
+    "totalAdvisories": 43,
+    "coveredCount": 42,
+    "partialCount": 0,
+    "missingCount": 1,
+    "coveragePercent": 98,
+    "kevTotal": 7,
+    "kevCovered": 7,
+    "kevMissing": 0,
+    "techTags": [],
+    "byEcosystem": {
+      "nextjs": {
+        "total": 3,
+        "covered": 3,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "react": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "spring": {
+        "total": 4,
+        "covered": 4,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "java": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "tomcat": {
+        "total": 3,
+        "covered": 3,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "apache": {
+        "total": 4,
+        "covered": 4,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "wordpress": {
+        "total": 3,
+        "covered": 3,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "django": {
+        "total": 3,
+        "covered": 3,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "fastapi": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "python": {
+        "total": 1,
+        "covered": 0,
+        "partial": 0,
+        "missing": 1,
+        "kevMissing": 0,
+        "coveragePercent": 0
+      },
+      "express": {
+        "total": 2,
+        "covered": 2,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "node": {
+        "total": 2,
+        "covered": 2,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "php": {
+        "total": 3,
+        "covered": 3,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "laravel": {
+        "total": 5,
+        "covered": 5,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "symfony": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "magento": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "codeigniter": {
+        "total": 1,
+        "covered": 1,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "drupal": {
+        "total": 2,
+        "covered": 2,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      },
+      "nginx": {
+        "total": 2,
+        "covered": 2,
+        "partial": 0,
+        "missing": 0,
+        "kevMissing": 0,
+        "coveragePercent": 100
+      }
+    },
+    "missingCveIds": [
+      "CVE-2024-56326"
+    ],
+    "partialCveIds": [],
+    "coveredCveIds": [
+      "CVE-2025-29927",
+      "CVE-2025-55182",
+      "CVE-2024-34351",
+      "CVE-2024-46982",
+      "CVE-2024-38816",
+      "CVE-2024-38819",
+      "CVE-2025-22235",
+      "CVE-2024-22262",
+      "CVE-2026-114938",
+      "CVE-2025-24813",
+      "CVE-2024-50379",
+      "CVE-2025-31650",
+      "CVE-2024-38476",
+      "CVE-2024-38477",
+      "CVE-2024-39573",
+      "CVE-2024-27316",
+      "CVE-2024-10924",
+      "CVE-2024-4439",
+      "CVE-2024-6307",
+      "CVE-2024-45230",
+      "CVE-2024-53907",
+      "CVE-2025-26699",
+      "CVE-2024-47874",
+      "CVE-2024-29041",
+      "CVE-2024-43796",
+      "CVE-2024-37890",
+      "CVE-2025-27152",
+      "CVE-2024-4577",
+      "CVE-2025-1217",
+      "CVE-2025-27515",
+      "CVE-2024-50342",
+      "CVE-2021-3129",
+      "CVE-2024-52301",
+      "CVE-2025-54068",
+      "CVE-2024-47823",
+      "CVE-2017-9841",
+      "CVE-2024-34102",
+      "CVE-2025-54418",
+      "CVE-2025-13081",
+      "CVE-2024-55638",
+      "CVE-2026-123007",
+      "CVE-2026-123633"
+    ],
+    "generatedAt": "2026-11-19T21:08:01.920Z"
+  },
+  "groupedFindings": [
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "Target is already HTTP — HTTPS check skipped",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "rate-limit",
+      "name": "rate limiting",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "detail": "15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+      "fix": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "cwe": "CWE-770",
+        "owasp": "A04:2021-Insecure Design",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/770.html",
+          "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+        ]
+      },
+      "title": "Rate Limiting & Abuse Prevention",
+      "category": "API Security",
+      "cwe": "CWE-770",
+      "owasp": "A04:2021-Insecure Design",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/770.html",
+        "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ -> HTTP 200 (HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk))",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "responseStatus": 200,
+        "observedSignal": "HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk)) on HTTP 200.",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"rate-limit\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"rate-limit\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "trafficId": "f8020117-599b-431f-8921-5398676fd97f"
+      },
+      "trafficId": "f8020117-599b-431f-8921-5398676fd97f",
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Content-Security-Policy",
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ -> HTTP 200 (HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>)",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "responseStatus": 200,
+        "observedSignal": "HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>) on HTTP 200.",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "trafficId": "bd475133-f0bd-4202-ae08-e3804dace3fa"
+      },
+      "trafficId": "bd475133-f0bd-4202-ae08-e3804dace3fa",
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "detail": "Server not using HTTPS at all",
+      "fix": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ (Server not using HTTPS at all)",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "observedSignal": "Server not using HTTPS at all",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (Server not using HTTPS at all).",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+      },
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "system-health",
+      "name": "system-health",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "issues": [],
+      "evidenceQuotes": [],
+      "meta": {
+        "id": "system-health",
+        "title": "System & Operational Health Exposure",
+        "category": "Network & Transport",
+        "plainExplanation": "Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.",
+        "whyItMatters": "Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.",
+        "defaultFix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "System & Operational Health Exposure",
+      "category": "Network & Transport",
+      "cveIds": [],
+      "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "pages": [
+        "http://127.0.0.1:4398"
+      ],
+      "pageCount": 1
+    }
+  ],
+  "findings": [
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "Target is already HTTP — HTTPS check skipped",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "rate-limit",
+      "name": "rate limiting",
+      "status": "SUSPICIOUS",
+      "severity": "MEDIUM",
+      "detail": "15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+      "fix": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "meta": {
+        "id": "rate-limit",
+        "title": "Rate Limiting & Abuse Prevention",
+        "category": "API Security",
+        "plainExplanation": "Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.",
+        "whyItMatters": "Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.",
+        "defaultFix": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "remediation": "Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.",
+        "cwe": "CWE-770",
+        "owasp": "A04:2021-Insecure Design",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/770.html",
+          "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+        ]
+      },
+      "title": "Rate Limiting & Abuse Prevention",
+      "category": "API Security",
+      "cwe": "CWE-770",
+      "owasp": "A04:2021-Insecure Design",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/770.html",
+        "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ -> HTTP 200 (HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk))",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "responseStatus": 200,
+        "observedSignal": "HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk)",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (HTTP 200 — 15/15 burst requests succeeded — no rate limiting detected (brute-force risk)) on HTTP 200.",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"rate-limit\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"rate-limit\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "trafficId": "f8020117-599b-431f-8921-5398676fd97f"
+      },
+      "trafficId": "f8020117-599b-431f-8921-5398676fd97f"
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Content-Security-Policy",
+        "Referrer-Policy",
+        "Permissions-Policy"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ -> HTTP 200 (HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>)",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "responseStatus": 200,
+        "observedSignal": "HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (HTTP 200 — <html><head><title>Mock App</title></head><body><h1>Hello World</h1></body></html>) on HTTP 200.",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "trafficId": "bd475133-f0bd-4202-ae08-e3804dace3fa"
+      },
+      "trafficId": "bd475133-f0bd-4202-ae08-e3804dace3fa"
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "detail": "Server not using HTTPS at all",
+      "fix": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://127.0.0.1:4398/ (Server not using HTTPS at all)",
+        "method": "GET",
+        "url": "http://127.0.0.1:4398/",
+        "requestHeaders": {},
+        "observedSignal": "Server not using HTTPS at all",
+        "curl": "curl -i -sS 'http://127.0.0.1:4398/'",
+        "steps": [
+          "Send GET request to http://127.0.0.1:4398/.",
+          "Observe the indicator (Server not using HTTPS at all).",
+          "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://127.0.0.1:4398/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+      }
+    },
+    {
+      "target": "http://127.0.0.1:4398",
+      "checkId": "system-health",
+      "name": "system-health",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "issues": [],
+      "evidenceQuotes": [],
+      "meta": {
+        "id": "system-health",
+        "title": "System & Operational Health Exposure",
+        "category": "Network & Transport",
+        "plainExplanation": "Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.",
+        "whyItMatters": "Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.",
+        "defaultFix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "title": "System & Operational Health Exposure",
+      "category": "Network & Transport",
+      "cveIds": [],
+      "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { isRedirectedToDifferentPath } from '../core/check-verify.js';
+
 export const tags = ['all'];
 
 /**
@@ -60,7 +62,9 @@ function analyzeToken(jwt) {
 export default async function run(target, fetchWithRetry) {
   for (const p of API_PATHS) {
     try {
-      const res   = await fetchWithRetry(`${target}${p}`);
+      const url   = `${target}${p}`;
+      const res   = await fetchWithRetry(url, { followRedirects: false });
+      if (isRedirectedToDifferentPath(res, url)) continue;
       const body  = res.text ?? '';
       const tokens = body.match(JWT_RE) ?? [];
 
@@ -70,12 +74,24 @@ export default async function run(target, fetchWithRetry) {
           const maxSev = issues.some(i => i.severity === 'CRITICAL') ? 'CRITICAL'
                        : issues.some(i => i.severity === 'HIGH')     ? 'HIGH'
                        : 'MEDIUM';
+          const detail = issues.map(i => i.issue).join('; ');
           return {
             name    : 'jwt security',
             status  : 'VULNERABLE',
             severity: maxSev,
             path    : p,
+            url,
+            detail,
             issues,
+            files   : [{
+              path         : p,
+              url,
+              method       : 'GET',
+              status       : res?.status ?? 200,
+              matchedSignal: issues[0].issue,
+              reproducible : true
+            }],
+            ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {}),
             fix     : "Disable 'alg: none' and only accept strong algorithms (e.g., RS256/ES256). Always include an 'exp' (expiration) claim and keep the payload minimal, avoiding sensitive data like passwords or internal IDs."
           };
         }

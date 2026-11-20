@@ -50,11 +50,14 @@ export default async function run(target, fetchWithRetry) {
     const successCount = valid.filter(r => r.status < 400).length;
 
     if (successCount >= Math.floor(BURST_SIZE * 0.8)) {
+      const firstTrafficId = valid.find(r => r?.trafficId !== undefined)?.trafficId;
       return {
         name    : 'rate limiting',
         status  : 'SUSPICIOUS',
         severity: 'MEDIUM',
+        path    : '/',
         detail  : `${successCount}/${BURST_SIZE} burst requests succeeded — no rate limiting detected (brute-force risk)`,
+        ...(firstTrafficId !== undefined ? { trafficId: firstTrafficId } : {}),
         fix     : "Implement rate limiting at the application level (e.g., Laravel's ThrottleRequests) or web server level (e.g., Nginx 'limit_req') to protect against brute-force and DoS attacks."
       };
     }

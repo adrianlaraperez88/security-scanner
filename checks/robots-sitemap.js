@@ -1,3 +1,5 @@
+import { isHtmlOrScript, isRedirectedToDifferentPath } from '../core/check-verify.js';
+
 export const tags = ['all'];
 
 /**
@@ -16,13 +18,15 @@ const SENSITIVE_PREFIXES = [
 
 export default async function run(target, fetchWithRetry) {
   try {
-    const res = await fetchWithRetry(`${target}/robots.txt`);
+    const robotsUrl = `${target}/robots.txt`;
+    const res = await fetchWithRetry(robotsUrl, { followRedirects: false });
 
-    if (res.status !== 200) {
+    if (res.status !== 200 || isRedirectedToDifferentPath(res, robotsUrl) || isHtmlOrScript(res, res.text)) {
       return { name: 'robots.txt disclosure', status: 'SAFE', severity: 'NONE' };
     }
 
-    const lines = res.text.split('\n').map(l => l.trim().toLowerCase());
+    const rawText = typeof res?.text === 'string' ? res.text : '';
+    const lines = rawText.split('\n').map(l => l.trim().toLowerCase());
 
     const disallowed = lines
       .filter(l => l.startsWith('disallow:'))
@@ -34,12 +38,28 @@ export default async function run(target, fetchWithRetry) {
     );
 
     if (leaked.length > 0) {
+      const topLeaked = leaked.slice(0, 10);
+      const quote = `Disallow: ${topLeaked[0]}`;
       return {
-        name     : 'robots.txt disclosure',
-        status   : 'SUSPICIOUS',
-        severity : 'LOW',
-        paths    : leaked.slice(0, 10),
-        fix      : "Avoid listing sensitive or administrative directories in robots.txt. Use 'X-Robots-Tag: noindex' headers or proper authentication to protect sensitive areas without alerting crawlers to their existence."
+        name          : 'robots.txt disclosure',
+        status        : 'SUSPICIOUS',
+        severity      : 'LOW',
+        path          : '/robots.txt',
+        url           : robotsUrl,
+        paths         : topLeaked,
+        detail        : `robots.txt discloses sensitive path(s): ${topLeaked.join(', ')}`,
+        files         : [{
+          path         : '/robots.txt',
+          url          : robotsUrl,
+          method       : 'GET',
+          status       : 200,
+          matchedSignal: quote,
+          reproducible : true,
+          preview      : quote
+        }],
+        ...(quote.length >= 8 ? { evidenceQuotes: [quote] } : {}),
+        ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {}),
+        fix           : "Avoid listing sensitive or administrative directories in robots.txt. Use 'X-Robots-Tag: noindex' headers or proper authentication to protect sensitive areas without alerting crawlers to their existence."
       };
     }
 

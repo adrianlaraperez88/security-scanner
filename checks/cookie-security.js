@@ -38,7 +38,10 @@ export default async function run(target, fetchWithRetry) {
       name    : 'cookie security',
       status  : 'SUSPICIOUS',
       severity: maxSev,
+      path    : '/',
+      detail  : issues.map(i => `${i.cookie}: ${i.issue}`).slice(0, 4).join('; '),
       issues,
+      ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {}),
       fix     : "Configure all sensitive cookies with 'HttpOnly', 'Secure', and 'SameSite=Strict' (or Lax) attributes to protect against XSS, credential theft, and CSRF."
     };
 

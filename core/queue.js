@@ -1,3 +1,5 @@
+const STATIC_ASSET_EXT_RE = /\.(?:js|mjs|cjs|css|less|scss|sass|woff2?|ttf|eot|otf|png|jpe?g|gif|svg|ico|webp|avif|bmp|tiff?|mp4|webm|ogg|mp3|wav|flac|aac|pdf|zip|tar|gz|tgz|bz2|7z|rar|map|wasm)$/i;
+
 /**
  * A simple Task Queue for Scanner 2.0.
  * Manages URL deduplication and ensures we only scan within the identified domain.
@@ -15,7 +17,7 @@ export class TaskQueue {
 
   /**
    * Push one or more URLs into the queue.
-   * Filters out duplicates and off-domain links.
+   * Filters out duplicates, static asset files, and off-domain links.
    */
   push(input) {
     const urls = Array.isArray(input) ? input : [input];
@@ -25,6 +27,11 @@ export class TaskQueue {
         // Resolve relative to base if needed
         const resolved = new URL(u, this.baseUrl.href).href.replace(/\/+$/, '');
         const urlObj   = new URL(resolved);
+        const isInitialSeed = this.seen.size === 0;
+
+        if (!isInitialSeed && STATIC_ASSET_EXT_RE.test(urlObj.pathname || '')) {
+          continue;
+        }
 
         // Stay on domain and only scan http/s
         if (urlObj.hostname === this.baseUrl.hostname && 

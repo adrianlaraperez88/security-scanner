@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Security Scan Report · November 19, 2026 at 1:33 PM</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+    --border:#30363d;--text:#c9d1d9;--text2:#e6edf3;--muted:#6e7681;
+    --blue:#58a6ff;--risk:#ff4444;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem}
+  .container{max-width:1200px;margin:0 auto}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:flex-start;
+          padding-bottom:1.5rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+  .header-left h1{font-size:1.3rem;font-weight:700;color:var(--text2)}
+  .header-left h1 .accent{color:var(--blue)}
+  .header-left .meta{font-size:0.78rem;color:var(--muted);margin-top:0.25rem}
+  .grade-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+              letter-spacing:0.05em;align-self:center}
+  .risk-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+             background:#ff444422;color:#ff4444;border:1px solid #ff444455;
+             align-self:center;letter-spacing:0.05em}
+
+  /* Stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:2rem}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+        padding:1.1rem 1rem;text-align:center}
+  .card .val{font-size:2rem;font-weight:800;line-height:1.1}
+  .card .lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;
+             letter-spacing:0.09em;margin-top:0.2rem}
+
+  /* Risk gauge */
+  .gauge-section{margin-bottom:2rem}
+  .section-title{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;
+                 color:var(--muted);font-weight:600;margin-bottom:0.8rem;
+                 padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+  .gauge-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
+  .gauge-fill{height:100%;width:75%;background:linear-gradient(90deg,#3fb950,#d29922,#e05f00,#ff4444);
+              border-radius:5px;transition:width .6s ease}
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+                margin-top:4px;padding:0 2px}
+
+  /* Target summary */
+  .targets-grid{display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:2rem}
+  .target-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+               padding:0.7rem 1rem}
+  .target-host{font-family:monospace;font-size:0.82rem;color:var(--blue);margin-bottom:0.3rem}
+  .target-stats{display:flex;gap:0.8rem;font-size:0.75rem;font-weight:600}
+
+  /* Table */
+  .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;background:var(--bg2)}
+  thead tr{background:var(--bg3)}
+  th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;
+     letter-spacing:0.08em;color:var(--muted);font-weight:600;white-space:nowrap}
+  td{padding:12px 14px;border-top:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:rgba(88,166,255,0.04)}
+  .check-title{font-weight:600;color:var(--text2);margin-bottom:4px;font-size:13px}
+  .check-badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cat-badge{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;
+             background:var(--bg3);color:var(--muted);border:1px solid var(--border);text-transform:uppercase;letter-spacing:0.04em}
+  .cve-badge{background:rgba(255,68,68,0.14);color:#ff7b72;border-color:rgba(255,68,68,0.4)}
+  .cvss-badge{background:rgba(88,166,255,0.14);color:var(--blue);border-color:rgba(88,166,255,0.4)}
+  .td-host code{font-size:11px}
+  .td-detail{font-size:11px;max-width:360px}
+  .td-muted{color:var(--muted)}
+  .meaning-box{margin-top:6px;font-size:11px;line-height:1.45;color:var(--text)}
+  .meaning-lbl{color:var(--blue);font-weight:700;display:inline-block;margin-right:4px}
+  .why-box{margin-top:5px;font-size:11px;line-height:1.45;color:var(--text)}
+  .why-lbl{color:#d29922;font-weight:700;display:inline-block;margin-right:4px}
+  .fix-box{margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;
+           border-left:3px solid var(--blue);font-size:11px;color:var(--text)}
+  .fix-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--blue);
+           font-weight:800;margin-bottom:3px}
+  .badge{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;
+         letter-spacing:0.06em;white-space:nowrap}
+  .muted{color:var(--muted)}
+
+  /* Footer */
+  .footer{margin-top:2.5rem;font-size:0.72rem;color:var(--muted);text-align:center;
+          padding-top:1.5rem;border-top:1px solid var(--border)}
+
+  @media print{
+    body{background:#fff;color:#000;padding:1rem}
+    .card,.target-card,.table-wrap{border-color:#ccc}
+    table,thead tr{background:#f6f8fa}
+    :root{--bg2:#f6f8fa;--bg3:#eaeef2;--text2:#24292f;--text:#57606a;--muted:#57606a;--border:#d0d7de;--blue:#0969da}
+    .fix-box{background:#fff;border:1px solid #ddd;border-left:3px solid #0969da}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🔍 Security Scan Report · <span class="accent">November 19, 2026 at 1:33 PM</span></h1>
+      <div class="meta">Security Scanner v2.2 · 317 checks executed</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="grade-pill" style="background:#ff444422;color:#ff4444;border:1px solid #ff444455">
+        GRADE F
+      </div>
+      <div class="risk-pill">CRITICAL RISK</div>
+    </div>
+  </div>
+
+  
+  <div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid #ff4444;border-radius:8px;padding:0.9rem 1.2rem;margin-bottom:1.8rem">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:700;margin-bottom:4px">Security Posture Assessment</div>
+    <div style="color:var(--text2);font-size:0.92rem;line-height:1.5">Critical security danger. Immediate action required to address high-severity vulnerabilities.</div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#ff4444">F</div><div class="lbl">Security Grade</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">CRITICAL</div><div class="lbl">Risk Level</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">45<span style="font-size:1rem;font-weight:400;color:var(--muted)">/60</span></div><div class="lbl">Risk Score</div></div>
+    <div class="card"><div class="val" style="color:#ff4444">2</div><div class="lbl">Vulnerable</div></div>
+    <div class="card"><div class="val" style="color:#d29922">4</div><div class="lbl">Suspicious</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">35</div><div class="lbl">Safe</div></div>
+    <div class="card"><div class="val" style="color:var(--muted)">0</div><div class="lbl">Errors</div></div>
+  </div>
+
+  <!-- Gauge -->
+  <div class="gauge-section">
+    <div class="section-title">Risk Score — 45 / 60</div>
+    <div class="gauge-track"><div class="gauge-fill"></div></div>
+    <div class="gauge-labels"><span>LOW</span><span>MEDIUM</span><span>HIGH</span><span>CRITICAL</span></div>
+  </div>
+
+  <!-- Target summary -->
+  <div class="section-title">Targets</div>
+  <div class="targets-grid">
+    <div class="target-card">
+      <div class="target-host">fearlessbull.com</div>
+      <div class="target-stats">
+        <span style="color:#ff4444">2 vuln</span>
+        <span style="color:#d29922">4 susp</span>
+        <span style="color:#3fb950">35 safe</span>
+        
+      </div>
+    </div></div>
+
+  
+  <!-- Detected Technology Stack & Audit Strategy -->
+  <div class="section-title">🧠 Detected Technology Stack & Audit Strategy</div>
+  <div class="targets-grid">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div class="target-host">https://fearlessbull.com</div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">
+        <strong>Stack:</strong> Laravel, PHP
+        <span class="muted" style="font-size:11px">(3% confidence)</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Ecosystem Tags:</span>
+        <span class="cat-badge">laravel</span> <span class="cat-badge">php</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Recommended Profile:</span>
+        <strong style="color:var(--blue)">laravel</strong>
+      </div>
+      <div class="target-stats" style="margin-top:8px">
+        <span style="color:#3fb950">41 relevant checks executed</span>
+        <span style="color:var(--muted)">21 skipped</span>
+      </div>
+    </div></div>
+
+  
+  <!-- CVE Coverage Summary -->
+  <div class="section-title">🛡️ CVE Coverage Audit Summary (laravel, php)</div>
+  <div class="cards" style="margin-bottom:1.8rem">
+    <div class="card"><div class="val" style="color:var(--blue)">100%</div><div class="lbl">CVE Coverage</div></div>
+    <div class="card"><div class="val" style="color:var(--text2)">17</div><div class="lbl">Advisories</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">17</div><div class="lbl">Covered</div></div>
+    <div class="card"><div class="val" style="color:#d29922">0</div><div class="lbl">Partial</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Missing</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">4/4</div><div class="lbl">KEV Covered</div></div>
+  </div>
+
+  <!-- Findings table -->
+  <div class="section-title" style="margin-bottom:0.8rem">Findings (Grouped by Vulnerability)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Severity</th>
+          <th>Check</th>
+          <th>Affected Pages</th>
+          <th>Findings & Remediation</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr style="background:rgba(255,68,68,0.07)">
+      <td class="td-status"><span style="color:#ff4444;font-weight:600">🚨 VULNERABLE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#ff4444;color:#fff">CRITICAL</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Auth Routes &amp; CSRF</div>
+        <div class="check-badges">
+          <code>laravel auth routes</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-352</span>
+          <span class="cat-badge owasp-badge">A07:2021-Identification and Authentication Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L2</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">/api/user returns user data without authentication</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks Laravel login, registration, and password reset endpoints for missing CSRF protection and brute-force defenses.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unprotected authentication routes enable credential brute-forcing and cross-site request forgery.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Ensure all sensitive API routes (/api/user, /api/me) are protected by authentication middleware (e.g., Sanctum/Passport). Disable public user registration (/api/register) if not needed and apply strict rate limiting to auth endpoints.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(255,68,68,0.07)">
+      <td class="td-status"><span style="color:#ff4444;font-weight:600">🚨 VULNERABLE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive Files &amp; Configurations</div>
+        <div class="check-badges">
+          <code>sensitive files</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-538</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L2</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">/.htaccess</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Leaked configuration and database dump files grant instant access to sensitive databases.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Remove sensitive configuration or metadata files from the web root or deny access to them in your web server configuration (e.g., .htaccess, composer.json, etc.).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive API Endpoints</div>
+        <div class="check-badges">
+          <code>api docs exposure</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">/api/docs</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable public API documentation endpoints in production or restrict access via authentication.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Clickjacking Protection</div>
+        <div class="check-badges">
+          <code>clickjacking protection</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-1021</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 4.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No X-Frame-Options or CSP frame-ancestors — iframe embedding possible</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if your web pages can be embedded in an iframe on third-party websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Add &#39;X-Frame-Options: DENY&#39; (or SAMEORIGIN) and &#39;Content-Security-Policy: frame-ancestors none&#39; (or &#39;self&#39;) headers to prevent unauthorized embedding in iframes.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">Rate Limiting &amp; Abuse Prevention</div>
+        <div class="check-badges">
+          <code>rate limiting</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-770</span>
+          <span class="cat-badge owasp-badge">A04:2021-Insecure Design</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">15/15 burst requests succeeded — no rate limiting detected (brute-force risk)</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement rate limiting at the application level (e.g., Laravel&#39;s ThrottleRequests) or web server level (e.g., Nginx &#39;limit_req&#39;) to protect against brute-force and DoS attacks.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#d29922;color:#0d1117">MEDIUM</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Security Headers</div>
+        <div class="check-badges">
+          <code>security headers</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-693</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L1</span>
+          <span class="cat-badge ver-badge">unverified</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Missing: X-Frame-Options, Content-Security-Policy, Permissions-Policy</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.</span>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement the missing security headers in your web server configuration (e.g., in Nginx &#39;add_header&#39; or Apache &#39;Header set&#39;) to protect against XSS, clickjacking, and mime-type sniffing.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Administrative Panels Exposure</div>
+        <div class="check-badges">
+          <code>admin panel exposure</code>
+          <span class="cat-badge">Access Control</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed admin interfaces attract automated brute-force attacks and credential stuffing.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">AI &amp; LLM Endpoint Exposure</div>
+        <div class="check-badges">
+          <code>ai &amp; llm exposure</code>
+          <span class="cat-badge">AI &amp; Machine Learning</span>
+          <span class="cat-badge cwe-badge">CWE-306</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cookie Security Attributes</div>
+        <div class="check-badges">
+          <code>cookie security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-614</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">CORS Configuration</div>
+        <div class="check-badges">
+          <code>cors misconfiguration</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-942</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP CGI Argument Injection (CVE-2024-4577)</div>
+        <div class="check-badges">
+          <code>php-cgi RCE (CVE-2024-4577)</code>
+          <span class="cat-badge">Known Vulnerabilities</span>
+          <span class="cat-badge cwe-badge">CWE-78</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          <span class="cat-badge cve-badge">CVE-2024-4577</span>
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No PHP-CGI binary found at common paths</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests for critical Windows PHP CGI argument injection vulnerability allowing remote code execution.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers can execute arbitrary command-line code on the server without authentication.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP, Laravel &amp; Symfony Ecosystem CVEs (CVE-2025-1217, CVE-2025-27515, CVE-2024-50342)</div>
+        <div class="check-badges">
+          <code>PHP, Laravel &amp; Symfony Ecosystem CVEs (CVE-2025-1217, CVE-2025-27515, CVE-2024-50342)</code>
+          <span class="cat-badge">Known Vulnerabilities</span>
+          <span class="cat-badge cwe-badge">CWE-20</span>
+          <span class="cat-badge owasp-badge">A06:2021-Vulnerable and Outdated Components</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No vulnerable PHP, Laravel, or Symfony CVE signals detected</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Passively inspects X-Powered-By / Server PHP banners and exposed /composer.json and /composer.lock manifests for PHP HTTP header parsing flaws (CVE-2025-1217), Laravel file validation bypass (CVE-2025-27515), and Symfony HttpFoundation Request parsing vulnerabilities (CVE-2024-50342).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Vulnerable PHP, Laravel, and Symfony versions can allow attackers to bypass uploaded file validation rules, spoof request headers or URLs, and evade security controls. Exposed composer manifests disclose exact backend package versions.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Directory Indexing / Listing</div>
+        <div class="check-badges">
+          <code>directory listing</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-548</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if web server directories without index files display automatic file listings.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Environment File Exposure (.env)</div>
+        <div class="check-badges">
+          <code>env file exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>.env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Git Repository Exposure (.git)</div>
+        <div class="check-badges">
+          <code>.git exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-527</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if the .git folder or .git/HEAD is publicly accessible on the web server.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">GraphQL Introspection &amp; Security</div>
+        <div class="check-badges">
+          <code>graphql introspection</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if GraphQL schema introspection is enabled in production environments.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Dangerous HTTP Methods</div>
+        <div class="check-badges">
+          <code>http methods</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-749</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP to HTTPS Redirection</div>
+        <div class="check-badges">
+          <code>https redirect</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-319</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">HTTP → HTTPS redirect in place (301 permanent)</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Ignition Debug RCE</div>
+        <div class="check-badges">
+          <code>ignition RCE (CVE-2021-3129)</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-94</span>
+          <span class="cat-badge owasp-badge">A06:2021-Vulnerable and Outdated Components</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          <span class="cat-badge cve-badge">CVE-2021-3129</span>
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Detects exposed Laravel Ignition error page endpoints susceptible to known remote code execution exploits.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Ignition debug routes in production can allow an attacker to run arbitrary PHP code on the server.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">JSON Web Token (JWT) Security</div>
+        <div class="check-badges">
+          <code>jwt security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-347</span>
+          <span class="cat-badge owasp-badge">A07:2021-Identification and Authentication Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No JWT tokens found in probed endpoints</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Audits JWT implementations for &quot;none&quot; algorithm flaws, weak secret keys, and exposed token endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Debug Mode Exposure</div>
+        <div class="check-badges">
+          <code>laravel debug exposure</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-215</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Laravel debug mode (APP_DEBUG=true) is accidentally enabled in production.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Debug mode displays detailed stack traces, database queries, and environment secrets when errors occur.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Environment Manipulation</div>
+        <div class="check-badges">
+          <code>laravel env manipulation (CVE-2024-52301)</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-88</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          <span class="cat-badge cve-badge">CVE-2024-52301</span>
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No environment manipulation detected — likely patched or register_argc_argv disabled</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests for parameter injection vulnerability attempting to switch application environment to local or debug.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Allows attackers to manipulate framework runtime behavior and trigger verbose error responses.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Livewire Security</div>
+        <div class="check-badges">
+          <code>livewire exposure (CVE-2025-54068)</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-285</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          <span class="cat-badge cve-badge">CVE-2025-54068</span><span class="cat-badge cve-badge">CVE-2024-47823</span>
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Audits Livewire endpoints (/livewire/update, /livewire/upload-file) for authorization bypasses and missing validation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed Livewire component endpoints can allow unauthorized state modification or file upload vulnerabilities.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Storage &amp; Log Exposure</div>
+        <div class="check-badges">
+          <code>laravel log exposure</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-532</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Laravel storage/logs, framework caches, or session files are accessible over HTTP.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Storage logs contain user data, API errors, session identifiers, and sensitive system details.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Laravel Telescope Exposure</div>
+        <div class="check-badges">
+          <code>telescope/horizon exposure</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Laravel Telescope debugging dashboard (/telescope) is publicly accessible.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Telescope records all requests, SQL queries, mail messages, and user sessions in real-time.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Open Redirect Vulnerability</div>
+        <div class="check-badges">
+          <code>open redirect</code>
+          <span class="cat-badge">Input Validation</span>
+          <span class="cat-badge cwe-badge">CWE-601</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 6.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (70):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.ico</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.svg</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/apple-touch-icon.png</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-DRC__1Mx.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-Q_nF8v4l.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-Dk9ku72i.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-CTEe1bJa.woff2</code></li>
+    </ul>
+    <details style="margin-top:4px;font-size:11px;color:var(--blue);cursor:pointer">
+         <summary>+ 62 more pages</summary>
+         <ul style="margin:4px 0 0 16px;padding:0;list-style:disc">
+           <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-B7fBEWYG.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-BsaQcF38.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-CYsWV7cW.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-Ds1aFT64.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-BbP24BW7.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/dist-CVT0uKVD.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardExpose-DnsDLuQX.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-I_h4Yde9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/button-DOe0-b6w.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-jeOgwn2S.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Teleport-C3wne5Es.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Presence-CXerr7Pd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/getActiveElement-DBcJEQOT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/createLucideIcon-Dy9PcA1Z.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Collection-CYtUCNQQ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/DialogTitle-XsKYm-Hd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardPropsEmits-DUtcjAmp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/wayfinder-DrSrwaE4.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Landing-Bl8sjQce.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/gauge-Dl4x4d6x.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/layers-COTV8Xfn.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TickerLogo-DuSVCO55.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/login</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/register</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/$%7Bt%7D</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Features-vQwrQvbi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/check-Dnm4PAYl.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/shield-check-DDwJCAZh.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ComingSoon-LL7aVCT-.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/About-CgJMbgtZ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Documentation-BUZkN6xj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/CardTitle-E7s8NS4N.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Login-DqDwOuq9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PasswordInput-Dhzff9GG.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/InputError-CTS6-Fvp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Spinner-75d016B1.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/authForm-MRyjIBir.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/mail-Di2lu41f.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useFormControl-8CUjpn-W.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Label-DW4jY9AT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/password-TnSFWt34.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/confirm-C6WtcVRt.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/forgot-password</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Terms-BGnW6jKT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PolicyDocument-DHmk_xIi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Privacy-H8yuTtov.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ForgotPassword-BWK8FDkj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TextLink-DIqfZEMN.js</code></li>
+         </ul>
+       </details>
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP Backup &amp; Old Files</div>
+        <div class="check-badges">
+          <code>php backup files</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-530</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for forgotten backup files such as index.php.bak, config.php.old, or index.php~.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Web servers often do not execute PHP for .bak or .old extensions, dumping raw PHP source code and credentials.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP-FPM &amp; CGI Status Exposure</div>
+        <div class="check-badges">
+          <code>php-cgi/fpm exposure</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for accessible /fpm-ping, /php-status, or cgi-bin PHP binaries.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>FPM status pages leak active client IPs, query strings, and script paths; exposed CGI binaries allow command execution.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Insecure PHP Configuration</div>
+        <div class="check-badges">
+          <code>php config exposure</code>
+          <span class="cat-badge">Framework Security</span>
+          <span class="cat-badge cwe-badge">CWE-16</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for unsafe PHP directives such as allow_url_include, display_errors, or register_globals.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Insecure PHP configurations enable Remote File Inclusion (RFI) and information disclosure.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP Error &amp; Exception Disclosure</div>
+        <div class="check-badges">
+          <code>php error exposure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-209</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if the web server displays verbose PHP warning, notice, or fatal error messages.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Error messages display filesystem paths, line numbers, and database query structures to visitors.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHPInfo Page Exposure</div>
+        <div class="check-badges">
+          <code>php info exposure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for public phpinfo.php, info.php, or test.php files.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>phpinfo() outputs complete server environment variables, PHP modules, OS versions, and database usernames.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP Local File Inclusion (LFI)</div>
+        <div class="check-badges">
+          <code>local file inclusion (LFI)</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-22</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (70):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.ico</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.svg</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/apple-touch-icon.png</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-DRC__1Mx.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-Q_nF8v4l.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-Dk9ku72i.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-CTEe1bJa.woff2</code></li>
+    </ul>
+    <details style="margin-top:4px;font-size:11px;color:var(--blue);cursor:pointer">
+         <summary>+ 62 more pages</summary>
+         <ul style="margin:4px 0 0 16px;padding:0;list-style:disc">
+           <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-B7fBEWYG.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-BsaQcF38.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-CYsWV7cW.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-Ds1aFT64.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-BbP24BW7.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/dist-CVT0uKVD.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardExpose-DnsDLuQX.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-I_h4Yde9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/button-DOe0-b6w.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-jeOgwn2S.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Teleport-C3wne5Es.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Presence-CXerr7Pd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/getActiveElement-DBcJEQOT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/createLucideIcon-Dy9PcA1Z.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Collection-CYtUCNQQ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/DialogTitle-XsKYm-Hd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardPropsEmits-DUtcjAmp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/wayfinder-DrSrwaE4.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Landing-Bl8sjQce.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/gauge-Dl4x4d6x.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/layers-COTV8Xfn.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TickerLogo-DuSVCO55.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/login</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/register</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/$%7Bt%7D</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Features-vQwrQvbi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/check-Dnm4PAYl.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/shield-check-DDwJCAZh.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ComingSoon-LL7aVCT-.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/About-CgJMbgtZ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Documentation-BUZkN6xj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/CardTitle-E7s8NS4N.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Login-DqDwOuq9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PasswordInput-Dhzff9GG.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/InputError-CTS6-Fvp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Spinner-75d016B1.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/authForm-MRyjIBir.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/mail-Di2lu41f.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useFormControl-8CUjpn-W.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Label-DW4jY9AT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/password-TnSFWt34.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/confirm-C6WtcVRt.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/forgot-password</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Terms-BGnW6jKT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PolicyDocument-DHmk_xIi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Privacy-H8yuTtov.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ForgotPassword-BWK8FDkj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TextLink-DIqfZEMN.js</code></li>
+         </ul>
+       </details>
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests for directory traversal vulnerabilities in file inclusion parameters (e.g. ?page=../../etc/passwd).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>LFI allows attackers to read sensitive files from the server OS or execute code via log poisoning.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHP Version Disclosure &amp; EOL</div>
+        <div class="check-badges">
+          <code>php version (eol)</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-1104</span>
+          <span class="cat-badge owasp-badge">A06:2021-Vulnerable and Outdated Components</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">PHP version not disclosed in headers</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if PHP version is disclosed via X-Powered-By headers and whether that version is end-of-life.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>EOL versions no longer receive security fixes; disclosing the exact version makes targeting known exploits trivial.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">PHPUnit Eval-Stdin RCE</div>
+        <div class="check-badges">
+          <code>phpunit RCE (CVE-2017-9841)</code>
+          <span class="cat-badge">Known Vulnerabilities</span>
+          <span class="cat-badge cwe-badge">CWE-94</span>
+          <span class="cat-badge owasp-badge">A06:2021-Vulnerable and Outdated Components</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          <span class="cat-badge cve-badge">CVE-2017-9841</span>
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for exposed /vendor/phpunit/.../eval-stdin.php test runner endpoint (CVE-2017-9841).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>This endpoint executes arbitrary PHP code sent via POST without authentication.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Robots.txt &amp; Sitemap Disclosure</div>
+        <div class="check-badges">
+          <code>robots.txt disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Server Software Disclosure</div>
+        <div class="check-badges">
+          <code>server version disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Detailed version information allows attackers to look up specific CVE exploits for that exact version.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Database Error Disclosure</div>
+        <div class="check-badges">
+          <code>sql error disclosure</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-209</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">SQL Injection (SQLi)</div>
+        <div class="check-badges">
+          <code>sql injection</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-89</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (70):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.ico</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.svg</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/apple-touch-icon.png</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-DRC__1Mx.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-Q_nF8v4l.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-Dk9ku72i.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-CTEe1bJa.woff2</code></li>
+    </ul>
+    <details style="margin-top:4px;font-size:11px;color:var(--blue);cursor:pointer">
+         <summary>+ 62 more pages</summary>
+         <ul style="margin:4px 0 0 16px;padding:0;list-style:disc">
+           <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-B7fBEWYG.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-BsaQcF38.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-CYsWV7cW.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-Ds1aFT64.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-BbP24BW7.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/dist-CVT0uKVD.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardExpose-DnsDLuQX.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-I_h4Yde9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/button-DOe0-b6w.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-jeOgwn2S.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Teleport-C3wne5Es.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Presence-CXerr7Pd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/getActiveElement-DBcJEQOT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/createLucideIcon-Dy9PcA1Z.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Collection-CYtUCNQQ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/DialogTitle-XsKYm-Hd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardPropsEmits-DUtcjAmp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/wayfinder-DrSrwaE4.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Landing-Bl8sjQce.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/gauge-Dl4x4d6x.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/layers-COTV8Xfn.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TickerLogo-DuSVCO55.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/login</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/register</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/$%7Bt%7D</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Features-vQwrQvbi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/check-Dnm4PAYl.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/shield-check-DDwJCAZh.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ComingSoon-LL7aVCT-.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/About-CgJMbgtZ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Documentation-BUZkN6xj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/CardTitle-E7s8NS4N.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Login-DqDwOuq9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PasswordInput-Dhzff9GG.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/InputError-CTS6-Fvp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Spinner-75d016B1.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/authForm-MRyjIBir.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/mail-Di2lu41f.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useFormControl-8CUjpn-W.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Label-DW4jY9AT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/password-TnSFWt34.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/confirm-C6WtcVRt.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/forgot-password</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Terms-BGnW6jKT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PolicyDocument-DHmk_xIi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Privacy-H8yuTtov.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ForgotPassword-BWK8FDkj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TextLink-DIqfZEMN.js</code></li>
+         </ul>
+       </details>
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests input fields and parameters for SQL syntax manipulation and time-based delays.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Supply Chain &amp; Subresource Integrity (SRI)</div>
+        <div class="check-badges">
+          <code>supply chain &amp; sri</code>
+          <span class="cat-badge">Supply Chain Security</span>
+          <span class="cat-badge cwe-badge">CWE-829</span>
+          <span class="cat-badge owasp-badge">A08:2021-Software and Data Integrity Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors&#39; browsers.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">SSL / TLS Certificate &amp; Encryption</div>
+        <div class="check-badges">
+          <code>ssl/tls check</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-295</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">TLSv1.3 | expires: Feb  8 08:01:56 2027 GMT</div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.</span>
+        </div>
+        
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cross-Site Scripting (XSS)</div>
+        <div class="check-badges">
+          <code>reflected xss</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-79</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (70):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.ico</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/favicon.svg</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/apple-touch-icon.png</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-DRC__1Mx.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-400-normal-Q_nF8v4l.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-Dk9ku72i.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-500-normal-CTEe1bJa.woff2</code></li>
+    </ul>
+    <details style="margin-top:4px;font-size:11px;color:var(--blue);cursor:pointer">
+         <summary>+ 62 more pages</summary>
+         <ul style="margin:4px 0 0 16px;padding:0;list-style:disc">
+           <li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-B7fBEWYG.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/instrument-sans-600-normal-BsaQcF38.woff2</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-CYsWV7cW.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-Ds1aFT64.css</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/app-BbP24BW7.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/dist-CVT0uKVD.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardExpose-DnsDLuQX.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-I_h4Yde9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/button-DOe0-b6w.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/utils-jeOgwn2S.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Teleport-C3wne5Es.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Presence-CXerr7Pd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/getActiveElement-DBcJEQOT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/createLucideIcon-Dy9PcA1Z.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Collection-CYtUCNQQ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/DialogTitle-XsKYm-Hd.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useForwardPropsEmits-DUtcjAmp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/wayfinder-DrSrwaE4.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Landing-Bl8sjQce.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/gauge-Dl4x4d6x.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/layers-COTV8Xfn.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TickerLogo-DuSVCO55.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/login</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/register</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/en/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/$%7Bt%7D</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/features</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/pricing</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/about</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/docs</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/terms</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/es/legal/privacy</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Features-vQwrQvbi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/check-Dnm4PAYl.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/shield-check-DDwJCAZh.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ComingSoon-LL7aVCT-.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/About-CgJMbgtZ.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Documentation-BUZkN6xj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/CardTitle-E7s8NS4N.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Login-DqDwOuq9.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PasswordInput-Dhzff9GG.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/InputError-CTS6-Fvp.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Spinner-75d016B1.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/authForm-MRyjIBir.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/mail-Di2lu41f.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/useFormControl-8CUjpn-W.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Label-DW4jY9AT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/password-TnSFWt34.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/confirm-C6WtcVRt.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/forgot-password</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Terms-BGnW6jKT.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/PolicyDocument-DHmk_xIi.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/Privacy-H8yuTtov.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/ForgotPassword-BWK8FDkj.js</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">https://fearlessbull.com/build/assets/TextLink-DIqfZEMN.js</code></li>
+         </ul>
+       </details>
+  </td>
+      <td class="td-detail">
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>XSS allows attackers to execute malicious JavaScript in victims&#39; browsers, stealing cookies and session tokens.</span>
+        </div>
+        
+      </td>
+    </tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">Security Scanner v2.2 · Generated November 19, 2026 at 1:33 PM</div>
+</div>
+</body>
+</html>
