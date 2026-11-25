@@ -297,12 +297,13 @@ const METADATA_ENTRIES = [
   },
   {
     id: 'cve-python-web',
-    title: 'Python Web Ecosystem CVEs (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699, CVE-2024-47874)',
+    title: 'Python Web Ecosystem CVEs (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699, CVE-2024-47874, CVE-2024-56326)',
     category: 'Known Vulnerabilities',
-    plainExplanation: 'Inspects exposed /requirements.txt, /openapi.json, and Django debug error pages for vulnerable Django releases (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699) and Starlette/FastAPI multipart DoS versions (CVE-2024-47874).',
-    whyItMatters: 'Affected Django versions suffer SQL injection via JSONField HasKey lookups and denial-of-service in urlize/wrap filters, while affected Starlette/FastAPI versions allow unauthenticated memory exhaustion via crafted multipart form uploads.',
-    defaultFix: 'Upgrade Django to 4.2.19+, 5.0.12+, or 5.1.6+; upgrade Starlette to 0.40.0+ and FastAPI to 0.115.0+. Disable DEBUG = True in production and ensure requirements.txt is not publicly served.',
+    plainExplanation: 'Inspects exposed /requirements.txt, /openapi.json, response headers, and Python/Django debug error pages for vulnerable Django releases (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699), Starlette/FastAPI multipart DoS versions (CVE-2024-47874), and Jinja2 sandboxed format string bypass versions (CVE-2024-56326).',
+    whyItMatters: 'Affected Django versions suffer SQL injection via JSONField HasKey lookups and denial-of-service in urlize/wrap filters, affected Starlette/FastAPI versions allow unauthenticated memory exhaustion via crafted multipart form uploads, and affected Jinja2 versions (< 3.1.5) allow sandboxed format string execution bypass.',
+    defaultFix: 'Upgrade Django to 4.2.19+, 5.0.12+, or 5.1.6+; upgrade Starlette to 0.40.0+, FastAPI to 0.115.0+, and Jinja2 to 3.1.5+. Disable DEBUG = True in production and ensure requirements.txt is not publicly served.',
     aliases: [
+      'python web ecosystem cves (cve-2024-45230, cve-2024-53907, cve-2025-26699, cve-2024-47874, cve-2024-56326)',
       'python web ecosystem cves (cve-2024-45230, cve-2024-53907, cve-2025-26699, cve-2024-47874)',
       'django sql injection via jsonfield haskey (cve-2024-53907)',
       'django urlize/urlizetrunc dos (cve-2024-45230)',
@@ -310,6 +311,7 @@ const METADATA_ENTRIES = [
       'starlette multipart form memory exhaustion dos (cve-2024-47874)',
       'fastapi / starlette multipart form memory exhaustion dos (cve-2024-47874)',
       'starlette multipart dos header version (cve-2024-47874)',
+      'jinja2 sandboxed environment format string execution bypass (cve-2024-56326)',
       'cve-python-web'
     ]
   },
@@ -711,6 +713,41 @@ const METADATA_ENTRIES = [
     aliases: ['system-health', 'system & operational health exposure', 'system health']
   },
   {
+    id: 'device-security',
+    title: 'Smart TV, IP Camera, PC/Workstation & Network Device Security Exposure',
+    category: 'Infrastructure & Network',
+    plainExplanation: 'Performs non-intrusive discovery and security auditing across Smart TVs (Samsung Tizen, LG webOS, Roku ECP, Google TV / Android TV / Chromecast, Sony Bravia, Vizio SmartCast, Philips JointSpace, Apple AirPlay, DIAL), IP Cameras / NVRs (RTSP 554/8554, ONVIF SOAP, Hikvision ISAPI, Dahua, Axis, Xiongmai, UniFi Protect, unauthenticated snapshots), PCs / Workstations / Local Servers (Windows SMB/NetBIOS/MSRPC/RDP/WinRM/WSDAPI, macOS/Linux SSH/VNC/CUPS/NFS/AFP/rsync/mDNS, Docker TCP 2375, Ollama 11434, local dev servers, open shares), routers, printers, NAS, and IoT appliances.',
+    whyItMatters: 'Local network devices and workstations often expose unauthenticated REST/WebSocket control APIs, live RTSP/MJPEG camera feeds, cleartext admin UIs, unauthenticated Docker/Ollama/dev servers, or remote file-sharing and shell services (SMB 445, RDP 3389, WinRM 5985, ADB 5555, Telnet 23) that allow LAN attackers to hijack screens, view surveillance feeds, access files, or execute arbitrary commands.',
+    defaultFix: 'Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.',
+    aliases: [
+      'device-security',
+      'device security',
+      'smart tv, iot & network device security exposure',
+      'smart tv, ip camera, pc/workstation & network device security exposure',
+      'smart tv & iot device security',
+      'tv security',
+      'iot device security',
+      'ip camera security',
+      'pc security',
+      'workstation security',
+      'lan device security'
+    ]
+  },
+  {
+    id: 'os-security',
+    title: 'Universal Operating System, Edge Appliance & Market CVE Security Audit',
+    category: 'Known Vulnerabilities',
+    plainExplanation: 'Passively inspects HTTP headers, service banners, and open OS/appliance/runtime ports across Windows Server & Workstation, Linux distributions (Ubuntu, Debian, CentOS, RHEL, AlmaLinux, Rocky, Alpine), macOS / Apple Darwin / AirPlay, BSD / Firewall OS (FreeBSD, OpenBSD, pfSense, OPNsense), Edge VPN/Firewall/Router/NAS appliances (Palo Alto PAN-OS, Fortinet FortiOS, Ivanti Connect Secure, Citrix NetScaler, Cisco IOS XE, MikroTik RouterOS, QNAP QTS), and AI/Cloud runtimes (Ollama, Anyscale Ray) for End-of-Life OS releases and high-impact CVEs.',
+    whyItMatters: 'End-of-Life operating systems and unpatched OS daemons or edge appliances (OpenSSH regreSSHion CVE-2024-6387, CUPS CVE-2024-47176, Apple AirPlay AirBorne CVE-2025-24252, Windows HTTP.sys/TCP-IP/RDP/SMBGhost, PAN-OS GlobalProtect, FortiOS SSL VPN, Ivanti Connect Secure, CitrixBleed, Cisco IOS XE, MikroTik RouterOS, QNAP QTS, Ollama Probllama, and Anyscale Ray ShadowRay) allow unauthenticated remote attackers to achieve root/SYSTEM remote code execution, session hijacking, or full network compromise.',
+    defaultFix: 'Upgrade End-of-Life operating systems to actively supported LTS releases, upgrade OpenSSH to 9.9p2+ (or apply vendor backport security updates), restrict or disable CUPS (631), AirPlay (5000/7000), SMB (445), and RDP (3389) on untrusted networks, apply emergency patches for PAN-OS, FortiOS, Ivanti, Citrix NetScaler, Cisco IOS XE, MikroTik RouterOS, and QNAP QTS appliances, and upgrade Ollama to 0.1.34+ and Ray to 2.8.1+ while binding AI runtimes to localhost.',
+    aliases: [
+      'os-security',
+      'os security',
+      'operating system security',
+      'universal operating system, edge appliance & market cve security audit'
+    ]
+  },
+  {
     id: 'symfony-checks',
     title: 'Symfony Framework Security',
     category: 'Framework Security',
@@ -774,6 +811,138 @@ const METADATA_ENTRIES = [
     whyItMatters: 'Exposed Actuator endpoints can leak environment variables, database credentials, and heap dumps containing cleartext passwords.',
     defaultFix: 'Restrict Actuator endpoints using Spring Security or set management.endpoints.web.exposure.include=health,info.',
     aliases: ['spring boot security', 'spring boot', 'spring-checks', 'spring']
+  },
+  {
+    id: 'origin-source-ip',
+    title: 'Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass',
+    category: 'Infrastructure & Network',
+    plainExplanation: 'Verifies whether the target connects via a resolved or configured Source/Origin IP and checks if direct Source-IP HTTP/HTTPS requests bypass CDN/WAF edge protections or leak internal default virtual-host / origin server metadata.',
+    whyItMatters: 'When an origin server accepts direct HTTP/HTTPS connections on its Source IP outside the CDN/WAF IP allowlist, attackers can bypass edge WAF rules, rate limits, and bot protections by connecting directly to the Source IP.',
+    defaultFix: 'Restrict origin firewall ingress on ports 80/443 to trusted CDN/WAF IP ranges only, configure a default-deny catch-all virtual host (ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).',
+    aliases: ['origin-source-ip', 'source ip exposure', 'origin ip bypass', 'direct source-ip / origin-ip http exposure & cdn/waf bypass']
+  },
+  {
+    id: 'php-session-upload-progress',
+    title: 'PHP session.upload_progress LFI-to-RCE & Serializer Mismatch (CVE-2026-109618 / CVE-2026-109619)',
+    category: 'Known Vulnerabilities',
+    plainExplanation: 'Passively and safely inspects PHP targets for the php2shell (CVE-2026-109618 / CVE-2026-109619) session.upload_progress multipart PHPSESSID fixation, raw filename session injection, var_destroy UAF, and FPM PS(serializer) handler mismatch conditions.',
+    whyItMatters: 'In PHP 5.4.0 through 8.5.11, the rfc1867 session.upload_progress handler accepts PHPSESSID from multipart POST form data ignoring session.use_only_cookies and writes raw filenames into session files, enabling LFI-to-RCE and deserialization RCE.',
+    defaultFix: 'Upgrade PHP to 8.2.35+, 8.3.36+, 8.4.27+, or 8.5.12+ (or 8.2.36+ / 8.3.37+ / 8.4.28+ / 8.5.13+), set session.upload_progress.enabled = Off, session.use_only_cookies = On, and enforce session.serialize_handler = php_serialize.',
+    aliases: ['php-session-upload-progress', 'php2shell', 'php session.upload_progress lfi-to-rce & serializer mismatch (cve-2026-109618 / cve-2026-109619)']
+  },
+  {
+    id: 'api-security-spectrum',
+    title: 'API Trust-Boundary Confusion, OAuth2/PKCE & REST Differential Spectrum',
+    category: 'API & Authentication',
+    plainExplanation: 'Inspects API and authentication surfaces for X-Forwarded-For / X-Real-IP rate-limit and IP trust-boundary confusion, OAuth2/OIDC missing PKCE or deprecated grant types, and REST differential exposures.',
+    whyItMatters: 'Trusting unverified X-Forwarded-For headers allows attackers to spoof 127.0.0.1 to bypass IP allowlists and rate limiters, while OAuth2 endpoints lacking S256 PKCE enable authorization-code interception.',
+    defaultFix: 'Configure reverse proxies and middleware to trust X-Forwarded-For only from verified proxy CIDRs, enforce S256 PKCE on OAuth2/OIDC endpoints, and disable implicit/password grant types.',
+    aliases: ['api-security-spectrum', 'api trust-boundary confusion, oauth2/pkce & rest differential spectrum', 'api security spectrum']
+  },
+  {
+    id: 'subdomain-takeover',
+    title: 'Subdomain Takeover & Dangling CNAME Cloud Resource Detection',
+    category: 'Infrastructure & Network',
+    plainExplanation: 'Inspects DNS CNAME chains and HTTP response signatures for dangling DNS records pointing to unclaimed third-party cloud platforms (GitHub Pages, AWS S3, Heroku, Fastly, Azure, Shopify, Vercel, Netlify, Pantheon, Zendesk, Surge.sh, Fly.io).',
+    whyItMatters: 'A dangling CNAME pointing to a deprovisioned external cloud service lets an attacker claim the resource name and serve arbitrary content or steal cookies under your domain.',
+    defaultFix: 'Remove dangling CNAME, A, and AAAA DNS records before deprovisioning cloud buckets or PaaS applications.',
+    aliases: ['subdomain-takeover', 'subdomain takeover', 'subdomain takeover & dangling cname cloud resource detection']
+  },
+  {
+    id: 'iis-shortname',
+    title: 'Microsoft IIS 8.3 Shortname (~1) Enumeration & ASP.NET Diagnostic Exposure',
+    category: 'Server & Configuration',
+    plainExplanation: 'Performs a safe status/error differential probe for Windows NTFS 8.3 tilde (~1) shortname enumeration on Microsoft IIS servers and checks for exposed ASP.NET trace.axd and elmah.axd diagnostic handlers.',
+    whyItMatters: 'IIS 8.3 shortname disclosure allows attackers to brute-force hidden backup and configuration files, while exposed trace.axd or elmah.axd pages leak session cookies and full HTTP request logs.',
+    defaultFix: 'Disable NTFS 8.3 shortname creation (fsutil 8dot3name set 1), block tilde (~) in IIS Request Filtering, and disable trace.axd and public elmah.axd access in web.config.',
+    aliases: ['iis-shortname', 'iis shortname', 'microsoft iis 8.3 shortname (~1) enumeration & asp.net diagnostic exposure']
+  },
+  {
+    id: 'ssti-check',
+    title: 'Server-Side Template Injection (SSTI — Jinja2, Twig, Freemarker, EL, ERB, EJS)',
+    category: 'Injection & Input',
+    plainExplanation: 'Tests URL query parameters with non-destructive arithmetic template expressions across Jinja2/Twig/Pebble ({{7919*13}}), Freemarker/Spring EL/Thymeleaf (${7919*13}), and ERB/EJS (<%= 7919*13 %>), verifying that the server evaluates the expression to 102947 without reflecting the un-evaluated formula.',
+    whyItMatters: 'When user input is concatenated directly into a server-side template string before rendering, attackers can execute arbitrary template expressions and achieve remote code execution (RCE).',
+    defaultFix: 'Never pass user-supplied strings as template source code. Always pass user data as named context variables into pre-compiled static templates.',
+    aliases: ['ssti-check', 'ssti', 'server-side template injection', 'server-side template injection (ssti — jinja2, twig, freemarker, el, erb, ejs)']
+  },
+  {
+    id: 'cache-poisoning',
+    title: 'Web Cache Poisoning & Unkeyed Header Reflection (X-Forwarded-Host / X-Original-URL)',
+    category: 'HTTP Headers',
+    plainExplanation: 'Probes an isolated cache-busted URL (?secscan_cb=<nonce>) with unkeyed forwarding headers (X-Forwarded-Host, X-Host, X-Original-URL) and performs a clean follow-up request to verify whether the reflected header is stored in a shared HTTP cache.',
+    whyItMatters: 'If a reverse proxy or CDN caches a response containing an unkeyed header value, an attacker can poison the shared cache and serve malicious scripts or redirects to all visitors.',
+    defaultFix: 'Include X-Forwarded-Host / X-Forwarded-Scheme in the cache key (Vary header), or configure the web server and framework to ignore unauthenticated X-Forwarded-Host and X-Original-URL headers.',
+    aliases: ['cache-poisoning', 'web cache poisoning', 'web cache poisoning & unkeyed header reflection (x-forwarded-host / x-original-url)']
+  },
+  {
+    id: 'http-desync-smuggling',
+    title: 'HTTP/1.1 & HTTP/2 Request Smuggling / Desync Normalization Surface',
+    category: 'Infrastructure & Network',
+    plainExplanation: 'Safely inspects reverse-proxy / origin HTTP framing behavior for ambiguous Transfer-Encoding obfuscation (TE.TE / CL.TE) and HTTP/2-to-HTTP/1.1 downgrade desynchronization indicators without poisoning shared connections.',
+    whyItMatters: 'When a front-end proxy and back-end server disagree on message boundaries, attackers can smuggle requests across user sessions.',
+    defaultFix: 'Configure the front-end proxy and origin server to reject requests containing both Content-Length and Transfer-Encoding (RFC 9112 §6.3) and reject malformed Transfer-Encoding values.',
+    aliases: ['http-desync-smuggling', 'request smuggling', 'http/1.1 & http/2 request smuggling / desync normalization surface']
+  },
+  {
+    id: 'bola-mass-assignment',
+    title: 'API BOLA / IDOR & Mass Assignment Privilege Attribute Exposure',
+    category: 'API & Authentication',
+    plainExplanation: 'Inspects REST API object endpoints (/api/users/1) against a non-existent canary route to detect unauthenticated Broken Object Level Authorization (BOLA/IDOR) and checks whether privilege-escalation fields (role, isAdmin, is_superuser) are exposed.',
+    whyItMatters: 'Broken Object Level Authorization (OWASP API1:2023) allows attackers to read or modify other users’ records by enumerating IDs, while Mass Assignment allows binding privileged fields like role or isAdmin.',
+    defaultFix: 'Enforce object-level ownership checks on every record lookup, use non-sequential UUIDs, and restrict request body deserialization to explicit allowlisted DTO fields.',
+    aliases: ['bola-mass-assignment', 'bola', 'idor', 'api bola / idor & mass assignment privilege attribute exposure']
+  },
+  {
+    id: 'dom-xss-sinks',
+    title: 'DOM-Based XSS Source-to-Sink & Unsafe postMessage Listener Analysis',
+    category: 'Injection & Input',
+    plainExplanation: 'Inspects client-side JavaScript in HTML responses for direct untrusted DOM source-to-sink dataflows (location.hash / location.search flowing into innerHTML / document.write / eval) and window.addEventListener("message") handlers lacking event.origin validation.',
+    whyItMatters: 'DOM-based XSS executes entirely in the victim’s browser when client-side scripts pass attacker-controlled URL fragments or cross-window postMessage data directly into HTML/script execution sinks.',
+    defaultFix: 'Use textContent / innerText instead of innerHTML or document.write, sanitize dynamic HTML with DOMPurify, and always validate event.origin inside postMessage handlers.',
+    aliases: ['dom-xss-sinks', 'dom xss', 'dom-based xss source-to-sink & unsafe postmessage listener analysis']
+  },
+  {
+    id: 'xxe-injection',
+    title: 'XML External Entity (XXE) & Unsafe XML/SOAP Entity Expansion',
+    category: 'Injection & Input',
+    plainExplanation: 'Safely tests XML-accepting endpoints with a benign internal DTD entity declaration (<!ENTITY secscanxxe "secscan_xxe_eval_9412">) to verify whether custom DOCTYPE entities are expanded or whether raw XML parser exceptions are disclosed.',
+    whyItMatters: 'XML parsers that permit DOCTYPE declarations and entity resolution allow attackers to read arbitrary local files, probe internal networks via SSRF, or trigger denial-of-service.',
+    defaultFix: 'Disable DOCTYPE declarations (disallow-doctype-decl = true) and external entities in your XML parser.',
+    aliases: ['xxe-injection', 'xxe', 'xml external entity (xxe) & unsafe xml/soap entity expansion']
+  },
+  {
+    id: 'crlf-header-injection',
+    title: 'HTTP Response Splitting & CRLF Header Injection',
+    category: 'Injection & Input',
+    plainExplanation: 'Probes redirect and query parameters with URL-encoded CR/LF sequences (%0d%0aX-SecScan-Crlf: crlf9812injected) and verifies whether an actual X-SecScan-Crlf HTTP header is injected into the response headers.',
+    whyItMatters: 'When user input containing CR and LF characters is copied into an HTTP response header without newline stripping, attackers can inject arbitrary headers, set malicious cookies, or split the HTTP response body.',
+    defaultFix: 'Strip or reject CR (\\r, %0d) and LF (\\n, %0a) characters before writing any user-derived value into HTTP response headers.',
+    aliases: ['crlf-header-injection', 'crlf injection', 'http response splitting & crlf header injection']
+  },
+  {
+    id: 'ssrf-surface',
+    title: 'Server-Side Request Forgery (SSRF) URL Parameter & Backend Fetcher Surface',
+    category: 'Injection & Input',
+    plainExplanation: 'Tests URL/webhook/callback query parameters (?url=, ?webhook=, ?uri=) with a non-routable RFC 2606 domain (http://secscan-ssrf-probe.invalid/) to detect whether the backend server attempts an outbound HTTP fetch and leaks HTTP client connection errors.',
+    whyItMatters: 'Unvalidated server-side URL fetchers allow attackers to pivot into internal VPC networks, query cloud instance metadata services (169.254.169.254), and scan internal ports.',
+    defaultFix: 'Validate user-supplied URLs against a strict domain allowlist, connect directly to the validated IP (PinnedDialer), and block all RFC1918, loopback, link-local, and cloud metadata IP ranges.',
+    aliases: ['ssrf-surface', 'ssrf', 'server-side request forgery (ssrf) url parameter & backend fetcher surface']
+  },
+  {
+    id: 'runtime-sca',
+    title: 'Runtime SCA & Technology Dependency Versions',
+    category: 'Supply Chain Security',
+    plainExplanation: 'Passively inspects HTML script/link tags, framework attributes (ng-version, meta generator), JavaScript bundle banners (Moment.js, Lodash, jQuery, Bootstrap, AngularJS, Angular, React, Vue.js, Next.js, DOMPurify, Axios, Handlebars), and server response headers to compare identified dependency versions against branch-level and overall latest releases and known CVEs.',
+    whyItMatters: 'Outdated or End-of-Life (EOL) third-party libraries and server runtimes expose web applications to publicly documented Cross-Site Scripting (XSS), Prototype Pollution, Regular Expression Denial of Service (ReDoS), SSRF, and Remote Code Execution vulnerabilities.',
+    defaultFix: 'Upgrade outdated third-party libraries and runtime dependencies to their latest patched releases, and migrate away from End-of-Life frameworks such as AngularJS 1.x or Moment.js.',
+    aliases: [
+      'runtime-sca',
+      'runtime sca',
+      'runtime sca & technology dependency versions',
+      'software composition analysis',
+      'technology dependency versions'
+    ]
   }
 ];
 
@@ -1025,7 +1194,9 @@ export const CWE_OWASP_MAP = {
       'CVE-2026-127960',
       'CVE-2026-128064',
       'CVE-2026-129538',
-      'CVE-2026-129292'
+      'CVE-2026-129292',
+      'CVE-2026-109618',
+      'CVE-2026-109619'
     ],
     references: [
       'https://cwe.mitre.org/data/definitions/20.html',
@@ -1035,21 +1206,76 @@ export const CWE_OWASP_MAP = {
       'https://nvd.nist.gov/vuln/detail/CVE-2025-27515',
       'https://nvd.nist.gov/vuln/detail/CVE-2024-50342',
       'https://nvd.nist.gov/vuln/detail/CVE-2026-129289',
-      'https://nvd.nist.gov/vuln/detail/CVE-2026-48841'
+      'https://nvd.nist.gov/vuln/detail/CVE-2026-48841',
+      'https://nvd.nist.gov/vuln/detail/CVE-2026-109618',
+      'https://nvd.nist.gov/vuln/detail/CVE-2026-109619'
+    ]
+  },
+  'origin-source-ip': {
+    cwe: 'CWE-284',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/284.html',
+      'https://owasp.org/Top10/A05_2021-Security_Misconfiguration/'
+    ]
+  },
+  'php-session-upload-progress': {
+    cwe: 'CWE-384',
+    owasp: 'A07:2021-Identification and Authentication Failures',
+    cvssScore: 9.8,
+    cveIds: ['CVE-2026-109618', 'CVE-2026-109619'],
+    references: [
+      'https://nvd.nist.gov/vuln/detail/CVE-2026-109618',
+      'https://nvd.nist.gov/vuln/detail/CVE-2026-109619',
+      'https://github.com/php/php-src/pull/22113',
+      'https://www.php.net/ChangeLog-8.php'
+    ]
+  },
+  'api-security-spectrum': {
+    cwe: 'CWE-290',
+    owasp: 'A07:2021-Identification and Authentication Failures',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/290.html',
+      'https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/'
+    ]
+  },
+  'subdomain-takeover': {
+    cwe: 'CWE-284',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 8.2,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/284.html',
+      'https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover'
+    ]
+  },
+  'iis-shortname': {
+    cwe: 'CWE-200',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 6.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/200.html',
+      'https://owasp.org/Top10/A05_2021-Security_Misconfiguration/'
     ]
   },
   'cve-python-web': {
     cwe: 'CWE-89',
     owasp: 'A03:2021-Injection',
     cvssScore: 8.8,
-    cveIds: ['CVE-2024-45230', 'CVE-2024-53907', 'CVE-2025-26699', 'CVE-2024-47874'],
+    cveIds: ['CVE-2024-45230', 'CVE-2024-53907', 'CVE-2025-26699', 'CVE-2024-47874', 'CVE-2024-56326'],
     references: [
       'https://cwe.mitre.org/data/definitions/89.html',
       'https://owasp.org/Top10/A03_2021-Injection/',
       'https://nvd.nist.gov/vuln/detail/CVE-2024-45230',
       'https://nvd.nist.gov/vuln/detail/CVE-2024-53907',
       'https://nvd.nist.gov/vuln/detail/CVE-2025-26699',
-      'https://nvd.nist.gov/vuln/detail/CVE-2024-47874'
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-47874',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-56326'
     ]
   },
   'cve-spring-framework': {
@@ -1506,6 +1732,71 @@ export const CWE_OWASP_MAP = {
       'https://owasp.org/Top10/A05_2021-Security_Misconfiguration/'
     ]
   },
+  'device-security': {
+    cwe: 'CWE-200',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/200.html',
+      'https://owasp.org/www-project-internet-of-things/'
+    ]
+  },
+  'os-security': {
+    cwe: 'CWE-1104',
+    owasp: 'A06:2021-Vulnerable and Outdated Components',
+    cvssScore: 9.8,
+    cveIds: [
+      'CVE-2024-6387',
+      'CVE-2025-26465',
+      'CVE-2025-26466',
+      'CVE-2024-7589',
+      'CVE-2024-47176',
+      'CVE-2024-38063',
+      'CVE-2024-38077',
+      'CVE-2022-21907',
+      'CVE-2020-0796',
+      'CVE-2025-24252',
+      'CVE-2024-3400',
+      'CVE-2024-0012',
+      'CVE-2024-21762',
+      'CVE-2024-55591',
+      'CVE-2024-21887',
+      'CVE-2025-0282',
+      'CVE-2023-4966',
+      'CVE-2023-20198',
+      'CVE-2023-30799',
+      'CVE-2024-27130',
+      'CVE-2024-37032',
+      'CVE-2023-48022'
+    ],
+    references: [
+      'https://cwe.mitre.org/data/definitions/1104.html',
+      'https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-6387',
+      'https://nvd.nist.gov/vuln/detail/CVE-2025-26465',
+      'https://nvd.nist.gov/vuln/detail/CVE-2025-26466',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-7589',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-47176',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-38063',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-38077',
+      'https://nvd.nist.gov/vuln/detail/CVE-2022-21907',
+      'https://nvd.nist.gov/vuln/detail/CVE-2020-0796',
+      'https://nvd.nist.gov/vuln/detail/CVE-2025-24252',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-3400',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-0012',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-21762',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-55591',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-21887',
+      'https://nvd.nist.gov/vuln/detail/CVE-2025-0282',
+      'https://nvd.nist.gov/vuln/detail/CVE-2023-4966',
+      'https://nvd.nist.gov/vuln/detail/CVE-2023-20198',
+      'https://nvd.nist.gov/vuln/detail/CVE-2023-30799',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-27130',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-37032',
+      'https://nvd.nist.gov/vuln/detail/CVE-2023-48022'
+    ]
+  },
   'symfony-checks': {
     cwe: 'CWE-215',
     owasp: 'A05:2021-Security Misconfiguration',
@@ -1534,6 +1825,96 @@ export const CWE_OWASP_MAP = {
     references: [
       'https://cwe.mitre.org/data/definitions/79.html',
       'https://owasp.org/Top10/A03_2021-Injection/'
+    ]
+  },
+  'ssti-check': {
+    cwe: 'CWE-1336',
+    owasp: 'A03:2021-Injection',
+    cvssScore: 9.8,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/1336.html',
+      'https://portswigger.net/web-security/server-side-template-injection'
+    ]
+  },
+  'cache-poisoning': {
+    cwe: 'CWE-444',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 8.2,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/444.html',
+      'https://portswigger.net/web-security/web-cache-poisoning'
+    ]
+  },
+  'http-desync-smuggling': {
+    cwe: 'CWE-444',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 8.6,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/444.html',
+      'https://portswigger.net/web-security/request-smuggling'
+    ]
+  },
+  'bola-mass-assignment': {
+    cwe: 'CWE-639',
+    owasp: 'A01:2021-Broken Access Control',
+    cvssScore: 8.6,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/639.html',
+      'https://cwe.mitre.org/data/definitions/915.html'
+    ]
+  },
+  'dom-xss-sinks': {
+    cwe: 'CWE-79',
+    owasp: 'A03:2021-Injection',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/79.html',
+      'https://portswigger.net/web-security/cross-site-scripting/dom-based'
+    ]
+  },
+  'xxe-injection': {
+    cwe: 'CWE-611',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 8.6,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/611.html',
+      'https://portswigger.net/web-security/xxe'
+    ]
+  },
+  'crlf-header-injection': {
+    cwe: 'CWE-113',
+    owasp: 'A03:2021-Injection',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/113.html',
+      'https://owasp.org/www-community/vulnerabilities/CRLF_Injection'
+    ]
+  },
+  'ssrf-surface': {
+    cwe: 'CWE-918',
+    owasp: 'A10:2021-Server-Side Request Forgery',
+    cvssScore: 8.6,
+    cveIds: [],
+    references: [
+      'https://cwe.mitre.org/data/definitions/918.html',
+      'https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/'
+    ]
+  },
+  'runtime-sca': {
+    cwe: 'CWE-1395',
+    owasp: 'A06:2021-Vulnerable and Outdated Components',
+    cvssScore: 7.5,
+    cveIds: [],
+    references: [
+      'https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/',
+      'https://cwe.mitre.org/data/definitions/1395.html'
     ]
   },
   'rce': {
@@ -1775,6 +2156,13 @@ export const PRESETS = [
     tagline: 'CORS, JWT, Rate Limiting, GraphQL & Auth',
     description: 'Specialized for REST and GraphQL endpoints testing access controls, token security, rate limiting, and HTTP verb manipulation.',
     checks: cloneProfileChecks('api')
+  },
+  {
+    id: 'device',
+    name: 'Smart TV, Camera, PC & LAN Device',
+    tagline: 'Smart TVs, IP Cameras / NVRs, PCs / Workstations / Dev Servers, Routers & IoT',
+    description: 'Non-intrusive multi-port device discovery and security audit for Smart TVs, IP cameras / NVRs (RTSP, ONVIF, Hikvision, Dahua, Axis), PCs / workstations / local servers (SMB, RDP, WinRM, SSH, VNC, CUPS, Docker, Ollama, dev servers), routers, printers, NAS, and smart home IoT hubs.',
+    checks: cloneProfileChecks('device')
   }
 ];
 

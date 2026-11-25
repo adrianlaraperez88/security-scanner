@@ -5,9 +5,27 @@ import { getCheckInfo } from './catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export async function getScanners() {
+export function getAvailableCheckNames() {
   const dir = path.join(__dirname, '../checks');
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.js')).sort();
+  return fs.readdirSync(dir)
+    .filter(f => f.endsWith('.js'))
+    .map(f => f.replace(/\.js$/, ''))
+    .sort();
+}
+
+export async function getScanners(options = {}) {
+  const dir = path.join(__dirname, '../checks');
+  let files = fs.readdirSync(dir).filter(f => f.endsWith('.js')).sort();
+
+  const rawOnly = options?.onlyChecks;
+  if (rawOnly) {
+    const onlySet = new Set(
+      Array.from(rawOnly)
+        .map(name => String(name || '').trim().toLowerCase().replace(/\.js$/, ''))
+        .filter(Boolean)
+    );
+    files = files.filter(f => onlySet.has(f.replace(/\.js$/, '').toLowerCase()));
+  }
 
   const scanners = [];
 

@@ -1,6 +1,6 @@
 /**
  * Asset DSL Search & Scan Output Ingestion Component
- * Real-time autocomplete for all 19 ARTEX DSL fields + ingestion modal for nmap/nuclei/httpx/ffuf/bbot.
+ * Real-time autocomplete for all 19 SecScan DSL fields + ingestion modal for nmap/nuclei/httpx/ffuf/bbot.
  */
 
 export const DSL_FIELDS = Object.freeze([

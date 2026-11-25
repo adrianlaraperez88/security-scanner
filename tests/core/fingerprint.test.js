@@ -1,12 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import {
   fingerprint,
   inferEcosystemTags,
   recommendProfileForStack
 } from '../../core/fingerprint.js';
-import { selectScannersForStack } from '../../core/profiles.js';
+import { selectScannersForStack, getProfileChecks } from '../../core/profiles.js';
 import { getScanners } from '../../core/registry.js';
+import { fetchWithRetry, createGovernedFetch } from '../../core/fetch.js';
+import { createTrackedFetch } from '../../core/reproduction.js';
 
 test('Fingerprint: accurately identifies WordPress even with PHP/Nginx headers', async () => {
   const mockFetch = async () => ({
@@ -630,4 +633,365 @@ test('Fingerprint: detects Angular via ng-server-context, hashed main/polyfills 
   assert.equal(ngAppRes.recommendedProfile, 'frontend');
   assert.ok(ngAppRes.apiCommunication);
   assert.ok(ngAppRes.apiCommunication.sameOriginEndpoints.includes('/api/dashboard'));
+});
+
+test('Fingerprint: fast TCP pre-check avoids stall when port 80 is closed and classifies quoted Samsung Smart TV target', async () => {
+  let rootFetched = false;
+  const tvFetch = async (url) => {
+    if (url === 'http://192.168.68.53' || url === 'http://192.168.68.53/') {
+      rootFetched = true;
+      throw new Error('Should have been skipped by TCP pre-check');
+    }
+    if (url === 'http://192.168.68.53:8001/api/v2/') {
+      return {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        text: JSON.stringify({
+          device: {
+            type: 'Samsung SmartTV',
+            OS: 'Tizen',
+            modelName: 'UN55TU7000FXZA',
+            name: 'Living Room TV',
+            tokenAuthSupport: 'false'
+          }
+        })
+      };
+    }
+    return { status: 404, headers: {}, text: '' };
+  };
+
+  const t0 = Date.now();
+  const fp = await fingerprint('"192.168.68.53\\"', tvFetch, {
+    allowPrivate: true,
+    deviceMode: true,
+    tcpProbe: async (_h, port) => ({ port, open: port === 8001 || port === 8002 || port === 8080 || port === 9197 })
+  });
+  const elapsed = Date.now() - t0;
+
+  assert.ok(elapsed < 500, `Expected < 500ms, got ${elapsed}ms`);
+  assert.equal(rootFetched, false);
+  assert.equal(fp.primary, 'device');
+  assert.equal(fp.recommendedProfile, 'device');
+  assert.ok(fp.detectedTags.includes('tv'));
+  assert.ok(fp.deviceInfo);
+  assert.equal(fp.deviceInfo.category, 'smart_tv');
+  assert.equal(fp.deviceInfo.modelName, 'UN55TU7000FXZA');
+});
+
+test('Fingerprint: invokes scanDeviceTarget on 401/generic root response for IP Camera and PC/Workstation targets', async () => {
+  // 1. IP Camera returning 401 Basic Auth on port 80
+  const camFp = await fingerprint('http://192.168.1.90', async (url) => {
+    if (url === 'http://192.168.1.90' || url === 'http://192.168.1.90/') {
+      return {
+        status: 401,
+        headers: { server: 'App-webs/', 'www-authenticate': 'Basic realm="Hikvision Camera"' },
+        text: 'Unauthorized'
+      };
+    }
+    if (url === 'http://192.168.1.90/ISAPI/System/deviceInfo') {
+      return {
+        status: 200,
+        headers: { 'content-type': 'application/xml' },
+        text: '<DeviceInfo><model>DS-2CD2143</model></DeviceInfo>'
+      };
+    }
+    return { status: 404, headers: {}, text: '' };
+  }, {
+    allowPrivate: true,
+    tcpProbe: async (_h, p) => ({ port: p, open: p === 80 || p === 554 })
+  });
+  assert.equal(camFp.primary, 'device');
+  assert.equal(camFp.recommendedProfile, 'device');
+  assert.ok(camFp.detectedTags.includes('camera'));
+  assert.ok(!camFp.detectedTags.includes('tv'));
+  assert.equal(camFp.deviceInfo.category, 'ip_camera');
+
+  // 2. PC/Workstation with generic port 80 + SMB 445 / SSH 22 / CUPS 631
+  const pcFp = await fingerprint('http://192.168.1.101', async (url) => {
+    if (url === 'http://192.168.1.101' || url === 'http://192.168.1.101/') {
+      return { status: 200, headers: {}, text: '<html><body>Host Status</body></html>' };
+    }
+    return { status: 404, headers: {}, text: '' };
+  }, {
+    allowPrivate: true,
+    deviceMode: true,
+    tcpProbe: async (_h, p) => ({ port: p, open: p === 80 || p === 22 || p === 445 || p === 631 })
+  });
+  assert.equal(pcFp.primary, 'device');
+  assert.equal(pcFp.recommendedProfile, 'device');
+  assert.ok(pcFp.detectedTags.includes('pc'));
+  assert.ok(pcFp.detectedTags.includes('workstation'));
+  assert.ok(pcFp.detectedTags.includes('server'));
+  assert.equal(pcFp.deviceInfo.category, 'pc_workstation');
+
+  // 3. Mock fetch with deviceMode: true and NO tcpProbe must NEVER open OS sockets
+  const mockOnlyFp = await fingerprint('https://example.com', async () => ({
+    status: 200,
+    headers: { server: 'nginx' },
+    text: '<html><body>Hello</body></html>'
+  }), { deviceMode: true });
+  assert.ok(mockOnlyFp.primary);
+});
+
+test('inferEcosystemTags, recommendProfileForStack, and getProfileChecks support Smart TV, IP Camera, and PC/Workstation aliases', () => {
+  const camTags = inferEcosystemTags(['ip_camera']);
+  assert.ok(camTags.includes('device'));
+  assert.ok(camTags.includes('camera'));
+  assert.ok(camTags.includes('ip-camera'));
+  assert.ok(!camTags.includes('tv'));
+
+  const pcTags = inferEcosystemTags(['pc_workstation']);
+  assert.ok(pcTags.includes('device'));
+  assert.ok(pcTags.includes('pc'));
+  assert.ok(pcTags.includes('workstation'));
+  assert.ok(pcTags.includes('server'));
+  assert.ok(!pcTags.includes('tv'));
+
+  for (const alias of ['smart_tv', 'camera', 'ip-camera', 'nvr', 'pc', 'workstation', 'server', 'pc_workstation']) {
+    assert.equal(recommendProfileForStack(alias, []), 'device');
+  }
+  for (const profAlias of ['tv', 'smart-tv', 'smart_tv', 'camera', 'ip-camera', 'ip_camera', 'nvr', 'pc', 'workstation', 'server', 'pc-workstation', 'pc_workstation', 'lan']) {
+    assert.deepEqual(getProfileChecks(profAlias), getProfileChecks('device'));
+  }
+});
+
+test('Fingerprint regression (Bug 2): ordinary PHP/Nginx HTML mentioning "cups " does NOT hijack primary to device', async () => {
+  const fp = await fingerprint('https://coffee.example.com', async () => ({
+    status: 200,
+    headers: { server: 'nginx', 'x-powered-by': 'PHP/8.2.20' },
+    text: '<html><head><title>Coffee Shop</title></head><body><h1>Buy 2 cups and get 1 free!</h1></body></html>'
+  }), { deepProbe: false });
+  assert.equal(fp.primary, 'php');
+  assert.notEqual(fp.primary, 'device');
+  assert.equal(fp.recommendedProfile, 'php');
+});
+
+test('Fingerprint regression (Bugs 4 & 7): pre-DNS SSRF blocks TCP pre-check and createTrackedFetch(fetchWithRetry) detects loopback Smart TV without multiPort: true', async () => {
+  // Bug 4: DNS resolving to 127.0.0.1 with allowPrivate: false must NOT fire tcpProbe or fetchWithRetry
+  let tcpCalled = 0;
+  let fetchCalled = 0;
+  const governed = createGovernedFetch({
+    allowPrivate: false,
+    dnsResolver: async () => ['127.0.0.1']
+  });
+  const trackedGoverned = Object.assign(async (...args) => {
+    fetchCalled++;
+    return governed(...args);
+  }, {
+    governance: governed.governance,
+    hasCustomFetcher: governed.hasCustomFetcher,
+    isDefaultFetch: governed.isDefaultFetch
+  });
+  const blockedFp = await fingerprint('http://rebind-fp.example', trackedGoverned, {
+    deviceMode: true,
+    tcpProbe: async () => { tcpCalled++; return { open: false }; }
+  });
+  assert.equal(tcpCalled, 0);
+  assert.equal(fetchCalled, 0);
+  assert.equal(blockedFp.primary, 'unknown');
+
+  // Bug 7: createTrackedFetch(fetchWithRetry) with explicit ports & NO multiPort: true succeeds on loopback server
+  const tvServer = http.createServer((req, res) => {
+    if (req.url === '/api/v2/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ device: { type: 'Samsung SmartTV', OS: 'Tizen', modelName: 'QN55Q80C', tokenAuthSupport: 'false' } }));
+      return;
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  });
+  await new Promise(resolve => tvServer.listen(0, '127.0.0.1', resolve));
+  const tvPort = tvServer.address().port;
+
+  // Find a guaranteed closed port on 127.0.0.1 to simulate closed port 80
+  const closedSrv = http.createServer();
+  await new Promise(resolve => closedSrv.listen(0, '127.0.0.1', resolve));
+  const closedPort = closedSrv.address().port;
+  await new Promise(resolve => closedSrv.close(resolve));
+
+  try {
+    const tracked = createTrackedFetch(fetchWithRetry);
+    const fp = await fingerprint(`"http://127.0.0.1:${closedPort}\\"`, tracked, {
+      allowPrivate: true,
+      deviceMode: true,
+      ports: [closedPort, tvPort],
+      portTimeoutMs: 250,
+      probeTimeoutMs: 500
+    });
+    assert.equal(fp.primary, 'device');
+    assert.equal(fp.deviceInfo?.category, 'smart_tv');
+    assert.equal(fp.deviceInfo?.vendor, 'Samsung');
+  } finally {
+    tvServer.closeAllConnections?.();
+    await new Promise(resolve => tvServer.close(resolve));
+  }
+});
+
+test('FINDING-2 regression: fingerprint evaluates built-in, custom, and post-DNS asset gate before DNS lookup or TCP probe', async () => {
+  // 1. Built-in deny TLD (.gov) must block before dnsResolver, tcpProbe, or fetchWithRetry
+  let dnsCalls = 0;
+  let tcpCalls = 0;
+  let fetchCalls = 0;
+  const builtinGov = createGovernedFetch({
+    allowPrivate: false,
+    dnsResolver: async () => {
+      dnsCalls++;
+      return ['93.184.216.34'];
+    }
+  });
+  const trackedGov = Object.assign(async (...args) => {
+    fetchCalls++;
+    return builtinGov(...args);
+  }, {
+    governance: builtinGov.governance,
+    hasCustomFetcher: builtinGov.hasCustomFetcher,
+    isDefaultFetch: builtinGov.isDefaultFetch
+  });
+
+  const govRes = await fingerprint('https://agency.gov', trackedGov, {
+    deviceMode: true,
+    tcpProbe: async () => {
+      tcpCalls++;
+      return { open: true };
+    }
+  });
+  assert.equal(govRes.primary, 'unknown');
+  assert.equal(dnsCalls, 0);
+  assert.equal(tcpCalls, 0);
+  assert.equal(fetchCalls, 0);
+
+  // 2. Custom exact_domain deny rule must block before dnsResolver, tcpProbe, or fetchWithRetry
+  const customDenied = createGovernedFetch({
+    allowPrivate: false,
+    scopeRules: [{ ruleType: 'exact_domain', pattern: 'denied.example.com', isAllowed: false }],
+    dnsResolver: async () => {
+      dnsCalls++;
+      return ['93.184.216.34'];
+    }
+  });
+  const trackedCustom = Object.assign(async (...args) => {
+    fetchCalls++;
+    return customDenied(...args);
+  }, {
+    governance: customDenied.governance,
+    hasCustomFetcher: customDenied.hasCustomFetcher,
+    isDefaultFetch: customDenied.isDefaultFetch
+  });
+
+  const customRes = await fingerprint('https://denied.example.com', trackedCustom, {
+    deviceMode: true,
+    tcpProbe: async () => {
+      tcpCalls++;
+      return { open: true };
+    }
+  });
+  assert.equal(customRes.primary, 'unknown');
+  assert.equal(dnsCalls, 0);
+  assert.equal(tcpCalls, 0);
+  assert.equal(fetchCalls, 0);
+
+  // 3. Post-DNS CIDR deny rule must block before tcpProbe or fetchWithRetry
+  let postDnsChecks = 0;
+  const cidrDenied = createGovernedFetch({
+    allowPrivate: false,
+    scopeRules: [{ ruleType: 'cidr', pattern: '198.51.100.0/24', isAllowed: false }],
+    dnsResolver: async () => {
+      postDnsChecks++;
+      return ['198.51.100.42'];
+    }
+  });
+  const trackedCidr = Object.assign(async (...args) => {
+    fetchCalls++;
+    return cidrDenied(...args);
+  }, {
+    governance: cidrDenied.governance,
+    hasCustomFetcher: cidrDenied.hasCustomFetcher,
+    isDefaultFetch: cidrDenied.isDefaultFetch
+  });
+
+  const cidrRes = await fingerprint('https://masked-cidr.example.com', trackedCidr, {
+    deviceMode: true,
+    tcpProbe: async () => {
+      tcpCalls++;
+      return { open: true };
+    }
+  });
+  assert.equal(cidrRes.primary, 'unknown');
+  assert.equal(postDnsChecks, 1);
+  assert.equal(tcpCalls, 0);
+  assert.equal(fetchCalls, 0);
+});
+
+test('Fingerprint (R3 scoping): bare public IP without deviceMode does NOT trigger multi-port device discovery or hijack profile to device', async () => {
+  // 1. Public IP returning Cloudflare 403 generic response without deviceMode (even with allowPrivate: true)
+  let tcpProbedPorts = [];
+  const cfPublicFp = await fingerprint('http://104.21.43.139', async () => ({
+    status: 403,
+    headers: { server: 'cloudflare', 'cf-ray': '8abc123456-MIA' },
+    text: '<html><title>Direct IP access not allowed | Cloudflare</title></html>'
+  }), {
+    allowPrivate: true,
+    deepProbe: false,
+    apiDiscovery: false,
+    tcpProbe: async (_h, port) => {
+      tcpProbedPorts.push(port);
+      return { port, open: [80, 443, 8080, 8443].includes(port) };
+    }
+  });
+  assert.deepEqual(tcpProbedPorts, []);
+  assert.equal(cfPublicFp.primary, 'cloudflare');
+  assert.notEqual(cfPublicFp.primary, 'device');
+  assert.notEqual(cfPublicFp.recommendedProfile, 'device');
+  assert.equal(cfPublicFp.deviceInfo, undefined);
+
+  // 2. Public IP with unreachable HTTP (fetch error) and deviceMode: false must NOT fall back to scanDeviceTarget
+  let fallbackTcpCalled = 0;
+  const downPublicFp = await fingerprint('http://104.21.43.139', async () => {
+    const err = new Error('connect ECONNREFUSED 104.21.43.139:80');
+    err.code = 'ECONNREFUSED';
+    throw err;
+  }, {
+    allowPrivate: false,
+    tcpProbe: async () => {
+      fallbackTcpCalled++;
+      return { open: true };
+    }
+  });
+  assert.equal(fallbackTcpCalled, 0);
+  assert.equal(downPublicFp.primary, 'unknown');
+  assert.equal(downPublicFp.recommendedProfile, 'smart');
+
+  // 3. Public host with multiPort: true and deviceMode: false returning only 8080/8443 device_web must NOT overwrite primary/recommendedProfile
+  const publicDeviceWebFp = await fingerprint('http://104.21.43.139', async () => ({
+    status: 403,
+    headers: { server: 'cloudflare' },
+    text: '<html><body>Forbidden</body></html>'
+  }), {
+    deviceMode: false,
+    multiPort: true,
+    deepProbe: false,
+    apiDiscovery: false,
+    tcpProbe: async (_h, port) => ({ port, open: port === 80 || port === 8080 || port === 8443 })
+  });
+  assert.notEqual(publicDeviceWebFp.primary, 'device');
+  assert.notEqual(publicDeviceWebFp.recommendedProfile, 'device');
+
+  // 4. Same public IP WITH explicit deviceMode: true + deviceCategory: 'ip_camera' DOES run device discovery
+  const explicitCamPublicFp = await fingerprint('http://104.21.43.139', async (url) => {
+    if (url === 'http://104.21.43.139/ISAPI/System/deviceInfo') {
+      return {
+        status: 200,
+        headers: { 'content-type': 'application/xml' },
+        text: '<DeviceInfo><model>DS-2CD2143</model></DeviceInfo>'
+      };
+    }
+    return { status: 403, headers: {}, text: 'Forbidden' };
+  }, {
+    deviceMode: true,
+    deviceCategory: 'ip_camera',
+    tcpProbe: async (_h, port) => ({ port, open: port === 80 || port === 554 })
+  });
+  assert.equal(explicitCamPublicFp.primary, 'device');
+  assert.equal(explicitCamPublicFp.recommendedProfile, 'device');
+  assert.equal(explicitCamPublicFp.deviceInfo?.category, 'ip_camera');
 });

@@ -1,6 +1,6 @@
 /**
  * Asset Query DSL Tokenizer, Recursive-Descent AST Parser & SQLite Compiler
- * Ported from ARTEX db/asset_dsl.go for Node.js ESM + node:sqlite.
+ * Ported from SecScan db/asset_dsl.go for Node.js ESM + node:sqlite.
  */
 
 export class AssetDslError extends Error {
@@ -14,7 +14,7 @@ export class AssetDslError extends Error {
 const VALID_OPERATORS = ['=', '==', '!=', '>', '>=', '<', '<='];
 
 /**
- * Canonical 19 ARTEX Asset DSL fields + `asset` / `key`.
+ * Canonical 19 SecScan Asset DSL fields + `asset` / `key`.
  * Column expressions are strictly static whitelist expressions (never interpolated from user input).
  */
 export const FIELD_SPECS = Object.freeze({

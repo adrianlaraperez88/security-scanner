@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import run from '../../checks/ssl-tls.js';
 import { createGovernedFetch } from '../../core/fetch.js';
 import { TargetPinStore } from '../../core/guard.js';
+import { groupFindings } from '../../core/html-report.js';
 import { mockFetch } from '../helpers/mock-fetch.js';
 
 const FUTURE_CERT = new Date(Date.now() + 90 * 86_400_000).toUTCString();
@@ -159,4 +160,79 @@ test('ssl-tls: enforces SSRF, built-in .gov deny, scopeRules, DNS pinning & anti
   // Metadata IP remains blocked even with allowPrivate: true
   const metaBlocked = await run('https://169.254.169.254/', privFetch, { tlsConnect: countingTls });
   assert.equal(metaBlocked.status, 'ERROR');
+});
+
+test('ssl-tls: coordinates via siblingSchemes so dual-scheme http:// avoids contradictory SAFE/SUSPICIOUS results', async () => {
+  // 1. http:// WITHOUT https: sibling still flags SUSPICIOUS (HIGH)
+  const httpOnlyRes = await run('http://198.51.100.10/', null, { siblingSchemes: ['http:'] });
+  assert.equal(httpOnlyRes.status, 'SUSPICIOUS');
+  assert.equal(httpOnlyRes.severity, 'HIGH');
+  assert.match(httpOnlyRes.detail, /not using HTTPS/i);
+
+  // 2. Dual-scheme with valid TLS -> both https:// and http:// return SAFE
+  const validTls = async ({ minVersion }) => {
+    if (minVersion) throw new Error('rejected');
+    return { cert: { valid_to: FUTURE_CERT }, protocol: 'TLSv1.3', authorized: true };
+  };
+  const httpsSafe = await run('https://104.21.43.139/', null, {
+    siblingSchemes: ['https:', 'http:'],
+    tlsConnect: validTls
+  });
+  const httpSafe = await run('http://104.21.43.139/', null, {
+    siblingSchemes: ['https:', 'http:'],
+    tlsConnect: validTls
+  });
+  assert.equal(httpsSafe.status, 'SAFE');
+  assert.equal(httpSafe.status, 'SAFE');
+  const safeGrouped = groupFindings([
+    { target: 'https://104.21.43.139/', checkId: 'ssl-tls', ...httpsSafe },
+    { target: 'http://104.21.43.139/', checkId: 'ssl-tls', ...httpSafe }
+  ]);
+  assert.equal(safeGrouped.length, 1);
+  assert.equal(safeGrouped[0].status, 'SAFE');
+
+  // 3. Dual-scheme with untrusted cert -> both return VULNERABLE (HIGH), never SAFE + VULNERABLE
+  const untrustedTls = async ({ minVersion }) => {
+    if (minVersion) throw new Error('rejected');
+    return {
+      cert: { valid_to: FUTURE_CERT },
+      protocol: 'TLSv1.3',
+      authorized: false,
+      authorizationError: 'ERR_TLS_CERT_ALTNAME_INVALID'
+    };
+  };
+  const httpsVuln = await run('https://104.21.43.139/', null, {
+    siblingSchemes: ['https:', 'http:'],
+    tlsConnect: untrustedTls
+  });
+  const httpVuln = await run('http://104.21.43.139/', null, {
+    siblingSchemes: ['https:', 'http:'],
+    tlsConnect: untrustedTls
+  });
+  assert.equal(httpsVuln.status, 'VULNERABLE');
+  assert.equal(httpVuln.status, 'VULNERABLE');
+  const vulnGrouped = groupFindings([
+    { target: 'https://104.21.43.139/', checkId: 'ssl-tls', ...httpsVuln },
+    { target: 'http://104.21.43.139/', checkId: 'ssl-tls', ...httpVuln }
+  ]);
+  assert.equal(vulnGrouped.length, 1);
+  assert.equal(vulnGrouped[0].status, 'VULNERABLE');
+  assert.equal(vulnGrouped[0].pages.length, 2);
+});
+
+test('ssl-tls: handles SNI-required TLS alerts on bare IPs gracefully without crashing', async () => {
+  for (const err of [
+    Object.assign(new Error('tlsv1 alert unrecognized name'), { code: 'ERR_SSL_TLSV1_ALERT_UNRECOGNIZED_NAME' }),
+    Object.assign(new Error('sslv3 alert handshake failure'), { code: 'ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE' }),
+    Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+  ]) {
+    const res = await run('https://104.21.43.139/', null, {
+      tlsConnect: async () => { throw err; }
+    });
+    assert.equal(res.name, 'ssl/tls check');
+    assert.equal(res.status, 'ERROR');
+    assert.equal(res.sniRequired, true);
+    assert.match(res.reason, /SNI/i);
+    assert.match(res.detail, /SNI/i);
+  }
 });

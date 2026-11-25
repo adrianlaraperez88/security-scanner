@@ -393,6 +393,7 @@ export class TargetPinStore {
     this.allowPrivate = Boolean(allowPrivate);
     this.strictSubset = Boolean(strictSubset);
     this.pins = new Map();
+    this._versionSeq = 0;
   }
 
   _normalizeHost(hostname) {
@@ -419,7 +420,7 @@ export class TargetPinStore {
       hadPublicIp: normIps.some(ip => !voidsExemption(ip)),
       firstSeenAt: existing ? existing.firstSeenAt : Date.now(),
       updatedAt: Date.now(),
-      version: existing ? existing.version + 1 : 1
+      version: ++this._versionSeq
     };
     this.pins.set(key, record);
     return {
@@ -514,7 +515,7 @@ export class TargetPinStore {
       hadPublicIp: normIps.some(ip => !voidsExemption(ip)),
       firstSeenAt: Date.now(),
       updatedAt: Date.now(),
-      version: 1
+      version: ++this._versionSeq
     };
     this.pins.set(key, record);
 
@@ -1167,7 +1168,7 @@ export const JEV_QUESTIONS = Object.freeze([
 ]);
 
 /**
- * Implements ARTEX's closed-world 8-question boolean precedence (`q1_in_scope` .. `q8_least_privilege`).
+ * Implements SecScan's closed-world 8-question boolean precedence (`q1_in_scope` .. `q8_least_privilege`).
  * Strictly fails closed (`{ approved: false, reason, failedChecks }`) on missing/non-boolean fields
  * or any failed invariant.
  *
@@ -1315,7 +1316,7 @@ export function attributeTargetFailure({ status, headers = {}, error, body = '' 
   // 1. Platform control block (local scope/deny/SSRF/DNS pin policy)
   if (
     errMsg.includes(PLATFORM_CONTROL_PREFIX) ||
-    errMsg.includes('[ARTEX platform control, not target defense]') ||
+    /\[[A-Z0-9_]+ platform control, not target defense\]/i.test(errMsg) ||
     errMsg.includes('blocked by SSRF policy') ||
     errMsg.includes('Target blocked by deny rule') ||
     errMsg.includes('Target outside declared allow scope') ||

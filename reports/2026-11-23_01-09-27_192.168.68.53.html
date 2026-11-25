@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Security Scan Report · November 22, 2026 at 8:09 PM</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+    --border:#30363d;--text:#c9d1d9;--text2:#e6edf3;--muted:#6e7681;
+    --blue:#58a6ff;--risk:#3fb950;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem}
+  .container{max-width:1200px;margin:0 auto}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:flex-start;
+          padding-bottom:1.5rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+  .header-left h1{font-size:1.3rem;font-weight:700;color:var(--text2)}
+  .header-left h1 .accent{color:var(--blue)}
+  .header-left .meta{font-size:0.78rem;color:var(--muted);margin-top:0.25rem}
+  .grade-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+              letter-spacing:0.05em;align-self:center}
+  .risk-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+             background:#3fb95022;color:#3fb950;border:1px solid #3fb95055;
+             align-self:center;letter-spacing:0.05em}
+
+  /* Stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:2rem}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+        padding:1.1rem 1rem;text-align:center}
+  .card .val{font-size:2rem;font-weight:800;line-height:1.1}
+  .card .lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;
+             letter-spacing:0.09em;margin-top:0.2rem}
+
+  /* Risk gauge */
+  .gauge-section{margin-bottom:2rem}
+  .section-title{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;
+                 color:var(--muted);font-weight:600;margin-bottom:0.8rem;
+                 padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+  .gauge-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
+  .gauge-fill{height:100%;width:0%;background:linear-gradient(90deg,#3fb950,#d29922,#e05f00,#ff4444);
+              border-radius:5px;transition:width .6s ease}
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+                margin-top:4px;padding:0 2px}
+
+  /* Target summary */
+  .targets-grid{display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:2rem}
+  .target-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+               padding:0.7rem 1rem}
+  .target-host{font-family:monospace;font-size:0.82rem;color:var(--blue);margin-bottom:0.3rem}
+  .target-stats{display:flex;gap:0.8rem;font-size:0.75rem;font-weight:600}
+
+  /* Table */
+  .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;background:var(--bg2)}
+  thead tr{background:var(--bg3)}
+  th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;
+     letter-spacing:0.08em;color:var(--muted);font-weight:600;white-space:nowrap}
+  td{padding:12px 14px;border-top:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:rgba(88,166,255,0.04)}
+  .check-title{font-weight:600;color:var(--text2);margin-bottom:4px;font-size:13px}
+  .check-badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cat-badge{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;
+             background:var(--bg3);color:var(--muted);border:1px solid var(--border);text-transform:uppercase;letter-spacing:0.04em}
+  .cve-badge{background:rgba(255,68,68,0.14);color:#ff7b72;border-color:rgba(255,68,68,0.4)}
+  .cvss-badge{background:rgba(88,166,255,0.14);color:var(--blue);border-color:rgba(88,166,255,0.4)}
+  .td-host code{font-size:11px}
+  .td-detail{font-size:11px;max-width:360px}
+  .td-muted{color:var(--muted)}
+  .meaning-box{margin-top:6px;font-size:11px;line-height:1.45;color:var(--text)}
+  .meaning-lbl{color:var(--blue);font-weight:700;display:inline-block;margin-right:4px}
+  .why-box{margin-top:5px;font-size:11px;line-height:1.45;color:var(--text)}
+  .why-lbl{color:#d29922;font-weight:700;display:inline-block;margin-right:4px}
+  .fix-box{margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;
+           border-left:3px solid var(--blue);font-size:11px;color:var(--text)}
+  .fix-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--blue);
+           font-weight:800;margin-bottom:3px}
+  .repro-box{margin-top:8px;padding:8px 12px;background:rgba(210,153,34,0.08);border-radius:6px;
+             border-left:3px solid #d29922;font-size:11px;color:var(--text)}
+  .repro-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:#d29922;
+             font-weight:800;margin-bottom:4px}
+  .repro-steps{margin:4px 0 6px 16px;padding:0;line-height:1.45}
+  .repro-cmd{margin:4px 0 0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);
+             border-radius:4px;overflow-x:auto;font-size:10px;white-space:pre-wrap;word-break:break-all}
+  .badge{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;
+         letter-spacing:0.06em;white-space:nowrap}
+  .muted{color:var(--muted)}
+
+  /* Footer */
+  .footer{margin-top:2.5rem;font-size:0.72rem;color:var(--muted);text-align:center;
+          padding-top:1.5rem;border-top:1px solid var(--border)}
+
+  @media print{
+    body{background:#fff;color:#000;padding:1rem}
+    .card,.target-card,.table-wrap{border-color:#ccc}
+    table,thead tr{background:#f6f8fa}
+    :root{--bg2:#f6f8fa;--bg3:#eaeef2;--text2:#24292f;--text:#57606a;--muted:#57606a;--border:#d0d7de;--blue:#0969da}
+    .fix-box{background:#fff;border:1px solid #ddd;border-left:3px solid #0969da}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🔍 Security Scan Report · <span class="accent">November 22, 2026 at 8:09 PM</span></h1>
+      <div class="meta">Security Scanner v2.2 · 1 checks executed</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="grade-pill" style="background:#3fb95022;color:#3fb950;border:1px solid #3fb95055">
+        GRADE A+
+      </div>
+      <div class="risk-pill">LOW RISK</div>
+    </div>
+  </div>
+
+  
+  <div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid #3fb950;border-radius:8px;padding:0.9rem 1.2rem;margin-bottom:1.8rem">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:700;margin-bottom:4px">Security Posture Assessment</div>
+    <div style="color:var(--text2);font-size:0.92rem;line-height:1.5">Outstanding security posture. No vulnerabilities or suspicious findings were identified.</div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#3fb950">A+</div><div class="lbl">Security Grade</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">LOW</div><div class="lbl">Risk Level</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">0<span style="font-size:1rem;font-weight:400;color:var(--muted)">/60</span></div><div class="lbl">Risk Score</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Vulnerable</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Suspicious</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Safe</div></div>
+    <div class="card"><div class="val" style="color:var(--muted)">1</div><div class="lbl">Errors</div></div>
+  </div>
+
+  <!-- Gauge -->
+  <div class="gauge-section">
+    <div class="section-title">Risk Score — 0 / 60</div>
+    <div class="gauge-track"><div class="gauge-fill"></div></div>
+    <div class="gauge-labels"><span>LOW</span><span>MEDIUM</span><span>HIGH</span><span>CRITICAL</span></div>
+  </div>
+
+  <!-- Target summary -->
+  <div class="section-title">Targets</div>
+  <div class="targets-grid">
+    <div class="target-card">
+      <div class="target-host">192.168.68.53</div>
+      <div class="target-stats">
+        <span style="color:#ff4444">0 vuln</span>
+        <span style="color:#d29922">0 susp</span>
+        <span style="color:#3fb950">0 safe</span>
+        <span style="color:#6e7681">1 err</span>
+      </div>
+    </div></div>
+
+  
+  <!-- Detected Technology Stack & Audit Strategy -->
+  <div class="section-title">🧠 Detected Technology Stack & Audit Strategy</div>
+  <div class="targets-grid">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div class="target-host">http://192.168.68.53</div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">
+        <strong>Stack:</strong> Unreachable or Unknown
+        
+      </div>
+      
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Ecosystem Tags:</span>
+        <span class="muted" style="font-size:11px">None detected</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Recommended Profile:</span>
+        <strong style="color:var(--blue)">smart</strong>
+      </div>
+      <div class="target-stats" style="margin-top:8px">
+        <span style="color:#3fb950">1 relevant checks executed</span>
+        <span style="color:var(--muted)">81 skipped</span>
+      </div>
+    </div></div>
+
+  
+
+  
+  <!-- CVE Coverage Summary -->
+  <div class="section-title">🛡️ CVE Coverage Audit Summary</div>
+  <div class="cards" style="margin-bottom:1.8rem">
+    <div class="card"><div class="val" style="color:var(--blue)">99%</div><div class="lbl">CVE Coverage</div></div>
+    <div class="card"><div class="val" style="color:var(--text2)">73</div><div class="lbl">Advisories</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">72</div><div class="lbl">Covered</div></div>
+    <div class="card"><div class="val" style="color:#d29922">0</div><div class="lbl">Partial</div></div>
+    <div class="card"><div class="val" style="color:#ff4444">1</div><div class="lbl">Missing</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">7/7</div><div class="lbl">KEV Covered</div></div>
+  </div>
+
+  <!-- Findings table -->
+  <div class="section-title" style="margin-bottom:0.8rem">Findings (Grouped by Vulnerability)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Severity</th>
+          <th>Check</th>
+          <th>Affected Pages</th>
+          <th>Findings & Remediation</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Smart TV, IP Camera, PC/Workstation &amp; Network Device Security Exposure</div>
+        <div class="check-badges">
+          <code>device-security</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://192.168.68.53</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target unreachable across standard and device ports</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Performs non-intrusive discovery and security auditing across Smart TVs (Samsung Tizen, LG webOS, Roku ECP, Google TV / Android TV / Chromecast, Sony Bravia, Vizio SmartCast, Philips JointSpace, Apple AirPlay, DIAL), IP Cameras / NVRs (RTSP 554/8554, ONVIF SOAP, Hikvision ISAPI, Dahua, Axis, Xiongmai, UniFi Protect, unauthenticated snapshots), PCs / Workstations / Local Servers (Windows SMB/NetBIOS/MSRPC/RDP/WinRM/WSDAPI, macOS/Linux SSH/VNC/CUPS/NFS/AFP/rsync/mDNS, Docker TCP 2375, Ollama 11434, local dev servers, open shares), routers, printers, NAS, and IoT appliances.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Local network devices and workstations often expose unauthenticated REST/WebSocket control APIs, live RTSP/MJPEG camera feeds, cleartext admin UIs, unauthenticated Docker/Ollama/dev servers, or remote file-sharing and shell services (SMB 445, RDP 3389, WinRM 5985, ADB 5555, Telnet 23) that allow LAN attackers to hijack screens, view surveillance feeds, access files, or execute arbitrary commands.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target unreachable across standard and device ports</code></div>
+          <ol class="repro-steps"><li>Send GET request to http://192.168.68.53/.</li><li>Observe the indicator (Target unreachable across standard and device ports).</li><li>Apply the remediation, then replay GET http://192.168.68.53/ and re-run check &quot;device-security&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://192.168.68.53/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.
+        </div>
+      </td>
+    </tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">Security Scanner v2.2 · Generated November 22, 2026 at 8:09 PM</div>
+</div>
+</body>
+</html>

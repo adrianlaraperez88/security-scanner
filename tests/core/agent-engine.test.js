@@ -368,11 +368,11 @@ describe('Step 2.5: Okapi BM25 tool selector (core/toolrag.js)', () => {
     assert.deepEqual(projectTools('sql injection', tools, { topK: 1, alwaysInclude: ['load_skill'] }).map((t) => t.name), ['load_skill', 'sqli']);
   });
 
-  it('indexes all 68 checks/*.js descriptors', async () => {
+  it('indexes all 84 checks/*.js descriptors', async () => {
     const descriptors = await loadCheckDescriptors();
     const fileCount = fs.readdirSync(path.join(ROOT, 'checks')).filter((f) => f.endsWith('.js')).length;
-    assert.equal(fileCount, 68);
-    assert.equal(descriptors.length, 68);
+    assert.equal(fileCount, 84);
+    assert.equal(descriptors.length, 84);
     const all = [...descriptors, { name: 'record_fact', description: 'x', tags: [] }];
     const top = projectTools('cross origin resource sharing cors credentials', all, { topK: 5 }).map((t) => t.name);
     assert.ok(top.includes('cors'), `expected cors in ${top.join(',')}`);

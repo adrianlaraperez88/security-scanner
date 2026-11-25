@@ -242,7 +242,7 @@ function buildNormalizedSnapshotCorpus(rawSnap) {
 }
 
 /**
- * ARTEX S1 Machine-Checked Receipt Verifier.
+ * SecScan S1 Machine-Checked Receipt Verifier.
  *
  * Rules:
  * 1. Must have at least one bound snapshot with `role` in `'proof'` or `'verification'`.

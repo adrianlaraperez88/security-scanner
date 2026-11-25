@@ -4,22 +4,22 @@ import { getScanners } from '../../core/registry.js';
 import { PROFILES, listProfiles, validateProfiles } from '../../core/profiles.js';
 import { PRESETS, CHECK_CATALOG, CWE_OWASP_MAP, getCheckInfo, getCheckMeta } from '../../core/catalog.js';
 
-test('profiles: validateProfiles() passes with 0 errors and 0 unprofiled checks across all 68 scanners', async () => {
+test('profiles: validateProfiles() passes with 0 errors and 0 unprofiled checks across all 84 scanners', async () => {
   const scanners = await getScanners();
-  assert.equal(scanners.length, 68);
+  assert.equal(scanners.length, 84);
 
   const report = validateProfiles(scanners);
   assert.equal(report.valid, true, `Expected valid profiles, got errors: ${report.errors.join('; ')}`);
   assert.deepEqual(report.errors, []);
   assert.deepEqual(report.unprofiledChecks, []);
-  assert.equal(report.stats.totalProfiles, 20);
-  assert.equal(report.stats.explicitProfiles, 18);
-  assert.equal(report.stats.totalKnownChecks, 68);
+  assert.equal(report.stats.totalProfiles, 21);
+  assert.equal(report.stats.explicitProfiles, 19);
+  assert.equal(report.stats.totalKnownChecks, 84);
 
   // Also verify no-args validateProfiles() reads checks/ synchronously
   const syncReport = validateProfiles();
   assert.equal(syncReport.valid, true);
-  assert.equal(syncReport.stats.totalKnownChecks, 68);
+  assert.equal(syncReport.stats.totalKnownChecks, 84);
 
   // Verify listProfiles() includes all 20 profiles including apache and ops
   const listed = listProfiles();
@@ -172,9 +172,11 @@ test('catalog: getCheckInfo(res.name) resolves 100% of all 68 check return name 
     ['cve-php-ecosystem', 'PHP Distro Backport Check (CVE-2026-48841)'],
     ['cve-php-ecosystem', 'Laravel File Validation Bypass (CVE-2025-27515)'],
     ['cve-php-ecosystem', 'Symfony HttpFoundation Request URL Parsing Flaw (CVE-2024-50342)'],
+    ['cve-python-web', 'Python Web Ecosystem CVEs (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699, CVE-2024-47874, CVE-2024-56326)'],
     ['cve-python-web', 'Python Web Ecosystem CVEs (CVE-2024-45230, CVE-2024-53907, CVE-2025-26699, CVE-2024-47874)'],
     ['cve-python-web', 'Django SQL injection via JSONField HasKey (CVE-2024-53907)'],
     ['cve-python-web', 'FastAPI / Starlette Multipart Form Memory Exhaustion DoS (CVE-2024-47874)'],
+    ['cve-python-web', 'Jinja2 Sandboxed Environment Format String Execution Bypass (CVE-2024-56326)'],
     ['cve-spring-framework', 'Spring Boot & Spring Framework CVEs (CVE-2024-38816, CVE-2024-38819, CVE-2025-22235, CVE-2024-22262)'],
     ['cve-spring-framework', 'Spring WebMvc/WebFlux Path Traversal (CVE-2024-38816)'],
     ['cve-spring-framework', 'Spring Boot EndpointRequest Matcher Bypass (CVE-2025-22235)'],
@@ -265,9 +267,9 @@ test('catalog: resolveCweOwaspFallback uses generic CWE-94 with cveIds: [] for u
   assert.deepEqual(getCheckInfo('cve-2024-4577').cveIds, ['CVE-2024-4577']);
 });
 
-test('registry: getScanners() returns 68 deterministically sorted scanners with normalized tags and meta', async () => {
+test('registry: getScanners() returns 84 deterministically sorted scanners with normalized tags and meta', async () => {
   const scanners = await getScanners();
-  assert.equal(scanners.length, 68);
+  assert.equal(scanners.length, 84);
 
   const names = scanners.map(s => s.name);
   const sorted = [...names].sort();

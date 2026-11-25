@@ -13,6 +13,8 @@
     "ui:watch": "node --watch core/server.js",
     "cve:audit": "node bin/cli.js --cve-audit",
     "cve:confirm": "node bin/cli.js --cve-audit --cve-db osv",
+    "cve:lab": "node bin/cli.js --cve-lab",
+    "pc:audit": "node bin/cli.js --pc-local",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:watch": "docker compose up --watch",

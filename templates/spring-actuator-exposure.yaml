@@ -1,0 +1,26 @@
+id: spring-actuator-exposure-template
+info:
+  name: Spring Boot Actuator Environment & Classpath Disclosure
+  severity: high
+  description: Detects publicly exposed Spring Boot /actuator/env or /actuator/info endpoints leaking runtime properties.
+  remediation: Disable public exposure of Spring Boot Actuator endpoints in application.properties.
+  classification:
+    cvss-score: 7.5
+    cwe-id: CWE-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/info"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: body
+        condition: or
+        words:
+          - "propertySources"
+          - "springFramework"
+          - "springBoot"

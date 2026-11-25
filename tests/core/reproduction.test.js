@@ -274,4 +274,240 @@ describe('Reproduction & Post-Fix Verification Context', () => {
     assert.match(headerRepro.observedSignal, /Missing security header\(s\): Content-Security-Policy, X-Frame-Options/);
     assert.equal(headerRepro.observedSignal.includes('<html'), false);
   });
+
+  test('createTrackedFetch forwards positional retries/timeout args and preserves guard + hasCustomFetcher', async () => {
+    const received = [];
+    const baseFetch = async (url, opts, retries, timeout) => {
+      received.push({ url, opts, retries, timeout });
+      return { status: 200, headers: {}, text: 'ok' };
+    };
+    baseFetch.hasCustomFetcher = true;
+    baseFetch.guard = { name: 'scope-guard' };
+    baseFetch.governance = { allowPrivate: true };
+
+    const tracked = createTrackedFetch(baseFetch);
+    assert.equal(tracked.hasCustomFetcher, true);
+    assert.deepEqual(tracked.guard, { name: 'scope-guard' });
+    assert.deepEqual(tracked.governance, { allowPrivate: true });
+
+    await tracked('http://192.168.68.53:8001/api/v2/', { method: 'GET' }, 0, 750);
+    assert.equal(received.length, 1);
+    assert.equal(received[0].retries, 0);
+    assert.equal(received[0].timeout, 750);
+  });
+
+  test('buildReproductionContext emits nc -vz and Test-NetConnection for TCP/UDP & device-security port findings without HTTP 404 trace pollution', () => {
+    const noisyHttpTraces = [
+      { method: 'GET', url: 'http://192.168.68.53/', headers: {}, status: 404, responseSnippet: 'Not Found' },
+      { method: 'GET', url: 'http://192.168.68.53:8080/', headers: {}, status: 404, responseSnippet: '404 Not Found' }
+    ];
+
+    const tcpRepro = buildReproductionContext({
+      name: 'Android Debug Bridge (ADB) Exposed',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      severity: 'CRITICAL',
+      method: 'TCP',
+      host: '192.168.68.53',
+      port: 5555,
+      path: ':5555',
+      url: 'http://192.168.68.53:5555/',
+      detail: 'ADB port 5555/TCP open without authentication',
+      fix: 'Disable ADB over Network.'
+    }, { capturedTraces: noisyHttpTraces });
+
+    assert.equal(tcpRepro.method, 'TCP');
+    assert.equal(tcpRepro.url, 'tcp://192.168.68.53:5555');
+    assert.equal(tcpRepro.curl, "nc -vz '192.168.68.53' 5555");
+    assert.equal(tcpRepro.curl.includes('-X TCP'), false);
+    assert.equal(tcpRepro.responseStatus, undefined);
+    assert.equal(tcpRepro.reproducible, true);
+    assert.ok(tcpRepro.steps.some(s => s.includes('Test-NetConnection')));
+    assert.ok(tcpRepro.verifyFix.includes('Test-NetConnection'));
+
+    // Aggregated device-security finding shape (method/port inside files[])
+    const aggRepro = buildReproductionContext({
+      name: 'device-security',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      severity: 'CRITICAL',
+      target: 'http://192.168.68.53',
+      path: ':5555',
+      url: 'http://192.168.68.53:5555/',
+      device: { host: '192.168.68.53' },
+      files: [
+        {
+          name: 'Android Debug Bridge (5555/TCP)',
+          path: ':5555',
+          url: 'http://192.168.68.53:5555/',
+          port: 5555,
+          method: 'TCP',
+          status: 200,
+          matchedSignal: 'ADB TCP port 5555 open'
+        }
+      ]
+    }, { capturedTraces: noisyHttpTraces });
+
+    assert.equal(aggRepro.method, 'TCP');
+    assert.equal(aggRepro.curl, "nc -vz '192.168.68.53' 5555");
+    assert.equal(aggRepro.responseStatus, undefined);
+  });
+
+  test('buildReproductionContext handles rtsp:// / rtsps:// safely by stripping embedded credentials', () => {
+    const rtspRepro = buildReproductionContext({
+      name: 'RTSP Unauthenticated Stream',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      severity: 'HIGH',
+      method: 'RTSP',
+      url: 'rtsp://admin:SuperSecret123@192.168.1.20:554/stream1',
+      detail: 'RTSP stream responded to OPTIONS'
+    }, {
+      capturedTraces: [{ method: 'GET', url: 'http://192.168.1.20/', status: 404, responseSnippet: 'Not Found' }]
+    });
+
+    assert.equal(rtspRepro.url, 'rtsp://192.168.1.20:554/stream1');
+    assert.equal(rtspRepro.curl, "curl -i -sS --request OPTIONS 'rtsp://192.168.1.20:554/stream1'");
+    assert.equal(rtspRepro.curl.includes('SuperSecret123'), false);
+    assert.equal(rtspRepro.curl.includes('admin'), false);
+    assert.equal(rtspRepro.responseStatus, undefined);
+    assert.equal(rtspRepro.reproducible, true);
+
+    // Sub-items in files[] with rtsp:// credentials must also strip userinfo in matchedEvidence[].url
+    const rtspSubItemRepro = buildReproductionContext({
+      name: 'RTSP Streams Exposed',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      severity: 'HIGH',
+      method: 'DESCRIBE',
+      url: 'rtsp://admin:SuperSecret123@192.168.1.20:554/stream1',
+      files: [
+        {
+          name: 'RTSP Primary Stream',
+          url: 'rtsp://operator:TopSecret99@192.168.1.20:554/live',
+          method: 'DESCRIBE',
+          matchedSignal: 'RTSP DESCRIBE returned SDP'
+        }
+      ]
+    });
+    assert.equal(rtspSubItemRepro.method, 'DESCRIBE');
+    assert.equal(rtspSubItemRepro.curl, "curl -i -sS --request DESCRIBE 'rtsp://192.168.1.20:554/stream1'");
+    assert.ok(rtspSubItemRepro.steps[0].includes('--request DESCRIBE'));
+    assert.ok(rtspSubItemRepro.verifyFix.includes('RTSP DESCRIBE'));
+    assert.equal(rtspSubItemRepro.matchedEvidence[0].url, 'rtsp://192.168.1.20:554/live');
+    assert.equal(rtspSubItemRepro.matchedEvidence[0].url.includes('TopSecret99'), false);
+    assert.equal(rtspSubItemRepro.matchedEvidence[0].url.includes('operator'), false);
+
+    // Non-HTTP ssh:// port finding aligns steps/verifyFix with nc -vz & Test-NetConnection
+    const sshRepro = buildReproductionContext({
+      name: 'SSH Port Exposed',
+      checkId: 'device-security',
+      status: 'SUSPICIOUS',
+      severity: 'LOW',
+      url: 'ssh://root:toor@192.168.1.10:22/',
+      files: [{ url: 'ssh://root:toor@192.168.1.10:22/', matchedSignal: 'SSH-2.0-OpenSSH_9.0' }]
+    });
+    assert.equal(sshRepro.curl, "nc -vz '192.168.1.10' 22");
+    assert.ok(sshRepro.steps[0].includes("nc -vz '192.168.1.10' 22"));
+    assert.ok(sshRepro.steps[0].includes('Test-NetConnection -ComputerName 192.168.1.10 -Port 22'));
+    assert.ok(sshRepro.verifyFix.includes('Test-NetConnection -ComputerName 192.168.1.10 -Port 22'));
+    assert.equal(sshRepro.matchedEvidence[0].url, 'ssh://192.168.1.10:22/');
+  });
+
+  test('buildReproductionContext resists shell injection on malicious hosts, invalid ports, and RTSP paths', () => {
+    const evilHostRepro = buildReproductionContext({
+      name: 'TCP Port',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      method: 'TCP',
+      host: '192.168.1.1; rm -rf /',
+      port: 5555
+    });
+    assert.equal(evilHostRepro.curl, null);
+
+    const cmdSubHostRepro = buildReproductionContext({
+      name: 'TCP Port',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      method: 'TCP',
+      host: '$(id)',
+      port: 23
+    });
+    assert.equal(cmdSubHostRepro.curl, null);
+
+    const evilPortRepro = buildReproductionContext({
+      name: 'TCP Port',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      method: 'TCP',
+      host: '192.168.1.10',
+      port: '554;id'
+    });
+    assert.equal(evilPortRepro.curl, null);
+
+    const outOfRangePortRepro = buildReproductionContext({
+      name: 'TCP Port',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      method: 'TCP',
+      host: '192.168.1.10',
+      port: 99999
+    });
+    assert.equal(outOfRangePortRepro.curl, null);
+
+    const rtspQuoteRepro = buildReproductionContext({
+      name: 'RTSP',
+      checkId: 'device-security',
+      status: 'VULNERABLE',
+      url: "rtsp://192.168.1.20:554/it's$(id)"
+    });
+    assert.ok(rtspQuoteRepro.curl.startsWith("curl -i -sS --request OPTIONS '"));
+    assert.ok(rtspQuoteRepro.curl.includes("'\\''"));
+  });
+
+  test('selectTriggerTrace & EnrichEngine keep same-origin 404 trace on :3000 instead of jumping to :80 200 OK', () => {
+    const traces = [
+      { method: 'GET', url: 'http://192.168.1.80/', headers: {}, status: 200, responseSnippet: '<html>Hello</html>' },
+      { method: 'GET', url: 'http://192.168.1.80:3000/', headers: {}, status: 404, responseSnippet: '404 Not Found' }
+    ];
+
+    const lgFinding = {
+      name: 'device-security',
+      checkId: 'device-security',
+      status: 'SUSPICIOUS',
+      severity: 'MEDIUM',
+      target: 'http://192.168.1.80',
+      path: '/',
+      url: 'http://192.168.1.80:3000/',
+      method: 'GET',
+      port: 3000,
+      observedStatus: 404,
+      detail: 'LG webOS SSAP service on port 3000 (HTTP 404)',
+      files: [
+        {
+          name: 'LG webOS Smart TV SSAP Control Service Exposed (3000/TCP)',
+          path: '/',
+          url: 'http://192.168.1.80:3000/',
+          port: 3000,
+          method: 'GET',
+          status: 404,
+          matchedSignal: 'LG webOS service on port 3000 (HTTP 404)'
+        }
+      ]
+    };
+
+    const engine = new EnrichEngine();
+    const enriched = engine.enrichFinding(lgFinding, { capturedTraces: traces });
+    assert.equal(enriched.status, 'SUSPICIOUS');
+    assert.equal(enriched.reproduction?.url, 'http://192.168.1.80:3000/');
+    assert.equal(enriched.reproduction?.responseStatus, 404);
+    assert.equal(enriched.reproduction?.curl, "curl -i -sS 'http://192.168.1.80:3000/'");
+
+    // When :3000 trace is absent and only :80 trace exists, selectTriggerTrace must NOT jump across origins
+    const missingOriginTrace = selectTriggerTrace(
+      [{ method: 'GET', url: 'http://192.168.1.80/', headers: {}, status: 200, responseSnippet: 'Hello' }],
+      lgFinding
+    );
+    assert.equal(missingOriginTrace, null);
+  });
 });

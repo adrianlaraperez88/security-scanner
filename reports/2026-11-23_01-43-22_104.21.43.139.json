@@ -1,0 +1,1890 @@
+{
+  "generatedAt": "2026-11-23T01:43:22.638Z",
+  "summary": {
+    "score": 20,
+    "level": "HIGH",
+    "grade": "D",
+    "summary": "High security risk. Significant vulnerabilities were detected that expose the system to attack.",
+    "totalChecks": 13,
+    "totalExecutions": 13,
+    "vulnerable": 0,
+    "suspicious": 2,
+    "errors": 0
+  },
+  "stacks": {
+    "http://104.21.43.139": {
+      "primary": "device",
+      "confidence": 10,
+      "stack": [
+        {
+          "tech": "device",
+          "score": 10,
+          "rank": 100
+        },
+        {
+          "tech": "cloudflare",
+          "score": 7,
+          "rank": 7
+        }
+      ],
+      "detectedTags": [
+        "cloudflare",
+        "device",
+        "iot"
+      ],
+      "recommendedProfile": "device",
+      "categories": {
+        "frameworks": [],
+        "frontend": [],
+        "runtimes": [],
+        "servers": [
+          "cloudflare",
+          "device"
+        ]
+      },
+      "summary": "Network Device Web & Companion Interface [Open Ports: 8443, 80, 443, 8080]",
+      "apiCommunication": null,
+      "deviceInfo": {
+        "detected": true,
+        "host": "104.21.43.139",
+        "category": "device_web",
+        "categoryLabel": "Network Device Web & Companion Interface",
+        "vendor": "Unknown",
+        "deviceType": "Network Device Web & Companion Interface",
+        "deviceName": "104.21.43.139",
+        "modelName": null,
+        "os": null,
+        "osFamily": null,
+        "firmwareVersion": null,
+        "macAddress": null,
+        "serialNumber": null,
+        "udn": null,
+        "ssid": null,
+        "networkType": null,
+        "resolution": null,
+        "countryCode": null,
+        "tokenAuthSupport": null,
+        "openPorts": [
+          8443,
+          80,
+          443,
+          8080
+        ],
+        "openServices": [
+          {
+            "port": 8443,
+            "scheme": "https",
+            "service": "device-https-alt",
+            "label": "Device / Cast / App HTTPS Control Interface",
+            "category": "smart_tv",
+            "vendor": null
+          },
+          {
+            "port": 80,
+            "scheme": "http",
+            "service": "http-device-web",
+            "label": "Device HTTP Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 443,
+            "scheme": "https",
+            "service": "https-device-web",
+            "label": "Device HTTPS Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 8080,
+            "scheme": "http",
+            "service": "http-companion-dial",
+            "label": "Device Companion Web / DIAL / Proxy HTTP Service",
+            "category": "device_web",
+            "vendor": null
+          }
+        ],
+        "basePortClosed": false,
+        "activeHttpOrigin": "http://104.21.43.139",
+        "activeHttpsOrigin": null,
+        "categorySignals": [],
+        "summary": "Network Device Web & Companion Interface [Open Ports: 8443, 80, 443, 8080]"
+      },
+      "activeChecksCount": 13,
+      "skippedChecksCount": 69,
+      "skippedChecks": [
+        "ai-llm-exposure",
+        "api-communication",
+        "api-security-spectrum",
+        "bola-mass-assignment",
+        "cache-poisoning",
+        "clickjacking",
+        "codeigniter-checks",
+        "crlf-header-injection",
+        "cve-2024-4577",
+        "cve-2026-114938",
+        "cve-2026-123007",
+        "cve-2026-123633",
+        "cve-2026-123634",
+        "cve-apache-httpd",
+        "cve-jdk-advisories",
+        "cve-nextjs-react",
+        "cve-nginx-http3",
+        "cve-nginx-tls",
+        "cve-node-express",
+        "cve-php-ecosystem",
+        "cve-python-web",
+        "cve-spring-framework",
+        "cve-tomcat",
+        "cve-wordpress-ecosystem",
+        "directory-listing",
+        "dom-xss-sinks",
+        "drupal-checks",
+        "env",
+        "frontend-checks",
+        "git",
+        "graphql",
+        "http-desync-smuggling",
+        "ignition",
+        "iis-shortname",
+        "jwt-security",
+        "laravel-auth",
+        "laravel-debug",
+        "laravel-env-manipulation",
+        "laravel-livewire",
+        "laravel-storage",
+        "laravel-telescope",
+        "magento-checks",
+        "magento-cosmicsting",
+        "nextjs-checks",
+        "node-checks",
+        "open-redirect",
+        "php-backup",
+        "php-cgi-exposure",
+        "php-config",
+        "php-errors",
+        "php-info",
+        "php-lfi",
+        "php-session-upload-progress",
+        "php-version",
+        "phpunit-rce",
+        "python-checks",
+        "rate-limit",
+        "robots-sitemap",
+        "spring-checks",
+        "sql-errors",
+        "sqli",
+        "sri-supply-chain",
+        "ssrf-surface",
+        "ssti-check",
+        "subdomain-takeover",
+        "symfony-checks",
+        "wp-checks",
+        "xss",
+        "xxe-injection"
+      ]
+    }
+  },
+  "cveCoverage": {
+    "totalAdvisories": 0,
+    "coveredCount": 0,
+    "partialCount": 0,
+    "missingCount": 0,
+    "coveragePercent": 100,
+    "kevTotal": 0,
+    "kevCovered": 0,
+    "kevMissing": 0,
+    "missingFromCatalogCount": 0,
+    "affectedPackageMatchesCount": 0,
+    "techTags": [
+      "cloudflare",
+      "device",
+      "iot"
+    ],
+    "byEcosystem": {},
+    "missingCveIds": [],
+    "partialCveIds": [],
+    "coveredCveIds": [],
+    "generatedAt": "2026-11-23T01:43:22.633Z"
+  },
+  "groupedFindings": [
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "admin-panels",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "cwe": "CWE-284",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "fix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "title": "Administrative Panels Exposure",
+      "category": "Access Control",
+      "cwe": "CWE-284",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-284",
+        "owaspApi2023": "API5:2023-Broken Function Level Authorization",
+        "pciDss4": "PCI-DSS v4.0 Req 7.2.1 (Access Control Model)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.3 (Information Access Restriction)",
+        "nist80053": "NIST SP 800-53 Rev.5 AC-3 (Access Enforcement)",
+        "soc2": "SOC 2 CC6.1 (Logical Access Security)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "fix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API9:2023-Improper Inventory Management",
+        "pciDss4": "PCI-DSS v4.0 Req 6.4.1 & 12.5.1 (API & Asset Inventory Protection)",
+        "iso27001": "ISO/IEC 27001:2022 A.5.9 (Inventory of Information and Associated Assets)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-8 (System Component Inventory)",
+        "soc2": "SOC 2 CC6.1 & CC6.6 (API Boundary & Inventory)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "cookie-security",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "cwe": "CWE-614",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/614.html",
+          "https://owasp.org/www-community/controls/SecureCookieAttribute"
+        ]
+      },
+      "fix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "title": "Cookie Security Attributes",
+      "category": "Authentication & Session",
+      "cwe": "CWE-614",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/614.html",
+        "https://owasp.org/www-community/controls/SecureCookieAttribute"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-614",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "cors",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "cwe": "CWE-942",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/942.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "title": "CORS Configuration",
+      "category": "API Security",
+      "cwe": "CWE-942",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/942.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-942",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "device-security",
+      "name": "device-security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "device": {
+        "detected": true,
+        "host": "104.21.43.139",
+        "category": "device_web",
+        "categoryLabel": "Network Device Web & Companion Interface",
+        "vendor": "Unknown",
+        "deviceType": "Network Device Web & Companion Interface",
+        "deviceName": "104.21.43.139",
+        "modelName": null,
+        "os": null,
+        "osFamily": null,
+        "firmwareVersion": null,
+        "macAddress": null,
+        "serialNumber": null,
+        "udn": null,
+        "ssid": null,
+        "networkType": null,
+        "resolution": null,
+        "countryCode": null,
+        "tokenAuthSupport": null,
+        "openPorts": [
+          8443,
+          80,
+          443,
+          8080
+        ],
+        "openServices": [
+          {
+            "port": 8443,
+            "scheme": "https",
+            "service": "device-https-alt",
+            "label": "Device / Cast / App HTTPS Control Interface",
+            "category": "smart_tv",
+            "vendor": null
+          },
+          {
+            "port": 80,
+            "scheme": "http",
+            "service": "http-device-web",
+            "label": "Device HTTP Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 443,
+            "scheme": "https",
+            "service": "https-device-web",
+            "label": "Device HTTPS Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 8080,
+            "scheme": "http",
+            "service": "http-companion-dial",
+            "label": "Device Companion Web / DIAL / Proxy HTTP Service",
+            "category": "device_web",
+            "vendor": null
+          }
+        ],
+        "basePortClosed": false,
+        "activeHttpOrigin": "http://104.21.43.139",
+        "activeHttpsOrigin": null,
+        "categorySignals": [],
+        "summary": "Network Device Web & Companion Interface [Open Ports: 8443, 80, 443, 8080]"
+      },
+      "deviceCategory": "device_web",
+      "openPorts": [
+        8443,
+        80,
+        443,
+        8080
+      ],
+      "meta": {
+        "id": "device-security",
+        "title": "Smart TV, IP Camera, PC/Workstation & Network Device Security Exposure",
+        "category": "Infrastructure & Network",
+        "plainExplanation": "Performs non-intrusive discovery and security auditing across Smart TVs (Samsung Tizen, LG webOS, Roku ECP, Google TV / Android TV / Chromecast, Sony Bravia, Vizio SmartCast, Philips JointSpace, Apple AirPlay, DIAL), IP Cameras / NVRs (RTSP 554/8554, ONVIF SOAP, Hikvision ISAPI, Dahua, Axis, Xiongmai, UniFi Protect, unauthenticated snapshots), PCs / Workstations / Local Servers (Windows SMB/NetBIOS/MSRPC/RDP/WinRM/WSDAPI, macOS/Linux SSH/VNC/CUPS/NFS/AFP/rsync/mDNS, Docker TCP 2375, Ollama 11434, local dev servers, open shares), routers, printers, NAS, and IoT appliances.",
+        "whyItMatters": "Local network devices and workstations often expose unauthenticated REST/WebSocket control APIs, live RTSP/MJPEG camera feeds, cleartext admin UIs, unauthenticated Docker/Ollama/dev servers, or remote file-sharing and shell services (SMB 445, RDP 3389, WinRM 5985, ADB 5555, Telnet 23) that allow LAN attackers to hijack screens, view surveillance feeds, access files, or execute arbitrary commands.",
+        "defaultFix": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+        "remediation": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/www-project-internet-of-things/"
+        ]
+      },
+      "fix": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+      "title": "Smart TV, IP Camera, PC/Workstation & Network Device Security Exposure",
+      "category": "Infrastructure & Network",
+      "cveIds": [],
+      "remediation": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/www-project-internet-of-things/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-749",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "Target is already HTTP — HTTPS check skipped",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "fix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-319",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 4.2.1 (Encrypted Transmission Over Open Networks)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.24 (Use of Cryptography)",
+        "nist80053": "NIST SP 800-53 Rev.5 SC-8 (Transmission Confidentiality and Integrity)",
+        "soc2": "SOC 2 CC6.7 (Encryption in Transit)",
+        "hipaa": "HIPAA §164.312(e)(2)(ii) (Encryption)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "origin-source-ip",
+      "name": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+      "status": "SAFE",
+      "resolvedIp": "104.21.43.139",
+      "dialedAddress": "104.21.43.139:80",
+      "detail": "Target HTTP transport routed via Source IP 104.21.43.139 (104.21.43.139:80); no origin WAF bypass or default vhost leakage detected.",
+      "meta": {
+        "id": "origin-source-ip",
+        "title": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+        "category": "Infrastructure & Network",
+        "plainExplanation": "Verifies whether the target connects via a resolved or configured Source/Origin IP and checks if direct Source-IP HTTP/HTTPS requests bypass CDN/WAF edge protections or leak internal default virtual-host / origin server metadata.",
+        "whyItMatters": "When an origin server accepts direct HTTP/HTTPS connections on its Source IP outside the CDN/WAF IP allowlist, attackers can bypass edge WAF rules, rate limits, and bot protections by connecting directly to the Source IP.",
+        "defaultFix": "Restrict origin firewall ingress on ports 80/443 to trusted CDN/WAF IP ranges only, configure a default-deny catch-all virtual host (ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+        "remediation": "Restrict origin firewall ingress on ports 80/443 to trusted CDN/WAF IP ranges only, configure a default-deny catch-all virtual host (ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+        "cwe": "CWE-284",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+      "title": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+      "category": "Infrastructure & Network",
+      "cwe": "CWE-284",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-284",
+        "owaspApi2023": "API5:2023-Broken Function Level Authorization",
+        "pciDss4": "PCI-DSS v4.0 Req 7.2.1 (Access Control Model)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.3 (Information Access Restriction)",
+        "nist80053": "NIST SP 800-53 Rev.5 AC-3 (Access Enforcement)",
+        "soc2": "SOC 2 CC6.1 (Logical Access Security)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "path": "/",
+      "observedStatus": 403,
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "Content-Security-Policy",
+        "Permissions-Policy"
+      ],
+      "present": [
+        "x-frame-options: SAMEORIGIN",
+        "referrer-policy: same-origin"
+      ],
+      "detail": "Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+      "files": [
+        {
+          "path": "/",
+          "url": "http://104.21.43.139",
+          "method": "GET",
+          "status": 403,
+          "matchedSignal": "Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+          "reproducible": true,
+          "preview": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy"
+        }
+      ],
+      "reproVerified": true,
+      "poeLevel": 3,
+      "evidenceQuotes": [
+        "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "x-frame-options: SAMEORIGIN",
+        "referrer-policy: same-origin"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://104.21.43.139/ -> HTTP 403 (HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy)",
+        "method": "GET",
+        "url": "http://104.21.43.139/",
+        "requestHeaders": {},
+        "reproducible": true,
+        "responseStatus": 403,
+        "observedSignal": "HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "curl": "curl -i -sS 'http://104.21.43.139/'",
+        "steps": [
+          "Send GET request to http://104.21.43.139/.",
+          "Observe the indicator (HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy) on HTTP 403.",
+          "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "matchedEvidence": [
+          {
+            "path": "/",
+            "url": "http://104.21.43.139/",
+            "method": "GET",
+            "status": 403,
+            "matchedSignal": "Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+            "preview": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy"
+          }
+        ],
+        "evidenceQuotes": [
+          "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+          "x-frame-options: SAMEORIGIN",
+          "referrer-policy: same-origin"
+        ],
+        "sourceIp": "104.21.43.139",
+        "resolvedIp": "104.21.43.139",
+        "dialedAddress": "104.21.43.139:80"
+      },
+      "compliance": {
+        "cwe": "CWE-693",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 75,
+      "proofArtifact": {
+        "certainty": 75,
+        "certaintyLabel": "Medium-High Confidence (75% Certainty)",
+        "isConfirmedProof": false,
+        "proofType": "http_response_receipt",
+        "extractedProof": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "verificationCommand": "curl -i -sS 'http://104.21.43.139/'"
+      },
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "sensitive-files",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "cwe": "CWE-538",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/538.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "title": "Sensitive Files & Configurations",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-538",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/538.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-538",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "detail": "Server not using HTTPS at all",
+      "fix": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://104.21.43.139/ (Server not using HTTPS at all)",
+        "method": "GET",
+        "url": "http://104.21.43.139/",
+        "requestHeaders": {},
+        "reproducible": false,
+        "observedSignal": "Server not using HTTPS at all",
+        "curl": "curl -i -sS 'http://104.21.43.139/'",
+        "steps": [
+          "Send GET request to http://104.21.43.139/.",
+          "Observe the indicator (Server not using HTTPS at all).",
+          "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+      },
+      "compliance": {
+        "cwe": "CWE-295",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 4.2.1 (Strong Cryptography & Valid TLS Certificates)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.24 (Use of Cryptography)",
+        "nist80053": "NIST SP 800-53 Rev.5 SC-8 & SC-17 (PKI Certificates)",
+        "soc2": "SOC 2 CC6.7 (Data in Transit Encryption)",
+        "hipaa": "HIPAA §164.312(e)(1) (Transmission Security)"
+      },
+      "certainty": 60,
+      "proofArtifact": {
+        "certainty": 60,
+        "certaintyLabel": "Tentative (60% Certainty)",
+        "isConfirmedProof": false,
+        "proofType": "http_response_receipt",
+        "extractedProof": "Server not using HTTPS at all",
+        "verificationCommand": "curl -i -sS 'http://104.21.43.139/'"
+      },
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "system-health",
+      "name": "system-health",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "issues": [],
+      "evidenceQuotes": [],
+      "meta": {
+        "id": "system-health",
+        "title": "System & Operational Health Exposure",
+        "category": "Network & Transport",
+        "plainExplanation": "Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.",
+        "whyItMatters": "Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.",
+        "defaultFix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "title": "System & Operational Health Exposure",
+      "category": "Network & Transport",
+      "cveIds": [],
+      "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0,
+      "pages": [
+        "http://104.21.43.139"
+      ],
+      "pageCount": 1
+    }
+  ],
+  "findings": [
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "admin-panels",
+      "name": "admin panel exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "admin-panels",
+        "title": "Administrative Panels Exposure",
+        "category": "Access Control",
+        "plainExplanation": "Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).",
+        "whyItMatters": "Exposed admin interfaces attract automated brute-force attacks and credential stuffing.",
+        "defaultFix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+        "cwe": "CWE-284",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+        ]
+      },
+      "fix": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "title": "Administrative Panels Exposure",
+      "category": "Access Control",
+      "cwe": "CWE-284",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-284",
+        "owaspApi2023": "API5:2023-Broken Function Level Authorization",
+        "pciDss4": "PCI-DSS v4.0 Req 7.2.1 (Access Control Model)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.3 (Information Access Restriction)",
+        "nist80053": "NIST SP 800-53 Rev.5 AC-3 (Access Enforcement)",
+        "soc2": "SOC 2 CC6.1 (Logical Access Security)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "api-endpoints",
+      "name": "api docs exposure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "api-endpoints",
+        "title": "Sensitive API Endpoints",
+        "category": "API Security",
+        "plainExplanation": "Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.",
+        "whyItMatters": "Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.",
+        "defaultFix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+        "cwe": "CWE-200",
+        "owasp": "A01:2021-Broken Access Control",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/API-Security/"
+        ]
+      },
+      "fix": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "title": "Sensitive API Endpoints",
+      "category": "API Security",
+      "cwe": "CWE-200",
+      "owasp": "A01:2021-Broken Access Control",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/API-Security/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API9:2023-Improper Inventory Management",
+        "pciDss4": "PCI-DSS v4.0 Req 6.4.1 & 12.5.1 (API & Asset Inventory Protection)",
+        "iso27001": "ISO/IEC 27001:2022 A.5.9 (Inventory of Information and Associated Assets)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-8 (System Component Inventory)",
+        "soc2": "SOC 2 CC6.1 & CC6.6 (API Boundary & Inventory)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "cookie-security",
+      "name": "cookie security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "No cookies set",
+      "meta": {
+        "id": "cookie-security",
+        "title": "Cookie Security Attributes",
+        "category": "Authentication & Session",
+        "plainExplanation": "Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.",
+        "whyItMatters": "Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.",
+        "defaultFix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+        "cwe": "CWE-614",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/614.html",
+          "https://owasp.org/www-community/controls/SecureCookieAttribute"
+        ]
+      },
+      "fix": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "title": "Cookie Security Attributes",
+      "category": "Authentication & Session",
+      "cwe": "CWE-614",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Set \"Secure; HttpOnly; SameSite=Lax\" (or SameSite=Strict) on all session and sensitive cookies.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/614.html",
+        "https://owasp.org/www-community/controls/SecureCookieAttribute"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-614",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "cors",
+      "name": "cors misconfiguration",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "cors",
+        "title": "CORS Configuration",
+        "category": "API Security",
+        "plainExplanation": "Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.",
+        "whyItMatters": "Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.",
+        "defaultFix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+        "cwe": "CWE-942",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/942.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "title": "CORS Configuration",
+      "category": "API Security",
+      "cwe": "CWE-942",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Specify explicit trusted origins in the \"Access-Control-Allow-Origin\" header and avoid reflecting arbitrary origins with credentials.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/942.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-942",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "device-security",
+      "name": "device-security",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "device": {
+        "detected": true,
+        "host": "104.21.43.139",
+        "category": "device_web",
+        "categoryLabel": "Network Device Web & Companion Interface",
+        "vendor": "Unknown",
+        "deviceType": "Network Device Web & Companion Interface",
+        "deviceName": "104.21.43.139",
+        "modelName": null,
+        "os": null,
+        "osFamily": null,
+        "firmwareVersion": null,
+        "macAddress": null,
+        "serialNumber": null,
+        "udn": null,
+        "ssid": null,
+        "networkType": null,
+        "resolution": null,
+        "countryCode": null,
+        "tokenAuthSupport": null,
+        "openPorts": [
+          8443,
+          80,
+          443,
+          8080
+        ],
+        "openServices": [
+          {
+            "port": 8443,
+            "scheme": "https",
+            "service": "device-https-alt",
+            "label": "Device / Cast / App HTTPS Control Interface",
+            "category": "smart_tv",
+            "vendor": null
+          },
+          {
+            "port": 80,
+            "scheme": "http",
+            "service": "http-device-web",
+            "label": "Device HTTP Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 443,
+            "scheme": "https",
+            "service": "https-device-web",
+            "label": "Device HTTPS Web Admin / Control Interface",
+            "category": "device_web",
+            "vendor": null
+          },
+          {
+            "port": 8080,
+            "scheme": "http",
+            "service": "http-companion-dial",
+            "label": "Device Companion Web / DIAL / Proxy HTTP Service",
+            "category": "device_web",
+            "vendor": null
+          }
+        ],
+        "basePortClosed": false,
+        "activeHttpOrigin": "http://104.21.43.139",
+        "activeHttpsOrigin": null,
+        "categorySignals": [],
+        "summary": "Network Device Web & Companion Interface [Open Ports: 8443, 80, 443, 8080]"
+      },
+      "deviceCategory": "device_web",
+      "openPorts": [
+        8443,
+        80,
+        443,
+        8080
+      ],
+      "meta": {
+        "id": "device-security",
+        "title": "Smart TV, IP Camera, PC/Workstation & Network Device Security Exposure",
+        "category": "Infrastructure & Network",
+        "plainExplanation": "Performs non-intrusive discovery and security auditing across Smart TVs (Samsung Tizen, LG webOS, Roku ECP, Google TV / Android TV / Chromecast, Sony Bravia, Vizio SmartCast, Philips JointSpace, Apple AirPlay, DIAL), IP Cameras / NVRs (RTSP 554/8554, ONVIF SOAP, Hikvision ISAPI, Dahua, Axis, Xiongmai, UniFi Protect, unauthenticated snapshots), PCs / Workstations / Local Servers (Windows SMB/NetBIOS/MSRPC/RDP/WinRM/WSDAPI, macOS/Linux SSH/VNC/CUPS/NFS/AFP/rsync/mDNS, Docker TCP 2375, Ollama 11434, local dev servers, open shares), routers, printers, NAS, and IoT appliances.",
+        "whyItMatters": "Local network devices and workstations often expose unauthenticated REST/WebSocket control APIs, live RTSP/MJPEG camera feeds, cleartext admin UIs, unauthenticated Docker/Ollama/dev servers, or remote file-sharing and shell services (SMB 445, RDP 3389, WinRM 5985, ADB 5555, Telnet 23) that allow LAN attackers to hijack screens, view surveillance feeds, access files, or execute arbitrary commands.",
+        "defaultFix": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+        "remediation": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/www-project-internet-of-things/"
+        ]
+      },
+      "fix": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+      "title": "Smart TV, IP Camera, PC/Workstation & Network Device Security Exposure",
+      "category": "Infrastructure & Network",
+      "cveIds": [],
+      "remediation": "Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/www-project-internet-of-things/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "http-methods",
+      "name": "http methods",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "http-methods",
+        "title": "Dangerous HTTP Methods",
+        "category": "HTTP Headers",
+        "plainExplanation": "Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.",
+        "whyItMatters": "TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.",
+        "defaultFix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+        "cwe": "CWE-749",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/749.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "title": "Dangerous HTTP Methods",
+      "category": "HTTP Headers",
+      "cwe": "CWE-749",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/749.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-749",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "http-redirect",
+      "name": "https redirect",
+      "status": "SAFE",
+      "severity": "NONE",
+      "detail": "Target is already HTTP — HTTPS check skipped",
+      "meta": {
+        "id": "http-redirect",
+        "title": "HTTP to HTTPS Redirection",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.",
+        "whyItMatters": "Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.",
+        "defaultFix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+        "cwe": "CWE-319",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/319.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "fix": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "title": "HTTP to HTTPS Redirection",
+      "category": "Network & Transport",
+      "cwe": "CWE-319",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/319.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-319",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 4.2.1 (Encrypted Transmission Over Open Networks)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.24 (Use of Cryptography)",
+        "nist80053": "NIST SP 800-53 Rev.5 SC-8 (Transmission Confidentiality and Integrity)",
+        "soc2": "SOC 2 CC6.7 (Encryption in Transit)",
+        "hipaa": "HIPAA §164.312(e)(2)(ii) (Encryption)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "origin-source-ip",
+      "name": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+      "status": "SAFE",
+      "resolvedIp": "104.21.43.139",
+      "dialedAddress": "104.21.43.139:80",
+      "detail": "Target HTTP transport routed via Source IP 104.21.43.139 (104.21.43.139:80); no origin WAF bypass or default vhost leakage detected.",
+      "meta": {
+        "id": "origin-source-ip",
+        "title": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+        "category": "Infrastructure & Network",
+        "plainExplanation": "Verifies whether the target connects via a resolved or configured Source/Origin IP and checks if direct Source-IP HTTP/HTTPS requests bypass CDN/WAF edge protections or leak internal default virtual-host / origin server metadata.",
+        "whyItMatters": "When an origin server accepts direct HTTP/HTTPS connections on its Source IP outside the CDN/WAF IP allowlist, attackers can bypass edge WAF rules, rate limits, and bot protections by connecting directly to the Source IP.",
+        "defaultFix": "Restrict origin firewall ingress on ports 80/443 to trusted CDN/WAF IP ranges only, configure a default-deny catch-all virtual host (ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+        "remediation": "Restrict origin firewall ingress on ports 80/443 to trusted CDN/WAF IP ranges only, configure a default-deny catch-all virtual host (ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+        "cwe": "CWE-284",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/284.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+      "title": "Direct Source-IP / Origin-IP HTTP Exposure & CDN/WAF Bypass",
+      "category": "Infrastructure & Network",
+      "cwe": "CWE-284",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/284.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-284",
+        "owaspApi2023": "API5:2023-Broken Function Level Authorization",
+        "pciDss4": "PCI-DSS v4.0 Req 7.2.1 (Access Control Model)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.3 (Information Access Restriction)",
+        "nist80053": "NIST SP 800-53 Rev.5 AC-3 (Access Enforcement)",
+        "soc2": "SOC 2 CC6.1 (Logical Access Security)",
+        "hipaa": "HIPAA §164.312(a)(1) (Access Control)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "security-headers",
+      "name": "security headers",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "path": "/",
+      "observedStatus": 403,
+      "missing": [
+        "HSTS (Strict-Transport-Security)",
+        "X-Content-Type-Options",
+        "Content-Security-Policy",
+        "Permissions-Policy"
+      ],
+      "present": [
+        "x-frame-options: SAMEORIGIN",
+        "referrer-policy: same-origin"
+      ],
+      "detail": "Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+      "files": [
+        {
+          "path": "/",
+          "url": "http://104.21.43.139",
+          "method": "GET",
+          "status": 403,
+          "matchedSignal": "Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+          "reproducible": true,
+          "preview": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy"
+        }
+      ],
+      "reproVerified": true,
+      "poeLevel": 3,
+      "evidenceQuotes": [
+        "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "x-frame-options: SAMEORIGIN",
+        "referrer-policy: same-origin"
+      ],
+      "fix": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "meta": {
+        "id": "security-headers",
+        "title": "HTTP Security Headers",
+        "category": "HTTP Headers",
+        "plainExplanation": "Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.",
+        "whyItMatters": "Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.",
+        "defaultFix": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "remediation": "Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.",
+        "cwe": "CWE-693",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/693.html",
+          "https://owasp.org/www-project-secure-headers/"
+        ]
+      },
+      "title": "HTTP Security Headers",
+      "category": "HTTP Headers",
+      "cwe": "CWE-693",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "cveIds": [],
+      "remediation": "Implement the missing security headers in your web server configuration (e.g., in Nginx 'add_header' or Apache 'Header set') to protect against XSS, clickjacking, and mime-type sniffing.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/693.html",
+        "https://owasp.org/www-project-secure-headers/"
+      ],
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://104.21.43.139/ -> HTTP 403 (HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy)",
+        "method": "GET",
+        "url": "http://104.21.43.139/",
+        "requestHeaders": {},
+        "reproducible": true,
+        "responseStatus": 403,
+        "observedSignal": "HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "curl": "curl -i -sS 'http://104.21.43.139/'",
+        "steps": [
+          "Send GET request to http://104.21.43.139/.",
+          "Observe the indicator (HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy) on HTTP 403.",
+          "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"security-headers\" to confirm status transitions to SAFE and the triggering indicator no longer appears.",
+        "matchedEvidence": [
+          {
+            "path": "/",
+            "url": "http://104.21.43.139/",
+            "method": "GET",
+            "status": 403,
+            "matchedSignal": "Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+            "preview": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy"
+          }
+        ],
+        "evidenceQuotes": [
+          "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+          "x-frame-options: SAMEORIGIN",
+          "referrer-policy: same-origin"
+        ],
+        "sourceIp": "104.21.43.139",
+        "resolvedIp": "104.21.43.139",
+        "dialedAddress": "104.21.43.139:80"
+      },
+      "compliance": {
+        "cwe": "CWE-693",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 75,
+      "proofArtifact": {
+        "certainty": 75,
+        "certaintyLabel": "Medium-High Confidence (75% Certainty)",
+        "isConfirmedProof": false,
+        "proofType": "http_response_receipt",
+        "extractedProof": "HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy",
+        "verificationCommand": "curl -i -sS 'http://104.21.43.139/'"
+      }
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "sensitive-files",
+      "name": "sensitive files",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "sensitive-files",
+        "title": "Sensitive Files & Configurations",
+        "category": "Secrets & Exposure",
+        "plainExplanation": "Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.",
+        "whyItMatters": "Leaked configuration and database dump files grant instant access to sensitive databases.",
+        "defaultFix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+        "cwe": "CWE-538",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/538.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "title": "Sensitive Files & Configurations",
+      "category": "Secrets & Exposure",
+      "cwe": "CWE-538",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Store backups, SQL dumps, and configuration files outside the web root directory.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/538.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-538",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "server-disclosure",
+      "name": "server version disclosure",
+      "status": "SAFE",
+      "severity": "NONE",
+      "meta": {
+        "id": "server-disclosure",
+        "title": "Server Software Disclosure",
+        "category": "Information Disclosure",
+        "plainExplanation": "Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).",
+        "whyItMatters": "Detailed version information allows attackers to look up specific CVE exploits for that exact version.",
+        "defaultFix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 3.1,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "title": "Server Software Disclosure",
+      "category": "Information Disclosure",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 3.1,
+      "cveIds": [],
+      "remediation": "Set ServerTokens Prod in Apache or server_tokens off in Nginx.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "ssl-tls",
+      "name": "ssl/tls check",
+      "status": "SUSPICIOUS",
+      "severity": "HIGH",
+      "detail": "Server not using HTTPS at all",
+      "fix": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "meta": {
+        "id": "ssl-tls",
+        "title": "SSL / TLS Certificate & Encryption",
+        "category": "Network & Transport",
+        "plainExplanation": "Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.",
+        "whyItMatters": "Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.",
+        "defaultFix": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "remediation": "Renew your SSL certificate, enable auto-renewal via Let's Encrypt, and disable obsolete TLS 1.0/1.1.",
+        "cwe": "CWE-295",
+        "owasp": "A02:2021-Cryptographic Failures",
+        "cvssScore": 7.5,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/295.html",
+          "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+        ]
+      },
+      "title": "SSL / TLS Certificate & Encryption",
+      "category": "Network & Transport",
+      "cwe": "CWE-295",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cvssScore": 7.5,
+      "cveIds": [],
+      "remediation": "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/295.html",
+        "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+      ],
+      "poeLevel": 1,
+      "verificationStatus": "unverified",
+      "trafficCount": 0,
+      "reproduction": {
+        "summary": "GET http://104.21.43.139/ (Server not using HTTPS at all)",
+        "method": "GET",
+        "url": "http://104.21.43.139/",
+        "requestHeaders": {},
+        "reproducible": false,
+        "observedSignal": "Server not using HTTPS at all",
+        "curl": "curl -i -sS 'http://104.21.43.139/'",
+        "steps": [
+          "Send GET request to http://104.21.43.139/.",
+          "Observe the indicator (Server not using HTTPS at all).",
+          "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+        ],
+        "verifyFix": "Apply the remediation, then replay GET http://104.21.43.139/ and re-run check \"ssl-tls\" to confirm status transitions to SAFE and the triggering indicator no longer appears."
+      },
+      "compliance": {
+        "cwe": "CWE-295",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 4.2.1 (Strong Cryptography & Valid TLS Certificates)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.24 (Use of Cryptography)",
+        "nist80053": "NIST SP 800-53 Rev.5 SC-8 & SC-17 (PKI Certificates)",
+        "soc2": "SOC 2 CC6.7 (Data in Transit Encryption)",
+        "hipaa": "HIPAA §164.312(e)(1) (Transmission Security)"
+      },
+      "certainty": 60,
+      "proofArtifact": {
+        "certainty": 60,
+        "certaintyLabel": "Tentative (60% Certainty)",
+        "isConfirmedProof": false,
+        "proofType": "http_response_receipt",
+        "extractedProof": "Server not using HTTPS at all",
+        "verificationCommand": "curl -i -sS 'http://104.21.43.139/'"
+      }
+    },
+    {
+      "target": "http://104.21.43.139",
+      "checkId": "system-health",
+      "name": "system-health",
+      "status": "SAFE",
+      "severity": "NONE",
+      "cwe": "CWE-200",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "cvssScore": 5.3,
+      "issues": [],
+      "evidenceQuotes": [],
+      "meta": {
+        "id": "system-health",
+        "title": "System & Operational Health Exposure",
+        "category": "Network & Transport",
+        "plainExplanation": "Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.",
+        "whyItMatters": "Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.",
+        "defaultFix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+        "cwe": "CWE-200",
+        "owasp": "A05:2021-Security Misconfiguration",
+        "cvssScore": 5.3,
+        "cveIds": [],
+        "references": [
+          "https://cwe.mitre.org/data/definitions/200.html",
+          "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+        ]
+      },
+      "fix": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "title": "System & Operational Health Exposure",
+      "category": "Network & Transport",
+      "cveIds": [],
+      "remediation": "Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/200.html",
+        "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+      ],
+      "poeLevel": 0,
+      "verificationStatus": "not_assessed",
+      "trafficCount": 0,
+      "compliance": {
+        "cwe": "CWE-200",
+        "owaspApi2023": "API8:2023-Security Misconfiguration",
+        "pciDss4": "PCI-DSS v4.0 Req 6.3.1 & 6.2.4 (Security Vulnerability Identification & Hardening)",
+        "iso27001": "ISO/IEC 27001:2022 A.8.8 & A.8.9 (Management of Technical Vulnerabilities & Configuration)",
+        "nist80053": "NIST SP 800-53 Rev.5 CM-6 & RA-5 (Configuration Settings & Vulnerability Monitoring)",
+        "soc2": "SOC 2 CC7.1 (System Configuration & Vulnerability Detection)",
+        "hipaa": "HIPAA §164.308(a)(1)(ii)(A) (Security Management & Risk Analysis)"
+      },
+      "certainty": 0
+    }
+  ]
+}

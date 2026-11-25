@@ -4,6 +4,7 @@ import {
   isRedirectedToDifferentPath,
   isFrameworkRouteErrorResponse,
   parseJsonObject,
+  extractVerbatimSnippet,
   confirmReproducible
 } from '../core/check-verify.js';
 
@@ -57,7 +58,7 @@ export default async function run(target, fetchWithRetry) {
       } catch { /* POST failed */ }
 
       if (rceConfirmed) {
-        const quote = `eval-stdin.php executed PHP probe returning ${EXPECTED}`;
+        const quote = extractVerbatimSnippet(postRes?.text || '', EXPECTED) || EXPECTED;
         return {
           name          : 'phpunit RCE (CVE-2017-9841)',
           status        : 'VULNERABLE',
@@ -102,15 +103,22 @@ export default async function run(target, fetchWithRetry) {
       } catch { /* canary 404/unreachable -> proceed */ }
 
       const finalRes = confirmGet || getRes;
-      const quote = `HTTP 200 non-HTML response on ${p}`;
+      const finalText = typeof finalRes?.text === 'string' ? finalRes.text : '';
+      const verbatimQuote =
+        finalText.trim().length >= 8
+          ? (extractVerbatimSnippet(finalText, /\S+/) || finalText.replace(/\s+/g, ' ').trim().slice(0, 120))
+          : null;
+      const quote = (verbatimQuote && verbatimQuote.length >= 8)
+        ? verbatimQuote
+        : `HTTP 200 non-HTML response on ${p}`;
       return {
         name          : 'phpunit RCE (CVE-2017-9841)',
-        status        : 'VULNERABLE',
+        status        : 'SUSPICIOUS',
         severity      : 'HIGH',
         path          : p,
         cve           : 'CVE-2017-9841',
         cveIds        : ['CVE-2017-9841'],
-        detail        : `eval-stdin.php at ${p} returned HTTP 200 consistently (likely exploitable — verify PHPUnit removal)`,
+        detail        : `eval-stdin.php at ${p} returned HTTP 200 consistently without PHP probe execution — verify PHPUnit removal`,
         files         : [{
           path         : p,
           url,

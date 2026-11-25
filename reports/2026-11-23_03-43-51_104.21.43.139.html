@@ -1,0 +1,3498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Security Scan Report · November 22, 2026 at 10:43 PM</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+    --border:#30363d;--text:#c9d1d9;--text2:#e6edf3;--muted:#6e7681;
+    --blue:#58a6ff;--risk:#d29922;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem}
+  .container{max-width:1200px;margin:0 auto}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:flex-start;
+          padding-bottom:1.5rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+  .header-left h1{font-size:1.3rem;font-weight:700;color:var(--text2)}
+  .header-left h1 .accent{color:var(--blue)}
+  .header-left .meta{font-size:0.78rem;color:var(--muted);margin-top:0.25rem}
+  .grade-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+              letter-spacing:0.05em;align-self:center}
+  .risk-pill{padding:0.35rem 1.1rem;border-radius:20px;font-weight:800;font-size:0.95rem;
+             background:#d2992222;color:#d29922;border:1px solid #d2992255;
+             align-self:center;letter-spacing:0.05em}
+
+  /* Stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:2rem}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+        padding:1.1rem 1rem;text-align:center}
+  .card .val{font-size:2rem;font-weight:800;line-height:1.1}
+  .card .lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;
+             letter-spacing:0.09em;margin-top:0.2rem}
+
+  /* Risk gauge */
+  .gauge-section{margin-bottom:2rem}
+  .section-title{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;
+                 color:var(--muted);font-weight:600;margin-bottom:0.8rem;
+                 padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+  .gauge-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
+  .gauge-fill{height:100%;width:18%;background:linear-gradient(90deg,#3fb950,#d29922,#e05f00,#ff4444);
+              border-radius:5px;transition:width .6s ease}
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+                margin-top:4px;padding:0 2px}
+
+  /* Target summary */
+  .targets-grid{display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:2rem}
+  .target-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+               padding:0.7rem 1rem}
+  .target-host{font-family:monospace;font-size:0.82rem;color:var(--blue);margin-bottom:0.3rem}
+  .target-stats{display:flex;gap:0.8rem;font-size:0.75rem;font-weight:600}
+
+  /* Table */
+  .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;background:var(--bg2)}
+  thead tr{background:var(--bg3)}
+  th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;
+     letter-spacing:0.08em;color:var(--muted);font-weight:600;white-space:nowrap}
+  td{padding:12px 14px;border-top:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:rgba(88,166,255,0.04)}
+  .check-title{font-weight:600;color:var(--text2);margin-bottom:4px;font-size:13px}
+  .check-badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cat-badge{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;
+             background:var(--bg3);color:var(--muted);border:1px solid var(--border);text-transform:uppercase;letter-spacing:0.04em}
+  .cve-badge{background:rgba(255,68,68,0.14);color:#ff7b72;border-color:rgba(255,68,68,0.4)}
+  .cvss-badge{background:rgba(88,166,255,0.14);color:var(--blue);border-color:rgba(88,166,255,0.4)}
+  .td-host code{font-size:11px}
+  .td-detail{font-size:11px;max-width:360px}
+  .td-muted{color:var(--muted)}
+  .meaning-box{margin-top:6px;font-size:11px;line-height:1.45;color:var(--text)}
+  .meaning-lbl{color:var(--blue);font-weight:700;display:inline-block;margin-right:4px}
+  .why-box{margin-top:5px;font-size:11px;line-height:1.45;color:var(--text)}
+  .why-lbl{color:#d29922;font-weight:700;display:inline-block;margin-right:4px}
+  .fix-box{margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;
+           border-left:3px solid var(--blue);font-size:11px;color:var(--text)}
+  .fix-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--blue);
+           font-weight:800;margin-bottom:3px}
+  .repro-box{margin-top:8px;padding:8px 12px;background:rgba(210,153,34,0.08);border-radius:6px;
+             border-left:3px solid #d29922;font-size:11px;color:var(--text)}
+  .repro-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:#d29922;
+             font-weight:800;margin-bottom:4px}
+  .repro-steps{margin:4px 0 6px 16px;padding:0;line-height:1.45}
+  .repro-cmd{margin:4px 0 0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);
+             border-radius:4px;overflow-x:auto;font-size:10px;white-space:pre-wrap;word-break:break-all}
+  .badge{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;
+         letter-spacing:0.06em;white-space:nowrap}
+  .muted{color:var(--muted)}
+
+  /* Footer */
+  .footer{margin-top:2.5rem;font-size:0.72rem;color:var(--muted);text-align:center;
+          padding-top:1.5rem;border-top:1px solid var(--border)}
+
+  @media print{
+    body{background:#fff;color:#000;padding:1rem}
+    .card,.target-card,.table-wrap{border-color:#ccc}
+    table,thead tr{background:#f6f8fa}
+    :root{--bg2:#f6f8fa;--bg3:#eaeef2;--text2:#24292f;--text:#57606a;--muted:#57606a;--border:#d0d7de;--blue:#0969da}
+    .fix-box{background:#fff;border:1px solid #ddd;border-left:3px solid #0969da}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🔍 Security Scan Report · <span class="accent">November 22, 2026 at 10:43 PM</span></h1>
+      <div class="meta">Security Scanner v2.2 · 74 checks executed</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="grade-pill" style="background:#d2992222;color:#d29922;border:1px solid #d2992255">
+        GRADE C
+      </div>
+      <div class="risk-pill">MEDIUM RISK</div>
+    </div>
+  </div>
+
+  
+  <div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid #d29922;border-radius:8px;padding:0.9rem 1.2rem;margin-bottom:1.8rem">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:700;margin-bottom:4px">Security Posture Assessment</div>
+    <div style="color:var(--text2);font-size:0.92rem;line-height:1.5">Moderate risk detected. Notable security gaps require remediation before production use.</div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="cards">
+    <div class="card"><div class="val" style="color:#d29922">C</div><div class="lbl">Security Grade</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">MEDIUM</div><div class="lbl">Risk Level</div></div>
+    <div class="card"><div class="val" style="color:var(--risk)">11<span style="font-size:1rem;font-weight:400;color:var(--muted)">/60</span></div><div class="lbl">Risk Score</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Vulnerable</div></div>
+    <div class="card"><div class="val" style="color:#d29922">2</div><div class="lbl">Suspicious</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">34</div><div class="lbl">Safe</div></div>
+    <div class="card"><div class="val" style="color:var(--muted)">27</div><div class="lbl">Errors</div></div>
+  </div>
+
+  <!-- Gauge -->
+  <div class="gauge-section">
+    <div class="section-title">Risk Score — 11 / 60</div>
+    <div class="gauge-track"><div class="gauge-fill"></div></div>
+    <div class="gauge-labels"><span>LOW</span><span>MEDIUM</span><span>HIGH</span><span>CRITICAL</span></div>
+  </div>
+
+  <!-- Target summary -->
+  <div class="section-title">Targets</div>
+  <div class="targets-grid">
+    <div class="target-card">
+      <div class="target-host">104.21.43.139</div>
+      <div class="target-stats">
+        <span style="color:#ff4444">0 vuln</span>
+        <span style="color:#d29922">2 susp</span>
+        <span style="color:#3fb950">34 safe</span>
+        <span style="color:#6e7681">27 err</span>
+      </div>
+    </div></div>
+
+  
+  <!-- Detected Technology Stack & Audit Strategy -->
+  <div class="section-title">🧠 Detected Technology Stack & Audit Strategy</div>
+  <div class="targets-grid">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div class="target-host">https://104.21.43.139</div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">
+        <strong>Stack:</strong> Unreachable or Unknown
+        
+      </div>
+      
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Ecosystem Tags:</span>
+        <span class="muted" style="font-size:11px">None detected</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Recommended Profile:</span>
+        <strong style="color:var(--blue)">smart</strong>
+      </div>
+      <div class="target-stats" style="margin-top:8px">
+        <span style="color:#3fb950">37 relevant checks executed</span>
+        <span style="color:var(--muted)">45 skipped</span>
+      </div>
+    </div>
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div class="target-host">http://104.21.43.139</div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">
+        <strong>Stack:</strong> Cloudflare
+        <span class="muted" style="font-size:11px">(7% confidence)</span>
+      </div>
+      
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Ecosystem Tags:</span>
+        <span class="cat-badge">cloudflare</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Recommended Profile:</span>
+        <strong style="color:var(--blue)">smart</strong>
+      </div>
+      <div class="target-stats" style="margin-top:8px">
+        <span style="color:#3fb950">37 relevant checks executed</span>
+        <span style="color:var(--muted)">45 skipped</span>
+      </div>
+    </div></div>
+
+  
+  <!-- API Communication Summary -->
+  <div class="section-title">🔌 API Communication &amp; Discovered Endpoints</div>
+  <div class="targets-grid" style="margin-bottom:1.8rem">
+    <div class="target-card" style="flex:1;min-width:280px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <strong style="color:var(--muted);font-size:12px">No Client-Side API Detected</strong>
+        <span class="cat-badge">traditional_web</span>
+      </div>
+      <div style="font-size:12px;margin:6px 0;color:var(--text2)">No client-side API communication detected (traditional_web)</div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">API Clients:</span>
+        <span class="muted" style="font-size:11px">None detected</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="muted">Protocols:</span>
+        <span class="muted" style="font-size:11px">None detected</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:6px">
+        <span class="muted">Same-Origin Routes (0):</span>
+        <span class="muted" style="font-size:11px">None discovered</span>
+      </div>
+      <div style="font-size:11px;margin-bottom:4px">
+        <span class="muted">External API Origins (0):</span>
+        <span class="muted" style="font-size:11px">None discovered</span>
+      </div>
+      
+      
+    </div>
+  </div>
+
+  
+  <!-- CVE Coverage Summary -->
+  <div class="section-title">🛡️ CVE Coverage Audit Summary (cloudflare)</div>
+  <div class="cards" style="margin-bottom:1.8rem">
+    <div class="card"><div class="val" style="color:var(--blue)">100%</div><div class="lbl">CVE Coverage</div></div>
+    <div class="card"><div class="val" style="color:var(--text2)">0</div><div class="lbl">Advisories</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Covered</div></div>
+    <div class="card"><div class="val" style="color:#d29922">0</div><div class="lbl">Partial</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0</div><div class="lbl">Missing</div></div>
+    <div class="card"><div class="val" style="color:#3fb950">0/0</div><div class="lbl">KEV Covered</div></div>
+  </div>
+
+  <!-- Findings table -->
+  <div class="section-title" style="margin-bottom:0.8rem">Findings (Grouped by Vulnerability)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Severity</th>
+          <th>Check</th>
+          <th>Affected Pages</th>
+          <th>Findings & Remediation</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#e05f00;color:#fff">HIGH</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Security Headers</div>
+        <div class="check-badges">
+          <code>security headers</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-693</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L3</span>
+          <span class="cat-badge ver-badge">unverified</span>
+          <span class="cat-badge" style="color:#3fb950;border-color:rgba(63,185,80,0.4)">Reproducible</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">/</div>
+        <div class="meaning-box" style="margin-top:6px">
+           <span class="meaning-lbl">Matched Files (1):</span>
+           <ul style="margin:4px 0 0 16px;padding:0">
+             <li><code>/</code> (HTTP 403) — Missing: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy · <code>HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy</code></li>
+           </ul>
+         </div>
+        <div class="why-box" style="margin-top:5px">
+           <span class="meaning-lbl">Evidence Proof:</span>
+           <code>HTTP 403 missing headers: HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy | x-frame-options: SAMEORIGIN | referrer-policy: same-origin</code>
+         </div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(63,185,80,0.2);color:#3fb950">Confirmed Reproducible</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy</code></div>
+          <ol class="repro-steps"><li>Send GET request to http://104.21.43.139/.</li><li>Observe the indicator (HTTP 403 — Confirmed on / (HTTP 403): missing 4 security header(s): HSTS (Strict-Transport-Security), X-Content-Type-Options, Content-Security-Policy, Permissions-Policy) on HTTP 403.</li><li>Apply the remediation, then replay GET http://104.21.43.139/ and re-run check &quot;security-headers&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement the missing security headers in your web server configuration (e.g., in Nginx &#39;add_header&#39; or Apache &#39;Header set&#39;) to protect against XSS, clickjacking, and mime-type sniffing.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(210,153,34,0.06)">
+      <td class="td-status"><span style="color:#d29922;font-weight:600">⚠️ SUSPICIOUS</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Clickjacking Protection</div>
+        <div class="check-badges">
+          <code>clickjacking protection</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-1021</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 4.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L3</span>
+          <span class="cat-badge ver-badge">unverified</span>
+          <span class="cat-badge" style="color:#3fb950;border-color:rgba(63,185,80,0.4)">Reproducible</span>
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">/</div>
+        
+        <div class="why-box" style="margin-top:5px">
+           <span class="meaning-lbl">Evidence Proof:</span>
+           <code>HTTP 403 on /: X-Frame-Options set but no CSP frame-ancestors — modern browsers may ignore XFO (XFO=sameorigin)</code>
+         </div>
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if your web pages can be embedded in an iframe on third-party websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(63,185,80,0.2);color:#3fb950">Confirmed Reproducible</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>HTTP 403 — X-Frame-Options set but no CSP frame-ancestors — modern browsers may ignore XFO</code></div>
+          <ol class="repro-steps"><li>Send GET request to http://104.21.43.139/.</li><li>Observe the indicator (HTTP 403 — X-Frame-Options set but no CSP frame-ancestors — modern browsers may ignore XFO) on HTTP 403.</li><li>Apply the remediation, then replay GET http://104.21.43.139/ and re-run check &quot;clickjacking&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;http://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Add &#39;X-Frame-Options: DENY&#39; (or SAMEORIGIN) and &#39;Content-Security-Policy: frame-ancestors none&#39; (or &#39;self&#39;) headers to prevent unauthorized embedding in iframes.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Client-Side API Communication &amp; Endpoint Discovery</div>
+        <div class="check-badges">
+          <code>api communication</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects Single Page Application (SPA) HTML, JavaScript bundles (Angular, React, Vue, Next.js), runtime configuration files (/assets/config.json, /config.json, /env.js), and CSP connect-src directives to map client-to-API communication, discover backend REST/GraphQL/WebSocket endpoints, and detect unauthenticated API data exposure or insecure API configurations.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Modern SPAs communicate directly with same-origin or external backend APIs via Angular HttpClient, Fetch, Axios, or GraphQL. Hardcoded development/localhost API URLs, plaintext HTTP API endpoints on HTTPS pages, exposed runtime config files, or unauthenticated JSON API endpoints can leak sensitive customer data, credentials, and internal service topology.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;api-communication&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use environment-specific production builds (e.g., Angular environment.prod.ts without dev proxy.conf.json localhost URLs), enforce HTTPS for all API origins, require authentication on sensitive REST/GraphQL endpoints, remove secrets from public /assets/config.json files, and restrict allowed API origins via Content-Security-Policy connect-src and strict CORS policies.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Clickjacking Protection</div>
+        <div class="check-badges">
+          <code>clickjacking protection</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-1021</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 4.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if your web pages can be embedded in an iframe on third-party websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers can trick users into clicking invisible buttons or submitting forms on your site while thinking they are on another site.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;clickjacking&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Add the &quot;X-Frame-Options: DENY&quot; or &quot;Content-Security-Policy: frame-ancestors &#39;none&#39;&quot; HTTP header.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Cookie Security Attributes</div>
+        <div class="check-badges">
+          <code>cookie security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-614</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;cookie-security&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Set &quot;Secure; HttpOnly; SameSite=Lax&quot; (or SameSite=Strict) on all session and sensitive cookies.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">CORS Configuration</div>
+        <div class="check-badges">
+          <code>cors misconfiguration</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-942</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/ with header(s) Origin: https://evil.attacker.example.com (probe: Header Origin: https://evil.attacker.example.com).</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;cors&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS -H &#39;Origin: https://evil.attacker.example.com&#39; &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Specify explicit trusted origins in the &quot;Access-Control-Allow-Origin&quot; header and avoid reflecting arbitrary origins with credentials.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Environment File Exposure (.env)</div>
+        <div class="check-badges">
+          <code>env file exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">All paths unreachable</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>.env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>All paths unreachable</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.env.staging.</li><li>Observe the indicator (All paths unreachable).</li><li>Apply the remediation, then replay GET https://104.21.43.139/.env.staging and re-run check &quot;env&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/.env.staging&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Block web server access to all dotfiles (e.g. location ~ /\. { deny all; }) and store sensitive configs outside web roots.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Rate Limiting &amp; Abuse Prevention</div>
+        <div class="check-badges">
+          <code>rate limiting</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-770</span>
+          <span class="cat-badge owasp-badge">A04:2021-Insecure Design</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">All burst requests failed</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>All burst requests failed</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (All burst requests failed).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;rate-limit&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Robots.txt &amp; Sitemap Disclosure</div>
+        <div class="check-badges">
+          <code>robots.txt disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/robots.txt.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/robots.txt and re-run check &quot;robots-sitemap&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/robots.txt&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Security Headers</div>
+        <div class="check-badges">
+          <code>security headers</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-693</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for critical defensive headers: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Missing security headers leaves users exposed to clickjacking, MIME sniffing, and cross-site scripting.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;security-headers&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure your web server to supply HSTS, CSP, X-Content-Type-Options: nosniff, and Referrer-Policy headers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#1f6feb;color:#fff">LOW</span></td>
+      <td class="td-name">
+        <div class="check-title">Server Software Disclosure</div>
+        <div class="check-badges">
+          <code>server version disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Detailed version information allows attackers to look up specific CVE exploits for that exact version.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;server-disclosure&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Set ServerTokens Prod in Apache or server_tokens off in Nginx.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">AI &amp; LLM Endpoint Exposure</div>
+        <div class="check-badges">
+          <code>ai &amp; llm exposure</code>
+          <span class="cat-badge">AI &amp; Machine Learning</span>
+          <span class="cat-badge cwe-badge">CWE-306</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target unreachable</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target unreachable</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/v1/models.</li><li>Observe the indicator (Target unreachable).</li><li>Apply the remediation, then replay GET https://104.21.43.139/v1/models and re-run check &quot;ai-llm-exposure&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/v1/models&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Git Repository Exposure (.git)</div>
+        <div class="check-badges">
+          <code>.git exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-527</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if the .git folder or .git/HEAD is publicly accessible on the web server.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.git/HEAD.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/.git/HEAD and re-run check &quot;git&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/.git/HEAD&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure your web server to strictly block access to the .git directory or exclude .git during deployment.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Dangerous HTTP Methods</div>
+        <div class="check-badges">
+          <code>http methods</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-749</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send OPTIONS request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay OPTIONS https://104.21.43.139/ and re-run check &quot;http-methods&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS -X OPTIONS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Open Redirect Vulnerability</div>
+        <div class="check-badges">
+          <code>open redirect</code>
+          <span class="cat-badge">Input Validation</span>
+          <span class="cat-badge cwe-badge">CWE-601</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 6.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/?redirect_to=https%3A%2F%2Fevil.attacker.example.com (probe: Query ?redirect_to=https%3A%2F%2Fevil.attacker.example.com).</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/?redirect_to=https%3A%2F%2Fevil.attacker.example.com and re-run check &quot;open-redirect&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/?redirect_to=https%3A%2F%2Fevil.attacker.example.com&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Validate target URLs against a strict whitelist of internal relative paths or approved domains.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive Files &amp; Configurations</div>
+        <div class="check-badges">
+          <code>sensitive files</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-538</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Leaked configuration and database dump files grant instant access to sensitive databases.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.git/config.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/.git/config and re-run check &quot;sensitive-files&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/.git/config&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Store backups, SQL dumps, and configuration files outside the web root directory.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Database Error Disclosure</div>
+        <div class="check-badges">
+          <code>sql error disclosure</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-209</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/?page=1%27 (probe: Query ?page=1%27).</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/?page=1%27 and re-run check &quot;sql-errors&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/?page=1%27&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable detailed database error output in production and use generic error messages.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Supply Chain &amp; Subresource Integrity (SRI)</div>
+        <div class="check-badges">
+          <code>supply chain &amp; sri</code>
+          <span class="cat-badge">Supply Chain Security</span>
+          <span class="cat-badge cwe-badge">CWE-829</span>
+          <span class="cat-badge owasp-badge">A08:2021-Software and Data Integrity Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target unreachable</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors&#39; browsers.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target unreachable</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Target unreachable).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;sri-supply-chain&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Include cryptographic integrity hashes (e.g., integrity=&quot;sha384-...&quot;) on all external script and link tags.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">SSL / TLS Certificate &amp; Encryption</div>
+        <div class="check-badges">
+          <code>ssl/tls check</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-295</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">TLS endpoint 104.21.43.139:443 rejected bare-IP handshake without SNI hostname (ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE); scan a domain hostname to inspect certificates and TLS versions.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies SSL certificate validity, expiration, hostname matching, and secure TLS protocol versions.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Expired or untrusted certificates cause browser warnings and leave traffic vulnerable to interception.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>TLS endpoint 104.21.43.139:443 rejected bare-IP handshake without SNI hostname (ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE); scan a domain hostname to inspect certificates and TLS versions.</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (TLS endpoint 104.21.43.139:443 rejected bare-IP handshake without SNI hostname (ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE); scan a domain hostname to inspect certificates and TLS versions.).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;ssl-tls&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>openssl s_client -connect &#39;104.21.43.139:443&#39; -servername &#39;104.21.43.139&#39; &lt;/dev/null</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Renew your SSL certificate, enable auto-renewal via Let&#39;s Encrypt, and disable obsolete TLS 1.0/1.1.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">System &amp; Operational Health Exposure</div>
+        <div class="check-badges">
+          <code>system-health</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;system-health&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">API BOLA / IDOR &amp; Mass Assignment Privilege Attribute Exposure</div>
+        <div class="check-badges">
+          <code>API BOLA / IDOR &amp; Mass Assignment Privilege Attribute Exposure</code>
+          <span class="cat-badge">API &amp; Authentication</span>
+          <span class="cat-badge cwe-badge">CWE-639</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects REST API object endpoints (/api/users/1) against a non-existent canary route to detect unauthenticated Broken Object Level Authorization (BOLA/IDOR) and checks whether privilege-escalation fields (role, isAdmin, is_superuser) are exposed.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Broken Object Level Authorization (OWASP API1:2023) allows attackers to read or modify other users’ records by enumerating IDs, while Mass Assignment allows binding privileged fields like role or isAdmin.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/api/users/99999991 with header(s) Accept: application/json (probe: Header Accept: application/json).</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/api/users/99999991 and re-run check &quot;bola-mass-assignment&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS -H &#39;Accept: application/json&#39; &#39;https://104.21.43.139/api/users/99999991&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enforce object-level ownership checks on every record lookup, use non-sequential UUIDs, and restrict request body deserialization to explicit allowlisted DTO fields (never bind role, isAdmin, or permissions from client input).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Web Cache Poisoning &amp; Unkeyed Header Reflection (X-Forwarded-Host / X-Original-URL)</div>
+        <div class="check-badges">
+          <code>Web Cache Poisoning &amp; Unkeyed Header Reflection (X-Forwarded-Host / X-Original-URL)</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-444</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.2</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Probes an isolated cache-busted URL (?secscan_cb=&lt;nonce&gt;) with unkeyed forwarding headers (X-Forwarded-Host, X-Host, X-Original-URL) and performs a clean follow-up request to verify whether the reflected header is stored in a shared HTTP cache.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a reverse proxy or CDN caches a response containing an unkeyed header value, an attacker can poison the shared cache and serve malicious scripts or redirects to all visitors.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/?secscan_cb=cb98412 with header(s) X-Forwarded-Host: secscan-cache-canary.invalid; X-Host: secscan-cache-canary.invalid (probe: Header X-Forwarded-Host: secscan-cache-canary.invalid).</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/?secscan_cb=cb98412 and re-run check &quot;cache-poisoning&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS -H &#39;X-Forwarded-Host: secscan-cache-canary.invalid&#39; -H &#39;X-Host: secscan-cache-canary.invalid&#39; &#39;https://104.21.43.139/?secscan_cb=cb98412&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Include X-Forwarded-Host / X-Forwarded-Scheme in the cache key (Vary header), or configure the web server and framework to ignore unauthenticated X-Forwarded-Host, X-Host, X-Original-URL, and X-Rewrite-URL headers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Response Splitting &amp; CRLF Header Injection</div>
+        <div class="check-badges">
+          <code>HTTP Response Splitting &amp; CRLF Header Injection</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-113</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Probes redirect and query parameters with URL-encoded CR/LF sequences (%0d%0aX-SecScan-Crlf: crlf9812injected) and verifies whether an actual X-SecScan-Crlf HTTP header is injected into the response headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When user input containing CR and LF characters is copied into an HTTP response header without newline stripping, attackers can inject arbitrary headers, set malicious cookies, or split the HTTP response body.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/?redirect=%2F%0d%0aX-SecScan-Crlf%3A%20crlf9812injected (probe: Query ?redirect=%2F%0d%0aX-SecScan-Crlf%3A%20crlf9812injected).</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/?redirect=%2F%0d%0aX-SecScan-Crlf%3A%20crlf9812injected and re-run check &quot;crlf-header-injection&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/?redirect=%2F%0d%0aX-SecScan-Crlf%3A%20crlf9812injected&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Strip or reject CR (\r, %0d) and LF (\n, %0a) characters before writing any user-derived value into HTTP response headers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">DOM-Based XSS Source-to-Sink &amp; Unsafe postMessage Listener Analysis</div>
+        <div class="check-badges">
+          <code>DOM-Based XSS Source-to-Sink &amp; Unsafe postMessage Listener Analysis</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-79</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects client-side JavaScript in HTML responses for direct untrusted DOM source-to-sink dataflows (location.hash / location.search flowing into innerHTML / document.write / eval) and window.addEventListener(&quot;message&quot;) handlers lacking event.origin validation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>DOM-based XSS executes entirely in the victim’s browser when client-side scripts pass attacker-controlled URL fragments or cross-window postMessage data directly into HTML/script execution sinks.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;dom-xss-sinks&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use textContent / innerText instead of innerHTML or document.write, sanitize dynamic HTML with DOMPurify, and always validate event.origin against an explicit allowlist inside window.addEventListener(&quot;message&quot;) handlers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP/1.1 &amp; HTTP/2 Request Smuggling / Desync Normalization Surface</div>
+        <div class="check-badges">
+          <code>HTTP/1.1 &amp; HTTP/2 Request Smuggling / Desync Normalization Surface</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-444</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Safely inspects reverse-proxy / origin HTTP framing behavior for ambiguous Transfer-Encoding obfuscation (TE.TE / CL.TE) and HTTP/2-to-HTTP/1.1 downgrade desynchronization indicators without poisoning shared connections.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When a front-end proxy and back-end server disagree on message boundaries, attackers can smuggle requests across user sessions.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;http-desync-smuggling&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure the front-end proxy and origin server to reject requests containing both Content-Length and Transfer-Encoding (RFC 9112 §6.3), reject malformed Transfer-Encoding values with HTTP 400/501, and use end-to-end HTTP/2 between proxy and upstream.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Direct Source-IP / Origin-IP HTTP Exposure &amp; CDN/WAF Bypass</div>
+        <div class="check-badges">
+          <code>Direct Source-IP / Origin-IP HTTP Exposure &amp; CDN/WAF Bypass</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Baseline request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies whether the target connects via a resolved or configured Source/Origin IP and checks if direct Source-IP HTTP/HTTPS requests bypass CDN/WAF edge protections or leak internal default virtual-host / origin server metadata.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When an origin server accepts direct HTTP/HTTPS connections on its Source IP outside the CDN/WAF IP allowlist, attackers can bypass edge WAF rules, rate limits, and bot protections by connecting directly to the Source IP.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Baseline request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Baseline request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;origin-source-ip&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Server-Side Request Forgery (SSRF) URL Parameter &amp; Backend Fetcher Surface</div>
+        <div class="check-badges">
+          <code>Server-Side Request Forgery (SSRF) URL Parameter &amp; Backend Fetcher Surface</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-918</span>
+          <span class="cat-badge owasp-badge">A10:2021-Server-Side Request Forgery</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests URL/webhook/callback query parameters (?url=, ?webhook=, ?uri=) with a non-routable RFC 2606 domain (http://secscan-ssrf-probe.invalid/) to detect whether the backend server attempts an outbound HTTP fetch and leaks HTTP client connection errors.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unvalidated server-side URL fetchers allow attackers to pivot into internal VPC networks, query cloud instance metadata services (169.254.169.254), and scan internal ports.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/?url=http%3A%2F%2Fsecscan-ssrf-probe.invalid%2F (probe: Query ?url=http%3A%2F%2Fsecscan-ssrf-probe.invalid%2F).</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/?url=http%3A%2F%2Fsecscan-ssrf-probe.invalid%2F and re-run check &quot;ssrf-surface&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/?url=http%3A%2F%2Fsecscan-ssrf-probe.invalid%2F&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Validate user-supplied URLs against a strict domain allowlist, resolve DNS once and connect directly to the validated IP (PinnedDialer), and block all RFC1918, loopback, link-local, and cloud metadata IP ranges.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Server-Side Template Injection (SSTI — Jinja2, Twig, Freemarker, EL, ERB, EJS)</div>
+        <div class="check-badges">
+          <code>Server-Side Template Injection (SSTI — Jinja2, Twig, Freemarker, EL, ERB, EJS)</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-1336</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests URL query parameters with non-destructive arithmetic template expressions across Jinja2/Twig/Pebble ({{7919*13}}), Freemarker/Spring EL/Thymeleaf (${7919*13}), and ERB/EJS (&lt;%= 7919*13 %&gt;), verifying that the server evaluates the expression to 102947 without reflecting the un-evaluated formula.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When user input is concatenated directly into a server-side template string before rendering, attackers can execute arbitrary template expressions and achieve remote code execution (RCE).</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send GET request to https://104.21.43.139/.</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay GET https://104.21.43.139/ and re-run check &quot;ssti-check&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Never pass user-supplied strings as template source code (e.g., avoid render_template_string(user_input) or Twig::createTemplate(user_input)). Always pass user data as named context variables into pre-compiled static templates.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:rgba(110,118,129,0.05)">
+      <td class="td-status"><span style="color:#6e7681;font-weight:600">❓ ERROR</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">XML External Entity (XXE) &amp; Unsafe XML/SOAP Entity Expansion</div>
+        <div class="check-badges">
+          <code>XML External Entity (XXE) &amp; Unsafe XML/SOAP Entity Expansion</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-611</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40
+</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Safely tests XML-accepting endpoints with a benign internal DTD entity declaration (&lt;!ENTITY secscanxxe &quot;secscan_xxe_eval_9412&quot;&gt;) to verify whether custom DOCTYPE entities are expanded or whether raw XML parser exceptions are disclosed.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>XML parsers that permit DOCTYPE declarations and entity resolution allow attackers to read arbitrary local files, probe internal networks via SSRF, or trigger denial-of-service.</span>
+        </div>
+        
+        <div class="repro-box">
+          <div class="repro-lbl">How to Reproduce &amp; Verify Fix · <span class="badge" style="background:rgba(210,153,34,0.2);color:#d29922">Recorded Trigger Trace</span></div>
+          <div style="font-size:11px;margin-bottom:4px"><strong>Observed:</strong> <code>Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40</code></div>
+          <ol class="repro-steps"><li>Send POST request to https://104.21.43.139/ with header(s) Content-Type: application/xml; Accept: application/xml, text/xml, application/json, text/plain (probe: &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt; &lt;!DOCTYPE secscan [&lt;!ENTITY secscanxxe &quot;secscan_xxe_eval_9412&quot;&gt;]&gt; &lt;request&gt;&lt;probe&gt;&amp;secscanxxe;&lt;/probe&gt;&lt;/request&gt;).</li><li>Observe the indicator (Target request failed: Fetch failed: write EPROTO 80310000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:openssl\ssl\record\rec_layer_s3.c:918:SSL alert number 40).</li><li>Apply the remediation, then replay POST https://104.21.43.139/ and re-run check &quot;xxe-injection&quot; to confirm status transitions to SAFE and the triggering indicator no longer appears.</li></ol>
+          <pre class="repro-cmd"><code>curl -i -sS -X POST -H &#39;Content-Type: application/xml&#39; -H &#39;Accept: application/xml, text/xml, application/json, text/plain&#39; --data-raw &#39;&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt; &lt;!DOCTYPE secscan [&lt;!ENTITY secscanxxe &quot;secscan_xxe_eval_9412&quot;&gt;]&gt; &lt;request&gt;&lt;probe&gt;&amp;secscanxxe;&lt;/probe&gt;&lt;/request&gt;&#39; &#39;https://104.21.43.139/&#39;</code></pre>
+        </div>
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable DOCTYPE declarations (disallow-doctype-decl = true) and external general/parameter entities in your XML parser (DocumentBuilderFactory, SAXParserFactory, libxml_disable_entity_loader, defusedxml).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Administrative Panels Exposure</div>
+        <div class="check-badges">
+          <code>admin panel exposure</code>
+          <span class="cat-badge">Access Control</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for publicly exposed administrative dashboards and login panels (e.g., /admin, /administrator, /cpanel).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed admin interfaces attract automated brute-force attacks and credential stuffing.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Restrict access by IP whitelist, VPN, or require multi-factor authentication (MFA).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive API Endpoints</div>
+        <div class="check-badges">
+          <code>api docs exposure</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Discovers exposed internal API endpoints, debug endpoints, and Swagger/OpenAPI documentation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly readable API endpoints can leak system architectures, internal schemas, and unprotected administrative actions.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enforce authentication and role-based access control on all internal endpoints and disable debug routes in production.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Smart TV, IP Camera, PC/Workstation &amp; Network Device Security Exposure</div>
+        <div class="check-badges">
+          <code>device-security</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target is a public host without device scan mode enabled; multi-port LAN device discovery skipped.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Performs non-intrusive discovery and security auditing across Smart TVs (Samsung Tizen, LG webOS, Roku ECP, Google TV / Android TV / Chromecast, Sony Bravia, Vizio SmartCast, Philips JointSpace, Apple AirPlay, DIAL), IP Cameras / NVRs (RTSP 554/8554, ONVIF SOAP, Hikvision ISAPI, Dahua, Axis, Xiongmai, UniFi Protect, unauthenticated snapshots), PCs / Workstations / Local Servers (Windows SMB/NetBIOS/MSRPC/RDP/WinRM/WSDAPI, macOS/Linux SSH/VNC/CUPS/NFS/AFP/rsync/mDNS, Docker TCP 2375, Ollama 11434, local dev servers, open shares), routers, printers, NAS, and IoT appliances.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Local network devices and workstations often expose unauthenticated REST/WebSocket control APIs, live RTSP/MJPEG camera feeds, cleartext admin UIs, unauthenticated Docker/Ollama/dev servers, or remote file-sharing and shell services (SMB 445, RDP 3389, WinRM 5985, ADB 5555, Telnet 23) that allow LAN attackers to hijack screens, view surveillance feeds, access files, or execute arbitrary commands.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Segment Smart TVs, IP cameras/NVRs, and IoT appliances onto isolated VLANs with client isolation enabled. Require authentication and HTTPS/TLS on camera and appliance admin interfaces, enforce RTSP Digest auth, disable unused UPnP/DLNA/ADB/Telnet services, bind local dev servers, Docker, and Ollama to 127.0.0.1, and restrict SMB/RDP/WinRM/SSH/VNC/NFS via host firewalls.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Directory Indexing / Listing</div>
+        <div class="check-badges">
+          <code>directory listing</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-548</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if web server directories without index files display automatic file listings.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Allows attackers to browse internal folder contents, discover forgotten backups, uploaded files, and source code.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable directory browsing in web server configuration (e.g., &quot;Options -Indexes&quot; in Apache, &quot;autoindex off&quot; in Nginx).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">GraphQL Introspection &amp; Security</div>
+        <div class="check-badges">
+          <code>graphql introspection</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if GraphQL schema introspection is enabled in production environments.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Introspection exposes your entire GraphQL schema, types, queries, and mutations to any unauthenticated caller.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable GraphQL schema introspection in production deployments.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP to HTTPS Redirection</div>
+        <div class="check-badges">
+          <code>https redirect</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-319</span>
+          <span class="cat-badge owasp-badge">A02:2021-Cryptographic Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that unencrypted HTTP connections are automatically redirected to secure HTTPS.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unencrypted HTTP traffic can be intercepted, read, or modified by attackers on public networks.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure a permanent (301) redirect from HTTP to HTTPS across all web server hosts.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">JSON Web Token (JWT) Security</div>
+        <div class="check-badges">
+          <code>jwt security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-347</span>
+          <span class="cat-badge owasp-badge">A07:2021-Identification and Authentication Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No JWT tokens found in probed endpoints</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Audits JWT implementations for &quot;none&quot; algorithm flaws, weak secret keys, and exposed token endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Vulnerable JWT implementations allow attackers to forge tokens and impersonate administrators.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use strong cryptographic algorithms (RS256 or high-entropy HS256) and strictly reject tokens with &quot;alg&quot;: &quot;none&quot;.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">SQL Injection (SQLi)</div>
+        <div class="check-badges">
+          <code>sql injection</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-89</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests input fields and parameters for SQL syntax manipulation and time-based delays.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>SQL injection allows attackers to bypass authentication, read, modify, or delete the entire database.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use parameterized queries / prepared statements for all database interactions; avoid string concatenation.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cross-Site Scripting (XSS)</div>
+        <div class="check-badges">
+          <code>reflected xss</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-79</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if user inputs in query parameters are reflected unsanitized in the HTML page body.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>XSS allows attackers to execute malicious JavaScript in victims&#39; browsers, stealing cookies and session tokens.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Sanitize and HTML-encode all user input before outputting it into web pages, and deploy a strong CSP.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">AI &amp; LLM Endpoint Exposure</div>
+        <div class="check-badges">
+          <code>ai &amp; llm exposure</code>
+          <span class="cat-badge">AI &amp; Machine Learning</span>
+          <span class="cat-badge cwe-badge">CWE-306</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for publicly exposed AI/LLM API routes (e.g., /api/chat, /api/generate, /v1/chat/completions) and vector DB endpoints.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unprotected AI endpoints invite costly token theft, denial-of-wallet attacks, and prompt injection exploits.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enforce strict authentication, user-level rate limiting, and input validation on all AI endpoints.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Client-Side API Communication &amp; Endpoint Discovery</div>
+        <div class="check-badges">
+          <code>api communication</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No client-side API communication detected (traditional_web)</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects Single Page Application (SPA) HTML, JavaScript bundles (Angular, React, Vue, Next.js), runtime configuration files (/assets/config.json, /config.json, /env.js), and CSP connect-src directives to map client-to-API communication, discover backend REST/GraphQL/WebSocket endpoints, and detect unauthenticated API data exposure or insecure API configurations.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Modern SPAs communicate directly with same-origin or external backend APIs via Angular HttpClient, Fetch, Axios, or GraphQL. Hardcoded development/localhost API URLs, plaintext HTTP API endpoints on HTTPS pages, exposed runtime config files, or unauthenticated JSON API endpoints can leak sensitive customer data, credentials, and internal service topology.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use environment-specific production builds (e.g., Angular environment.prod.ts without dev proxy.conf.json localhost URLs), enforce HTTPS for all API origins, require authentication on sensitive REST/GraphQL endpoints, remove secrets from public /assets/config.json files, and restrict allowed API origins via Content-Security-Policy connect-src and strict CORS policies.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Cookie Security Attributes</div>
+        <div class="check-badges">
+          <code>cookie security</code>
+          <span class="cat-badge">Authentication &amp; Session</span>
+          <span class="cat-badge cwe-badge">CWE-614</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No cookies set</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies that cookies have Secure, HttpOnly, and SameSite flags configured.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Cookies missing HttpOnly can be stolen via XSS, and cookies missing Secure can be intercepted over unencrypted networks.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Set &quot;Secure; HttpOnly; SameSite=Lax&quot; (or SameSite=Strict) on all session and sensitive cookies.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">CORS Configuration</div>
+        <div class="check-badges">
+          <code>cors misconfiguration</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-942</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks for overly permissive Cross-Origin Resource Sharing (CORS) policies like wildcard origins with credentials.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Permissive CORS allows malicious third-party websites to read sensitive user data from your API via cross-origin requests.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Specify explicit trusted origins in the &quot;Access-Control-Allow-Origin&quot; header and avoid reflecting arbitrary origins with credentials.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Environment File Exposure (.env)</div>
+        <div class="check-badges">
+          <code>env file exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 9.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if environment configuration files (.env, .env.backup, etc.) are downloadable from the web.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>.env files usually contain database passwords, API secrets, JWT keys, and payment gateway tokens.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Block web server access to all dotfiles (e.g. location ~ /\. { deny all; }) and store sensitive configs outside web roots.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Git Repository Exposure (.git)</div>
+        <div class="check-badges">
+          <code>.git exposure</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-527</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if the .git folder or .git/HEAD is publicly accessible on the web server.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Exposed Git folders allow attackers to download your entire source code repository, history, and embedded secrets.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure your web server to strictly block access to the .git directory or exclude .git during deployment.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Dangerous HTTP Methods</div>
+        <div class="check-badges">
+          <code>http methods</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-749</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether dangerous or unnecessary HTTP verbs (PUT, DELETE, TRACE, OPTIONS) are accepted.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>TRACE enables Cross-Site Tracing (XST) attacks; improperly configured PUT/DELETE allows unauthorized file modification.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable TRACE and restrict HTTP methods to only GET, POST, and HEAD for public web pages.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Open Redirect Vulnerability</div>
+        <div class="check-badges">
+          <code>open redirect</code>
+          <span class="cat-badge">Input Validation</span>
+          <span class="cat-badge cwe-badge">CWE-601</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 6.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if redirect parameters (e.g. ?url=, ?redirect=) accept arbitrary external websites.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers craft believable phishing links using your trusted domain that redirect victims to malicious sites.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Validate target URLs against a strict whitelist of internal relative paths or approved domains.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Rate Limiting &amp; Abuse Prevention</div>
+        <div class="check-badges">
+          <code>rate limiting</code>
+          <span class="cat-badge">API Security</span>
+          <span class="cat-badge cwe-badge">CWE-770</span>
+          <span class="cat-badge owasp-badge">A04:2021-Insecure Design</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests whether rapid bursts of requests trigger HTTP 429 Too Many Requests or rate-limit headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Endpoints without rate limiting are vulnerable to denial of service, credential stuffing, and scraping.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Implement rate limiting at the reverse proxy (e.g. Nginx limit_req) or application layer.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Robots.txt &amp; Sitemap Disclosure</div>
+        <div class="check-badges">
+          <code>robots.txt disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Analyzes robots.txt and sitemap.xml for disallow rules pointing to sensitive hidden directories.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Attackers read robots.txt to discover hidden admin panels, staging areas, and private endpoints.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Do not rely on robots.txt for security; enforce authentication on all sensitive endpoints.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Sensitive Files &amp; Configurations</div>
+        <div class="check-badges">
+          <code>sensitive files</code>
+          <span class="cat-badge">Secrets &amp; Exposure</span>
+          <span class="cat-badge cwe-badge">CWE-538</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed database dumps, configuration backups, credentials, and docker-compose files.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Leaked configuration and database dump files grant instant access to sensitive databases.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Store backups, SQL dumps, and configuration files outside the web root directory.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Server Software Disclosure</div>
+        <div class="check-badges">
+          <code>server version disclosure</code>
+          <span class="cat-badge">Information Disclosure</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 3.1</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks if Server header reveals software names and exact version numbers (e.g., Apache/2.4.41).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Detailed version information allows attackers to look up specific CVE exploits for that exact version.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Set ServerTokens Prod in Apache or server_tokens off in Nginx.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Database Error Disclosure</div>
+        <div class="check-badges">
+          <code>sql error disclosure</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-209</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests if query strings trigger verbose database error messages (MySQL, PostgreSQL, SQLite, MSSQL).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Database error messages reveal schema structures and confirm the presence of SQL injection vulnerabilities.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable detailed database error output in production and use generic error messages.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">Supply Chain &amp; Subresource Integrity (SRI)</div>
+        <div class="check-badges">
+          <code>supply chain &amp; sri</code>
+          <span class="cat-badge">Supply Chain Security</span>
+          <span class="cat-badge cwe-badge">CWE-829</span>
+          <span class="cat-badge owasp-badge">A08:2021-Software and Data Integrity Failures</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Checks whether external CDN scripts and stylesheets utilize Subresource Integrity (integrity and crossorigin attributes).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a third-party CDN is compromised, scripts without SRI hashes can inject malicious code directly into your visitors&#39; browsers.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Include cryptographic integrity hashes (e.g., integrity=&quot;sha384-...&quot;) on all external script and link tags.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e">NONE</span></td>
+      <td class="td-name">
+        <div class="check-title">System &amp; Operational Health Exposure</div>
+        <div class="check-badges">
+          <code>system-health</code>
+          <span class="cat-badge">Network &amp; Transport</span>
+          <span class="cat-badge cwe-badge">CWE-200</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 5.3</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Scans for exposed operational telemetry (/metrics, /prometheus, /server-status, /actuator/health), server 5xx errors, slow response latency, uncompressed payloads, and expiring TLS certificates.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Publicly accessible operational metrics, server status, and detailed component health dumps reveal internal architectures, infrastructure utilization, and sensitive service names to unauthorized actors.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Restrict operational and telemetry endpoints to authorized monitoring networks or require authentication. Enable gzip/brotli compression, resolve backend server errors, and renew SSL/TLS certificates before expiration.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Subdomain Takeover &amp; Dangling CNAME Cloud Resource Detection</div>
+        <div class="check-badges">
+          <code>Subdomain Takeover &amp; Dangling CNAME Cloud Resource Detection</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.2</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (2):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">https://104.21.43.139</code></li><li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Target is an IP literal; subdomain CNAME takeover does not apply.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects DNS CNAME chains and HTTP response signatures for dangling DNS records pointing to unclaimed third-party cloud platforms (GitHub Pages, AWS S3, Heroku, Fastly, Azure, Shopify, Vercel, Netlify, Pantheon, Zendesk, Surge.sh, Fly.io).</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>A dangling CNAME pointing to a deprovisioned external cloud service lets an attacker claim the resource name and serve arbitrary content or steal cookies under your domain.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Remove dangling CNAME, A, and AAAA DNS records before deprovisioning cloud buckets or PaaS applications, or immediately claim the target resource in your organization cloud account.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">API BOLA / IDOR &amp; Mass Assignment Privilege Attribute Exposure</div>
+        <div class="check-badges">
+          <code>API BOLA / IDOR &amp; Mass Assignment Privilege Attribute Exposure</code>
+          <span class="cat-badge">API &amp; Authentication</span>
+          <span class="cat-badge cwe-badge">CWE-639</span>
+          <span class="cat-badge owasp-badge">A01:2021-Broken Access Control</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No unauthenticated BOLA/IDOR object endpoint detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects REST API object endpoints (/api/users/1) against a non-existent canary route to detect unauthenticated Broken Object Level Authorization (BOLA/IDOR) and checks whether privilege-escalation fields (role, isAdmin, is_superuser) are exposed.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Broken Object Level Authorization (OWASP API1:2023) allows attackers to read or modify other users’ records by enumerating IDs, while Mass Assignment allows binding privileged fields like role or isAdmin.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Enforce object-level ownership checks on every record lookup, use non-sequential UUIDs, and restrict request body deserialization to explicit allowlisted DTO fields (never bind role, isAdmin, or permissions from client input).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Web Cache Poisoning &amp; Unkeyed Header Reflection (X-Forwarded-Host / X-Original-URL)</div>
+        <div class="check-badges">
+          <code>Web Cache Poisoning &amp; Unkeyed Header Reflection (X-Forwarded-Host / X-Original-URL)</code>
+          <span class="cat-badge">HTTP Headers</span>
+          <span class="cat-badge cwe-badge">CWE-444</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.2</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No unkeyed X-Forwarded-Host / X-Host reflection detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Probes an isolated cache-busted URL (?secscan_cb=&lt;nonce&gt;) with unkeyed forwarding headers (X-Forwarded-Host, X-Host, X-Original-URL) and performs a clean follow-up request to verify whether the reflected header is stored in a shared HTTP cache.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>If a reverse proxy or CDN caches a response containing an unkeyed header value, an attacker can poison the shared cache and serve malicious scripts or redirects to all visitors.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Include X-Forwarded-Host / X-Forwarded-Scheme in the cache key (Vary header), or configure the web server and framework to ignore unauthenticated X-Forwarded-Host, X-Host, X-Original-URL, and X-Rewrite-URL headers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP Response Splitting &amp; CRLF Header Injection</div>
+        <div class="check-badges">
+          <code>HTTP Response Splitting &amp; CRLF Header Injection</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-113</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No CRLF response header injection detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Probes redirect and query parameters with URL-encoded CR/LF sequences (%0d%0aX-SecScan-Crlf: crlf9812injected) and verifies whether an actual X-SecScan-Crlf HTTP header is injected into the response headers.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When user input containing CR and LF characters is copied into an HTTP response header without newline stripping, attackers can inject arbitrary headers, set malicious cookies, or split the HTTP response body.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Strip or reject CR (\r, %0d) and LF (\n, %0a) characters before writing any user-derived value into HTTP response headers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">DOM-Based XSS Source-to-Sink &amp; Unsafe postMessage Listener Analysis</div>
+        <div class="check-badges">
+          <code>DOM-Based XSS Source-to-Sink &amp; Unsafe postMessage Listener Analysis</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-79</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No client-side DOM sink patterns found.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Inspects client-side JavaScript in HTML responses for direct untrusted DOM source-to-sink dataflows (location.hash / location.search flowing into innerHTML / document.write / eval) and window.addEventListener(&quot;message&quot;) handlers lacking event.origin validation.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>DOM-based XSS executes entirely in the victim’s browser when client-side scripts pass attacker-controlled URL fragments or cross-window postMessage data directly into HTML/script execution sinks.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Use textContent / innerText instead of innerHTML or document.write, sanitize dynamic HTML with DOMPurify, and always validate event.origin against an explicit allowlist inside window.addEventListener(&quot;message&quot;) handlers.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">HTTP/1.1 &amp; HTTP/2 Request Smuggling / Desync Normalization Surface</div>
+        <div class="check-badges">
+          <code>HTTP/1.1 &amp; HTTP/2 Request Smuggling / Desync Normalization Surface</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-444</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No HTTP/1.1 or HTTP/2 request smuggling / desync mismatch detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Safely inspects reverse-proxy / origin HTTP framing behavior for ambiguous Transfer-Encoding obfuscation (TE.TE / CL.TE) and HTTP/2-to-HTTP/1.1 downgrade desynchronization indicators without poisoning shared connections.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When a front-end proxy and back-end server disagree on message boundaries, attackers can smuggle requests across user sessions.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Configure the front-end proxy and origin server to reject requests containing both Content-Length and Transfer-Encoding (RFC 9112 §6.3), reject malformed Transfer-Encoding values with HTTP 400/501, and use end-to-end HTTP/2 between proxy and upstream.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Direct Source-IP / Origin-IP HTTP Exposure &amp; CDN/WAF Bypass</div>
+        <div class="check-badges">
+          <code>Direct Source-IP / Origin-IP HTTP Exposure &amp; CDN/WAF Bypass</code>
+          <span class="cat-badge">Infrastructure &amp; Network</span>
+          <span class="cat-badge cwe-badge">CWE-284</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 7.5</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">Direct IP 104.21.43.139 is a Cloudflare CDN/WAF edge endpoint (HTTP 403 — direct IP access blocked by edge); origin server is masked.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Verifies whether the target connects via a resolved or configured Source/Origin IP and checks if direct Source-IP HTTP/HTTPS requests bypass CDN/WAF edge protections or leak internal default virtual-host / origin server metadata.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When an origin server accepts direct HTTP/HTTPS connections on its Source IP outside the CDN/WAF IP allowlist, attackers can bypass edge WAF rules, rate limits, and bot protections by connecting directly to the Source IP.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Restrict origin firewall / security-group ingress on ports 80 and 443 to trusted CDN/WAF IP ranges only, configure a strict default-deny catch-all virtual host that rejects unknown Host headers or direct-IP TLS handshakes (nginx ssl_reject_handshake on; return 444;), and enforce Authenticated Origin Pulls (mTLS).
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Server-Side Request Forgery (SSRF) URL Parameter &amp; Backend Fetcher Surface</div>
+        <div class="check-badges">
+          <code>Server-Side Request Forgery (SSRF) URL Parameter &amp; Backend Fetcher Surface</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-918</span>
+          <span class="cat-badge owasp-badge">A10:2021-Server-Side Request Forgery</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No SSRF backend URL-fetcher surface detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests URL/webhook/callback query parameters (?url=, ?webhook=, ?uri=) with a non-routable RFC 2606 domain (http://secscan-ssrf-probe.invalid/) to detect whether the backend server attempts an outbound HTTP fetch and leaks HTTP client connection errors.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>Unvalidated server-side URL fetchers allow attackers to pivot into internal VPC networks, query cloud instance metadata services (169.254.169.254), and scan internal ports.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Validate user-supplied URLs against a strict domain allowlist, resolve DNS once and connect directly to the validated IP (PinnedDialer), and block all RFC1918, loopback, link-local, and cloud metadata IP ranges.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">Server-Side Template Injection (SSTI — Jinja2, Twig, Freemarker, EL, ERB, EJS)</div>
+        <div class="check-badges">
+          <code>Server-Side Template Injection (SSTI — Jinja2, Twig, Freemarker, EL, ERB, EJS)</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-1336</span>
+          <span class="cat-badge owasp-badge">A03:2021-Injection</span>
+          <span class="cat-badge cvss-badge">CVSS 9.8</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No Server-Side Template Injection (SSTI) arithmetic evaluation detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Tests URL query parameters with non-destructive arithmetic template expressions across Jinja2/Twig/Pebble ({{7919*13}}), Freemarker/Spring EL/Thymeleaf (${7919*13}), and ERB/EJS (&lt;%= 7919*13 %&gt;), verifying that the server evaluates the expression to 102947 without reflecting the un-evaluated formula.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>When user input is concatenated directly into a server-side template string before rendering, attackers can execute arbitrary template expressions and achieve remote code execution (RCE).</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Never pass user-supplied strings as template source code (e.g., avoid render_template_string(user_input) or Twig::createTemplate(user_input)). Always pass user data as named context variables into pre-compiled static templates.
+        </div>
+      </td>
+    </tr>
+    <tr style="background:">
+      <td class="td-status"><span style="color:#3fb950;font-weight:600">✅ SAFE</span></td>
+      <td class="td-sev"><span class="badge" style="background:#30363d;color:#8b949e"></span></td>
+      <td class="td-name">
+        <div class="check-title">XML External Entity (XXE) &amp; Unsafe XML/SOAP Entity Expansion</div>
+        <div class="check-badges">
+          <code>XML External Entity (XXE) &amp; Unsafe XML/SOAP Entity Expansion</code>
+          <span class="cat-badge">Injection &amp; Input</span>
+          <span class="cat-badge cwe-badge">CWE-611</span>
+          <span class="cat-badge owasp-badge">A05:2021-Security Misconfiguration</span>
+          <span class="cat-badge cvss-badge">CVSS 8.6</span>
+          
+          <span class="cat-badge poe-badge">PoE L0</span>
+          <span class="cat-badge ver-badge">not_assessed</span>
+          
+        </div>
+      </td>
+      <td class="td-host">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">
+      Pages (1):
+    </div>
+    <ul style="margin:0 0 0 16px;padding:0;list-style:disc">
+      <li style="margin:2px 0;word-break:break-all"><code class="muted">http://104.21.43.139</code></li>
+    </ul>
+    
+  </td>
+      <td class="td-detail">
+        <div class="td-muted" style="margin-bottom:6px">No XML entity expansion or unsafe XML parser exposure detected.</div>
+        
+        
+        
+        <div class="meaning-box">
+          <span class="meaning-lbl">What this means:</span>
+          <span>Safely tests XML-accepting endpoints with a benign internal DTD entity declaration (&lt;!ENTITY secscanxxe &quot;secscan_xxe_eval_9412&quot;&gt;) to verify whether custom DOCTYPE entities are expanded or whether raw XML parser exceptions are disclosed.</span>
+        </div>
+        
+        <div class="why-box">
+          <span class="why-lbl">Why it matters:</span>
+          <span>XML parsers that permit DOCTYPE declarations and entity resolution allow attackers to read arbitrary local files, probe internal networks via SSRF, or trigger denial-of-service.</span>
+        </div>
+        
+        
+        <div class="fix-box">
+          <div class="fix-lbl">Recommendation</div>
+          Disable DOCTYPE declarations (disallow-doctype-decl = true) and external general/parameter entities in your XML parser (DocumentBuilderFactory, SAXParserFactory, libxml_disable_entity_loader, defusedxml).
+        </div>
+      </td>
+    </tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">Security Scanner v2.2 · Generated November 22, 2026 at 10:43 PM</div>
+</div>
+</body>
+</html>

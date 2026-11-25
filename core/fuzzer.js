@@ -19,6 +19,16 @@ function isGovernanceBlockError(err) {
   );
 }
 
+const SQL_ERRORS = [
+  'sql syntax',
+  'mysql_fetch',
+  'ora-00933',
+  'postgresql query failed',
+  'sqlite3::exception',
+  'dynamic sql generation',
+  'unclosed quotation mark'
+];
+
 function getHeader(headers, name) {
   if (!headers || typeof headers !== 'object') return '';
   const targetLower = String(name).toLowerCase();
@@ -106,6 +116,9 @@ export class Fuzzer {
       }
     }
 
+    let sqliErrorBaselineFetched = false;
+    let sqliErrorBaselineRes = null;
+
     for (const param of params) {
       const testUrl = new URL(url.href);
       testUrl.searchParams.set(param, payload);
@@ -125,13 +138,61 @@ export class Fuzzer {
         const duration = Math.max(0, Date.now() - startTime);
 
         if (this.isVulnerable(res, payload, signatureType, duration, { baselineMs, delayThresholdMs })) {
-          findings.push({
-            parameter: param,
-            payload,
-            type: signatureType,
-            url: testUrl.href,
-            ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {})
-          });
+          let isBaselineFalsePositive = false;
+          if (
+            signatureType === 'SQLI_ERROR' &&
+            Number(res?.status ?? 200) === 200 &&
+            testUrl.href !== url.href
+          ) {
+            if (!sqliErrorBaselineFetched) {
+              sqliErrorBaselineFetched = true;
+              try {
+                const bRes = await this.fetch(url.href);
+                if (bRes?.isGovernanceBlock) {
+                  const gErr = new Error(bRes.reason || bRes.error || 'Blocked by governance policy');
+                  gErr.isGovernanceBlock = true;
+                  governanceError = gErr;
+                  lastError = gErr;
+                  break;
+                }
+                sqliErrorBaselineRes = bRes;
+              } catch (bErr) {
+                if (isGovernanceBlockError(bErr)) {
+                  governanceError = bErr;
+                  lastError = bErr;
+                  break;
+                }
+              }
+            }
+
+            if (
+              sqliErrorBaselineRes &&
+              Number(sqliErrorBaselineRes.status ?? 200) === 200 &&
+              typeof sqliErrorBaselineRes.text === 'string' &&
+              typeof res.text === 'string'
+            ) {
+              if (sqliErrorBaselineRes.text === res.text) {
+                isBaselineFalsePositive = true;
+              } else {
+                const lowProbe = res.text.toLowerCase();
+                const lowBase = sqliErrorBaselineRes.text.toLowerCase();
+                const matchedInProbe = SQL_ERRORS.filter(sig => lowProbe.includes(sig));
+                if (matchedInProbe.length > 0 && matchedInProbe.every(sig => lowBase.includes(sig))) {
+                  isBaselineFalsePositive = true;
+                }
+              }
+            }
+          }
+
+          if (!isBaselineFalsePositive) {
+            findings.push({
+              parameter: param,
+              payload,
+              type: signatureType,
+              url: testUrl.href,
+              ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {})
+            });
+          }
         }
       } catch (err) {
         lastError = err;
@@ -177,12 +238,8 @@ export class Fuzzer {
       }
 
       case 'SQLI_ERROR': {
-        const sqlErrors = [
-          'sql syntax', 'mysql_fetch', 'ora-00933', 'postgresql query failed',
-          'sqlite3::exception', 'dynamic sql generation', 'unclosed quotation mark'
-        ];
         const lowBody = body.toLowerCase();
-        return sqlErrors.some(err => lowBody.includes(err));
+        return SQL_ERRORS.some(err => lowBody.includes(err));
       }
 
       case 'SQLI_TIME': {

@@ -1,4 +1,5 @@
 import { URL } from 'node:url';
+import net from 'node:net';
 
 const SENSITIVE_HEADER_RE = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-auth-token|x-access-token|x-csrf-token)$/i;
 const DEFAULT_NOISE_HEADERS = new Set(['user-agent', 'accept-encoding', 'connection', 'host', 'content-length']);
@@ -7,6 +8,7 @@ const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/g;
 const MAX_TRACES_PER_CHECK = 200;
 const MAX_SNIPPET_LEN = 240;
 const MAX_BODY_PREVIEW = 512;
+const NON_HTTP_PROTOCOLS = new Set(['rtsp:', 'rtsps:', 'tcp:', 'udp:', 'ssh:', 'rdp:', 'smb:', 'vnc:', 'telnet:', 'ftp:', 'mqtt:']);
 
 function stripControlChars(value) {
   return String(value ?? '').replace(CONTROL_CHAR_RE, ' ').trim();
@@ -26,6 +28,59 @@ function normalizeHttpUrl(rawUrl) {
     return parsed.href;
   } catch {
     return null;
+  }
+}
+
+function normalizeNonHttpUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const cleaned = stripControlChars(rawUrl);
+  if (!cleaned) return null;
+  try {
+    const parsed = new URL(cleaned);
+    if (!NON_HTTP_PROTOCOLS.has(parsed.protocol)) return null;
+    if (!parsed.hostname) return null;
+    if (parsed.username || parsed.password) {
+      parsed.username = '';
+      parsed.password = '';
+    }
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function isValidShellHost(rawHost) {
+  if (typeof rawHost !== 'string') return false;
+  const cleaned = stripControlChars(rawHost).replace(/^\[|\]$/g, '').trim();
+  if (!cleaned || cleaned.length > 253) return false;
+  if (net.isIP(cleaned) !== 0) return true;
+  return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(cleaned);
+}
+
+function parseValidPort(rawPort) {
+  if (rawPort === undefined || rawPort === null || typeof rawPort === 'boolean') return null;
+  if (typeof rawPort === 'string' && !/^\s*\d+\s*$/.test(rawPort)) return null;
+  const n = Number(rawPort);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
+}
+
+function parsedUrlHostname(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    const u = new URL(stripControlChars(rawUrl));
+    return String(u.hostname || '').replace(/^\[|\]$/g, '');
+  } catch {
+    return '';
+  }
+}
+
+function parsedUrlPort(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    const u = new URL(stripControlChars(rawUrl));
+    return u.port || '';
+  } catch {
+    return '';
   }
 }
 
@@ -115,7 +170,10 @@ export function buildCurlCommand({
   body = null,
   http2 = false,
   http3 = false,
-  tlsv13 = false
+  tlsv13 = false,
+  sourceIp = null,
+  resolvedIp = null,
+  includeResolveFlag = false
 } = {}) {
   const safeUrl = normalizeHttpUrl(url);
   if (!safeUrl) return null;
@@ -130,6 +188,23 @@ export function buildCurlCommand({
   if (tlsv13 && safeUrl.startsWith('https://')) {
     parts.push('--tlsv1.3');
   }
+
+  const effectivePinIp = stripControlChars(sourceIp || (includeResolveFlag ? resolvedIp : '') || '')
+    .replace(/^\[|\]$/g, '');
+  if (effectivePinIp && /^[0-9a-fA-F:.]+$/.test(effectivePinIp)) {
+    try {
+      const parsed = new URL(safeUrl);
+      const cleanHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+      const isLiteralIpHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(cleanHost) || cleanHost.includes(':');
+      if (cleanHost && !isLiteralIpHost) {
+        const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+        parts.push('--resolve', shellQuoteSingle(`${cleanHost}:${port}:${effectivePinIp}`));
+      }
+    } catch {
+      // ignore invalid URL parse
+    }
+  }
+
   if (cleanMethod !== 'GET') {
     parts.push('-X', cleanMethod);
   }
@@ -228,16 +303,17 @@ function inferPayloadHint(finding, trace, url) {
 export function createTrackedFetch(baseFetch) {
   const traces = [];
 
-  const trackedFetch = async function trackedFetch(url, opts = {}) {
-    const reqMethod = String(opts?.method || 'GET').toUpperCase();
-    const reqHeaders = sanitizeHeadersForRepro(opts?.headers);
-    const bodyPreview = (opts?.body !== undefined && opts?.body !== null)
-      ? stripControlChars(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)).slice(0, MAX_BODY_PREVIEW)
+  const trackedFetch = async function trackedFetch(url, opts = {}, ...rest) {
+    const safeOpts = opts && typeof opts === 'object' ? opts : {};
+    const reqMethod = String(safeOpts.method || 'GET').toUpperCase();
+    const reqHeaders = sanitizeHeadersForRepro(safeOpts.headers);
+    const bodyPreview = (safeOpts.body !== undefined && safeOpts.body !== null)
+      ? stripControlChars(typeof safeOpts.body === 'string' ? safeOpts.body : JSON.stringify(safeOpts.body)).slice(0, MAX_BODY_PREVIEW)
       : null;
 
     let res;
     try {
-      res = await baseFetch(url, opts);
+      res = await baseFetch(url, opts, ...rest);
     } catch (err) {
       if (traces.length < MAX_TRACES_PER_CHECK) {
         traces.push({
@@ -267,14 +343,29 @@ export function createTrackedFetch(baseFetch) {
         bodyPreview,
         status: Number.isFinite(Number(res?.status)) ? Number(res.status) : null,
         responseSnippet: stripControlChars(text).slice(0, MAX_SNIPPET_LEN),
-        trafficId: res?.trafficId || null
+        trafficId: res?.trafficId || null,
+        ...(res?.resolvedIp ? { resolvedIp: stripControlChars(res.resolvedIp) } : {}),
+        ...(res?.sourceIp ? { sourceIp: stripControlChars(res.sourceIp) } : {}),
+        ...(res?.dialedAddress ? { dialedAddress: stripControlChars(res.dialedAddress) } : {})
       });
     }
 
     return res;
   };
 
-  for (const prop of ['governance', 'tlsAlpnProbe', 'governor', 'trafficStore']) {
+  for (const prop of [
+    'governance',
+    'tlsAlpnProbe',
+    'governor',
+    'guard',
+    'trafficStore',
+    'targetPinStore',
+    'resolveCache',
+    'sourceIp',
+    'sourceIpMap',
+    'hasCustomFetcher',
+    'isDefaultFetch'
+  ]) {
     if (baseFetch && baseFetch[prop] !== undefined) {
       trackedFetch[prop] = baseFetch[prop];
     }
@@ -301,18 +392,17 @@ export function selectTriggerTrace(traces = [], finding = {}) {
 
   const preferredTargets = [];
   const baseForResolve = finding?.target || (Array.isArray(finding?.pages) ? finding.pages[0] : '') || '';
-  if (finding?.url) {
-    const explicitUrl = normalizeHttpUrl(finding.url);
-    if (explicitUrl && explicitUrl !== normalizeHttpUrl(baseForResolve)) {
-      preferredTargets.push(explicitUrl);
-    }
+  const explicitFindingUrl = finding?.url ? normalizeHttpUrl(finding.url) : null;
+  if (explicitFindingUrl && explicitFindingUrl !== normalizeHttpUrl(baseForResolve)) {
+    preferredTargets.push(explicitFindingUrl);
   }
+  const baseForPathResolve = explicitFindingUrl || baseForResolve;
   if (finding?.evidence?.requestUrl) preferredTargets.push(String(finding.evidence.requestUrl));
   for (const listKey of ['files', 'findings', 'panels']) {
     if (Array.isArray(finding?.[listKey])) {
       for (const item of finding[listKey]) {
         const itemPath = item?.path || item?.endpoint;
-        const itemTarget = item?.url || (baseForResolve && itemPath ? resolveEndpointUrl(baseForResolve, itemPath) : null);
+        const itemTarget = item?.url || (baseForPathResolve && itemPath ? resolveEndpointUrl(baseForPathResolve, itemPath) : null);
         if (itemTarget) preferredTargets.push(itemTarget);
       }
     }
@@ -321,36 +411,69 @@ export function selectTriggerTrace(traces = [], finding = {}) {
     for (const iss of finding.issues) {
       if (iss && typeof iss === 'object') {
         const issPath = iss.path || iss.endpoint;
-        const issTarget = iss.url || (baseForResolve && issPath ? resolveEndpointUrl(baseForResolve, issPath) : null);
+        const issTarget = iss.url || (baseForPathResolve && issPath ? resolveEndpointUrl(baseForPathResolve, issPath) : null);
         if (issTarget) preferredTargets.push(issTarget);
       }
     }
   }
-  if (Array.isArray(finding?.paths) && baseForResolve) {
+  if (Array.isArray(finding?.paths) && baseForPathResolve) {
     for (const p of finding.paths) {
       if (typeof p === 'string' && p) {
-        const resolved = resolveEndpointUrl(baseForResolve, p);
+        const resolved = resolveEndpointUrl(baseForPathResolve, p);
         if (resolved) preferredTargets.push(resolved);
       }
     }
   }
-  if (finding?.path && baseForResolve) {
-    const resolved = resolveEndpointUrl(baseForResolve, finding.path);
+  if (finding?.path && baseForPathResolve) {
+    const resolved = resolveEndpointUrl(baseForPathResolve, finding.path);
     if (resolved) preferredTargets.push(resolved);
   }
 
+  const checkId = String(finding?.checkId || finding?.meta?.id || finding?.name || '').toLowerCase();
+  const subItems = [
+    ...(Array.isArray(finding?.files) ? finding.files : []),
+    ...(Array.isArray(finding?.findings) ? finding.findings : []),
+    ...(Array.isArray(finding?.issues) ? finding.issues : [])
+  ].filter(item => item && typeof item === 'object');
+  const hasAny404SubItem = subItems.some(item => Number(item.status) === 404);
+  const findingExpects404 =
+    Number(finding?.observedStatus) === 404 ||
+    (checkId === 'device-security' && hasAny404SubItem);
+
+  const preferredOrigins = new Set();
   for (const pref of preferredTargets) {
-    const exact = traces.find(t => t.url === pref && t.status !== 404);
-    if (exact) return exact;
+    let prefParsed = null;
     try {
-      const prefParsed = new URL(pref);
+      prefParsed = new URL(pref);
+      preferredOrigins.add(prefParsed.origin);
+    } catch {
+      prefParsed = null;
+    }
+
+    const prefSubItem = subItems.find(
+      item =>
+        (item.url && item.url === pref) ||
+        (item.path && pref.endsWith(String(item.path)))
+    );
+    const allow404ForPref =
+      Number(finding?.observedStatus) === 404 ||
+      Number(prefSubItem?.status) === 404 ||
+      (checkId === 'device-security' && hasAny404SubItem);
+
+    const findMatchingTrace = (allow404) => {
+      const statusOk = (t) => allow404 || t.status !== 404;
+      const exact = traces.find(t => t.url === pref && statusOk(t));
+      if (exact) return exact;
+      if (!prefParsed) return null;
+
+      const prefOrigin = prefParsed.origin;
       const prefPath = prefParsed.pathname;
       const prefSearch = prefParsed.search;
       if (prefSearch) {
         const byPathAndSearch = traces.find(t => {
           try {
             const tu = new URL(t.url);
-            return tu.pathname === prefPath && tu.search === prefSearch && t.status !== 404;
+            return tu.origin === prefOrigin && tu.pathname === prefPath && tu.search === prefSearch && statusOk(t);
           } catch {
             return false;
           }
@@ -359,16 +482,29 @@ export function selectTriggerTrace(traces = [], finding = {}) {
       }
       const byPath = traces.find(t => {
         try {
-          return new URL(t.url).pathname === prefPath && t.status !== 404;
+          const tu = new URL(t.url);
+          return tu.origin === prefOrigin && tu.pathname === prefPath && statusOk(t);
         } catch {
           return false;
         }
       });
-      if (byPath) return byPath;
-    } catch {
-      // ignore
-    }
+      return byPath || null;
+    };
+
+    const matched = findMatchingTrace(false) || (allow404ForPref ? findMatchingTrace(true) : null);
+    if (matched) return matched;
   }
+
+  const fallbackTraces = preferredOrigins.size > 0
+    ? traces.filter(t => {
+        try {
+          return preferredOrigins.has(new URL(t.url).origin);
+        } catch {
+          return false;
+        }
+      })
+    : traces;
+  if (fallbackTraces.length === 0) return null;
 
   const isTriggerCandidate = (t) => {
     const hasProbeHeaders = t.headers && Object.keys(t.headers).some(k => !DEFAULT_NOISE_HEADERS.has(k.toLowerCase()));
@@ -377,14 +513,19 @@ export function selectTriggerTrace(traces = [], finding = {}) {
     return goodStatus && (hasProbeHeaders || nonGet || Boolean(t.bodyPreview));
   };
 
-  const probeHit = traces.find(isTriggerCandidate);
+  const probeHit = fallbackTraces.find(isTriggerCandidate);
   if (probeHit) return probeHit;
 
-  const status2xx3xx = traces.find(t => Number.isFinite(t.status) && t.status >= 200 && t.status < 400);
+  const status2xx3xx = fallbackTraces.find(t => Number.isFinite(t.status) && t.status >= 200 && t.status < 400);
   if (status2xx3xx) return status2xx3xx;
 
-  const non404 = traces.find(t => Number.isFinite(t.status) && t.status !== 404);
-  return non404 || traces[traces.length - 1] || null;
+  if (findingExpects404) {
+    const exact404 = fallbackTraces.find(t => Number.isFinite(t.status) && t.status === 404);
+    if (exact404) return exact404;
+  }
+
+  const non404 = fallbackTraces.find(t => Number.isFinite(t.status) && t.status !== 404);
+  return non404 || fallbackTraces[fallbackTraces.length - 1] || null;
 }
 
 /**
@@ -407,7 +548,52 @@ export function buildReproductionContext(finding, options = {}) {
 
   const checkId = String(finding.checkId || finding.meta?.id || finding.name || 'security-check').toLowerCase();
   const capturedTraces = Array.isArray(options.capturedTraces) ? options.capturedTraces : [];
-  const triggerTrace = selectTriggerTrace(capturedTraces, finding);
+
+  const subItems = [
+    ...(Array.isArray(finding.files) ? finding.files : []),
+    ...(Array.isArray(finding.findings) ? finding.findings : []),
+    ...(Array.isArray(finding.issues) ? finding.issues : [])
+  ].filter(item => item && typeof item === 'object');
+
+  const matchingSubItem =
+    subItems.find(item => (finding.url && item.url === finding.url) || (finding.path && item.path === finding.path)) ||
+    subItems[0] ||
+    null;
+
+  const rawExplicitMethod = String(
+    custom?.method ||
+    finding.method ||
+    finding.evidence?.requestMethod ||
+    matchingSubItem?.method ||
+    ''
+  ).toUpperCase().replace(/[^A-Z]/g, '');
+
+  const explicitNonHttpUrl =
+    normalizeNonHttpUrl(custom?.url) ||
+    normalizeNonHttpUrl(finding.url) ||
+    normalizeNonHttpUrl(matchingSubItem?.url) ||
+    normalizeNonHttpUrl(finding.target);
+
+  const isRtsp = rawExplicitMethod === 'RTSP' || /^rtsps?:\/\//i.test(explicitNonHttpUrl || '');
+  const isPortExposedItem = Boolean(
+    checkId === 'device-security' &&
+    matchingSubItem &&
+    String(matchingSubItem.method || '').toUpperCase() === 'TCP'
+  );
+  const isTcp = !isRtsp && (
+    rawExplicitMethod === 'TCP' ||
+    rawExplicitMethod === 'UDP' ||
+    /^(?:tcp|udp):\/\//i.test(explicitNonHttpUrl || '') ||
+    /^:\d{1,5}$/.test(String(finding.path || '').trim()) ||
+    (matchingSubItem && /^:\d{1,5}$/.test(String(matchingSubItem.path || '').trim())) ||
+    isPortExposedItem
+  );
+  const isOtherNonHttp = !isRtsp && !isTcp && Boolean(explicitNonHttpUrl);
+  const isNonHttpMode = isRtsp || isTcp || isOtherNonHttp;
+
+  const triggerTrace = isNonHttpMode
+    ? (finding?.trafficId ? capturedTraces.find(t => t.trafficId === finding.trafficId) || null : null)
+    : selectTriggerTrace(capturedTraces, finding);
 
   let defaultMethod = 'GET';
   const defaultHeaders = {};
@@ -465,14 +651,14 @@ export function buildReproductionContext(finding, options = {}) {
     subFindingUrl || subFileUrl || subPanelUrl || subIssueUrl || subPathEntry || finding.evidence?.requestUrl || finding.path || ''
   );
 
-  const method = String(
+  let method = String(
     custom?.method ||
     triggerTrace?.method ||
     finding.evidence?.requestMethod ||
-    defaultMethod
+    (isTcp ? (rawExplicitMethod === 'UDP' ? 'UDP' : 'TCP') : isRtsp ? (rawExplicitMethod === 'DESCRIBE' ? 'DESCRIBE' : 'OPTIONS') : defaultMethod)
   ).toUpperCase().replace(/[^A-Z]/g, '') || 'GET';
 
-  const url =
+  let url =
     normalizeHttpUrl(custom?.url) ||
     normalizeHttpUrl(triggerTrace?.url) ||
     fallbackUrl;
@@ -484,9 +670,13 @@ export function buildReproductionContext(finding, options = {}) {
   });
 
   const body = custom?.body ?? triggerTrace?.bodyPreview ?? null;
-  const responseStatus = Number.isFinite(Number(custom?.responseStatus ?? triggerTrace?.status))
-    ? Number(custom?.responseStatus ?? triggerTrace?.status)
-    : null;
+  const responseStatus = isNonHttpMode
+    ? (Number.isFinite(Number(custom?.responseStatus ?? triggerTrace?.status))
+        ? Number(custom?.responseStatus ?? triggerTrace?.status)
+        : null)
+    : (Number.isFinite(Number(custom?.responseStatus ?? triggerTrace?.status))
+        ? Number(custom?.responseStatus ?? triggerTrace?.status)
+        : null);
 
   const observedSignal = stripControlChars(
     custom?.observedSignal || summarizeObservedSignal(finding, triggerTrace)
@@ -495,52 +685,175 @@ export function buildReproductionContext(finding, options = {}) {
     ? (custom.payload ? stripControlChars(custom.payload) : null)
     : inferPayloadHint(finding, { headers: requestHeaders, bodyPreview: body }, url);
 
-  let curl = normalizeHttpUrl(url)
-    ? (custom?.curl && typeof custom.curl === 'string'
-        ? stripControlChars(custom.curl)
-        : buildCurlCommand({
-            method,
-            url,
-            headers: requestHeaders,
-            body,
-            http2: useHttp2,
-            http3: useHttp3,
-            tlsv13: useTls13
-          }))
-    : null;
+  const sourceIp = stripControlChars(
+    custom?.sourceIp ||
+    finding.sourceIp ||
+    triggerTrace?.sourceIp ||
+    ''
+  ) || null;
+  const resolvedIp = stripControlChars(
+    custom?.resolvedIp ||
+    finding.resolvedIp ||
+    triggerTrace?.resolvedIp ||
+    ''
+  ) || null;
+  const dialedAddress = stripControlChars(
+    custom?.dialedAddress ||
+    finding.dialedAddress ||
+    triggerTrace?.dialedAddress ||
+    ''
+  ) || null;
+  const includeResolveFlag = Boolean(
+    sourceIp ||
+    custom?.includeResolveFlag ||
+    finding.includeResolveFlag ||
+    checkId === 'origin-source-ip'
+  );
 
-  if (curl && checkId === 'ssl-tls' && url) {
-    try {
-      const u = new URL(url);
-      if (u.protocol === 'https:') {
-        const port = u.port || '443';
-        curl = `openssl s_client -connect ${shellQuoteSingle(`${u.hostname}:${port}`)} -servername ${shellQuoteSingle(u.hostname)} </dev/null`;
+  let nonHttpHost = '';
+  let nonHttpPort = null;
+  let curl = null;
+  let rtspRequestMethod = 'OPTIONS';
+
+  if (isRtsp) {
+    method = rawExplicitMethod === 'RTSP' ? 'RTSP' : (rawExplicitMethod === 'DESCRIBE' ? 'DESCRIBE' : 'OPTIONS');
+    rtspRequestMethod = method === 'DESCRIBE' ? 'DESCRIBE' : 'OPTIONS';
+    const rawHostSource = (finding.host !== undefined && finding.host !== null && String(finding.host).trim() !== '')
+      ? String(finding.host)
+      : (parsedUrlHostname(explicitNonHttpUrl) || finding.device?.host || parsedUrlHostname(finding.url) || parsedUrlHostname(finding.target) || '');
+    const cleanHost = stripControlChars(rawHostSource).replace(/^\[|\]$/g, '').trim();
+    const hostOk = isValidShellHost(cleanHost);
+    const pathPortMatch = String(finding.path || matchingSubItem?.path || '').trim().match(/^:(\d{1,5})$/);
+    const portCandidate =
+      finding.port ??
+      matchingSubItem?.port ??
+      (explicitNonHttpUrl ? (parsedUrlPort(explicitNonHttpUrl) || (/^rtsps:\/\//i.test(explicitNonHttpUrl) ? 322 : 554)) : null) ??
+      (parsedUrlPort(finding.url) || (pathPortMatch ? pathPortMatch[1] : null) || 554);
+    const portOk = parseValidPort(portCandidate);
+    nonHttpHost = cleanHost;
+    nonHttpPort = portOk;
+
+    let rtspUrl = explicitNonHttpUrl;
+    if (!rtspUrl && hostOk && portOk) {
+      const formattedHost = cleanHost.includes(':') ? `[${cleanHost}]` : cleanHost;
+      rtspUrl = `rtsp://${formattedHost}:${portOk}/`;
+    }
+    url = rtspUrl || null;
+    curl = (rtspUrl && hostOk)
+      ? (custom?.curl && typeof custom.curl === 'string'
+          ? stripControlChars(custom.curl)
+          : `curl -i -sS --request ${rtspRequestMethod} ${shellQuoteSingle(rtspUrl)}`)
+      : null;
+  } else if (isTcp || isOtherNonHttp) {
+    if (isTcp) {
+      method = rawExplicitMethod === 'UDP' ? 'UDP' : 'TCP';
+    } else {
+      method = rawExplicitMethod || 'TCP';
+    }
+    const rawHostSource = (finding.host !== undefined && finding.host !== null && String(finding.host).trim() !== '')
+      ? String(finding.host)
+      : (finding.device?.host
+          ? String(finding.device.host)
+          : (parsedUrlHostname(explicitNonHttpUrl) ||
+             parsedUrlHostname(finding.url) ||
+             parsedUrlHostname(matchingSubItem?.url) ||
+             parsedUrlHostname(finding.target) ||
+             ''));
+    const cleanHost = stripControlChars(rawHostSource).replace(/^\[|\]$/g, '').trim();
+    const hostOk = isValidShellHost(cleanHost);
+    const pathPortMatch = String(finding.path || matchingSubItem?.path || '').trim().match(/^:(\d{1,5})$/);
+    const rawPortSource =
+      finding.port !== undefined && finding.port !== null && finding.port !== ''
+        ? finding.port
+        : (matchingSubItem?.port !== undefined && matchingSubItem?.port !== null && matchingSubItem?.port !== ''
+            ? matchingSubItem.port
+            : ((explicitNonHttpUrl && parsedUrlPort(explicitNonHttpUrl)) ||
+               parsedUrlPort(finding.url) ||
+               parsedUrlPort(matchingSubItem?.url) ||
+               (pathPortMatch ? pathPortMatch[1] : null)));
+    const portOk = parseValidPort(rawPortSource);
+    nonHttpHost = cleanHost;
+    nonHttpPort = portOk;
+
+    const protoScheme = method === 'UDP' ? 'udp' : 'tcp';
+    const formattedHost = cleanHost.includes(':') ? `[${cleanHost}]` : cleanHost;
+    url = explicitNonHttpUrl || (hostOk && portOk ? `${protoScheme}://${formattedHost}:${portOk}` : null);
+    curl = (hostOk && portOk)
+      ? (custom?.curl && typeof custom.curl === 'string'
+          ? stripControlChars(custom.curl)
+          : `nc -vz ${shellQuoteSingle(cleanHost)} ${portOk}`)
+      : null;
+  } else {
+    curl = normalizeHttpUrl(url)
+      ? (custom?.curl && typeof custom.curl === 'string'
+          ? stripControlChars(custom.curl)
+          : buildCurlCommand({
+              method,
+              url,
+              headers: requestHeaders,
+              body,
+              http2: useHttp2,
+              http3: useHttp3,
+              tlsv13: useTls13,
+              sourceIp,
+              resolvedIp,
+              includeResolveFlag
+            }))
+      : null;
+
+    if (curl && checkId === 'ssl-tls' && url) {
+      try {
+        const u = new URL(url);
+        if (u.protocol === 'https:') {
+          const port = u.port || '443';
+          curl = `openssl s_client -connect ${shellQuoteSingle(`${u.hostname}:${port}`)} -servername ${shellQuoteSingle(u.hostname)} </dev/null`;
+        }
+      } catch {
+        // keep curl
       }
-    } catch {
-      // keep curl
     }
   }
 
   const verifyFix = stripControlChars(
     custom?.verifyFix ||
-    (finding.fix || finding.remediation || finding.meta?.defaultFix
-      ? `Apply the remediation, then replay ${method} ${url || 'the endpoint'} and re-run check "${finding.checkId || finding.name || checkId}" to confirm status transitions to SAFE and the triggering indicator no longer appears.`
-      : `Apply the recommended fix and re-run "${finding.checkId || finding.name || checkId}" (or click 1-Click Retest) until status returns SAFE.`)
+    ((isTcp || isOtherNonHttp) && isValidShellHost(nonHttpHost) && nonHttpPort
+      ? `Apply the remediation, then re-test ${method} port ${nonHttpPort} on ${nonHttpHost} (nc -vz ${shellQuoteSingle(nonHttpHost)} ${nonHttpPort} or PowerShell Test-NetConnection -ComputerName ${nonHttpHost} -Port ${nonHttpPort}) and re-run check "${finding.checkId || finding.name || checkId}" to confirm status transitions to SAFE.`
+      : isRtsp && url
+        ? `Apply the remediation, then replay RTSP ${rtspRequestMethod} against ${url} and re-run check "${finding.checkId || finding.name || checkId}" to confirm status transitions to SAFE.`
+        : (finding.fix || finding.remediation || finding.meta?.defaultFix
+            ? `Apply the remediation, then replay ${method} ${url || 'the endpoint'} and re-run check "${finding.checkId || finding.name || checkId}" to confirm status transitions to SAFE and the triggering indicator no longer appears.`
+            : `Apply the recommended fix and re-run "${finding.checkId || finding.name || checkId}" (or click 1-Click Retest) until status returns SAFE.`))
   );
 
   const steps = Array.isArray(custom?.steps) && custom.steps.length > 0
     ? custom.steps.map(s => stripControlChars(s)).filter(Boolean)
-    : [
-        url
-          ? `Send ${method} request to ${url}${Object.keys(requestHeaders).length ? ` with header(s) ${Object.entries(requestHeaders).map(([k, v]) => `${k}: ${v}`).join('; ')}` : ''}${payload && !url.includes(payload) ? ` (probe: ${payload})` : ''}.`
-          : `Run the "${finding.checkId || finding.name || checkId}" verification check against ${stripControlChars(pageFallback || 'the target')}.`,
-        `Observe the indicator (${observedSignal})${responseStatus ? ` on HTTP ${responseStatus}` : ''}.`,
-        verifyFix
-      ];
+    : (isTcp || isOtherNonHttp) && isValidShellHost(nonHttpHost) && nonHttpPort
+      ? [
+          `Run ${method} connectivity probe against ${nonHttpHost}:${nonHttpPort}: nc -vz ${shellQuoteSingle(nonHttpHost)} ${nonHttpPort} (or PowerShell: Test-NetConnection -ComputerName ${nonHttpHost} -Port ${nonHttpPort}).`,
+          `Observe that ${method} port ${nonHttpPort} is reachable (${observedSignal}).`,
+          verifyFix
+        ]
+      : isRtsp && url
+        ? [
+            `Send RTSP ${rtspRequestMethod} probe to ${url}: curl -i -sS --request ${rtspRequestMethod} ${shellQuoteSingle(url)}.`,
+            `Observe the RTSP response (${observedSignal})${responseStatus ? ` (status ${responseStatus})` : ''}.`,
+            verifyFix
+          ]
+        : [
+            url
+              ? `Send ${method} request to ${url}${Object.keys(requestHeaders).length ? ` with header(s) ${Object.entries(requestHeaders).map(([k, v]) => `${k}: ${v}`).join('; ')}` : ''}${payload && !url.includes(payload) ? ` (probe: ${payload})` : ''}.`
+              : `Run the "${finding.checkId || finding.name || checkId}" verification check against ${stripControlChars(pageFallback || 'the target')}.`,
+            `Observe the indicator (${observedSignal})${responseStatus ? ` on HTTP ${responseStatus}` : ''}.`,
+            verifyFix
+          ];
 
   const summary = stripControlChars(
     custom?.summary ||
-    (url ? `${method} ${url}${responseStatus ? ` -> HTTP ${responseStatus}` : ''} (${observedSignal})` : observedSignal)
+    ((isTcp || isOtherNonHttp) && isValidShellHost(nonHttpHost) && nonHttpPort
+      ? `${method} ${nonHttpHost}:${nonHttpPort} (${observedSignal})`
+      : isRtsp && url
+        ? `RTSP ${rtspRequestMethod} ${url} (${observedSignal})`
+        : (url ? `${method} ${url}${responseStatus ? ` -> HTTP ${responseStatus}` : ''} (${observedSignal})` : observedSignal))
   );
 
   const trafficId = finding.trafficId || triggerTrace?.trafficId || null;
@@ -549,6 +862,8 @@ export function buildReproductionContext(finding, options = {}) {
     : Boolean(
         finding.reproVerified === true ||
         custom?.reproducible === true ||
+        ((isTcp || isOtherNonHttp) && isValidShellHost(nonHttpHost) && Boolean(nonHttpPort)) ||
+        (isRtsp && Boolean(url) && isValidShellHost(nonHttpHost)) ||
         (responseStatus !== null && responseStatus >= 200 && responseStatus < 400 && Boolean(url))
       );
   const matchedEvidence = [];
@@ -564,7 +879,7 @@ export function buildReproductionContext(finding, options = {}) {
     const itemPath = f.path || f.endpoint;
     matchedEvidence.push({
       ...(itemPath ? { path: stripControlChars(itemPath).slice(0, 200) } : {}),
-      ...(f.url ? { url: normalizeHttpUrl(f.url) || stripControlChars(f.url).slice(0, 300) } : {}),
+      ...(f.url ? { url: normalizeHttpUrl(f.url) || normalizeNonHttpUrl(f.url) || stripControlChars(f.url).slice(0, 300) } : {}),
       ...(f.method ? { method: stripControlChars(f.method).slice(0, 16) } : {}),
       ...(f.status !== undefined && Number.isFinite(Number(f.status)) ? { status: Number(f.status) } : {}),
       ...(f.matchedSignal || f.signal ? { matchedSignal: stripControlChars(f.matchedSignal || f.signal).slice(0, 140) } : {}),
@@ -585,11 +900,14 @@ export function buildReproductionContext(finding, options = {}) {
     ...(payload ? { payload } : {}),
     ...(responseStatus !== null ? { responseStatus } : {}),
     observedSignal,
-    ...(curl ? { curl } : {}),
+    ...(curl ? { curl } : (isNonHttpMode ? { curl: null } : {})),
     steps,
     verifyFix,
     ...(matchedEvidence.length ? { matchedEvidence } : {}),
     ...(evidenceQuotes.length ? { evidenceQuotes } : {}),
+    ...(sourceIp ? { sourceIp } : {}),
+    ...(resolvedIp ? { resolvedIp } : {}),
+    ...(dialedAddress ? { dialedAddress } : {}),
     ...(trafficId ? { trafficId } : {})
   };
 }

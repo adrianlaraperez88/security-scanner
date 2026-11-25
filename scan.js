@@ -1,43 +1,40 @@
 import fs                                       from 'node:fs';
-import { getScanners }                          from './core/registry.js';
+import net                                      from 'node:net';
+import { getScanners, getAvailableCheckNames }  from './core/registry.js';
 import { fingerprint }                          from './core/fingerprint.js';
-import { fetchWithRetry as baseFetch,
-         createGovernedFetch }                  from './core/fetch.js';
+import { createGovernedFetch }                  from './core/fetch.js';
 import { generateReport, saveReport,
          saveHtmlReport, saveAutoReports,
          generateMarkdownReport, generateCsvReport,
          generateSarifReport,
          groupFindings, summarizeCveAudit,
+         buildExecutiveResume,
          sanitizeApiCommunication,
          mergeApiCommunication }                from './core/report.js';
 import { filterSafeSameOriginApiRoutes }        from './core/api-discovery.js';
-import { generateFixSolution,
-         summarizeScanForAudience,
-         analyzeApiCommunication }              from './core/ai-advisor.js';
-import { auditCveCoverage }                     from './core/cve-audit.js';
+import { sanitizeRuntimeSca,
+         mergeRuntimeSca }                      from './core/runtime-sca.js';
 import { calculateRisk }                        from './core/severity.js';
 import { selectScannersForStack,
+         getProfileChecks,
          ACTIVE_FUZZING_CHECKS }                from './core/profiles.js';
-import { saveHistory, loadLastHistory,
-         diffScans }                            from './core/history.js';
-import { sendWebhook, maskWebhookUrl }          from './core/notify.js';
 import { TaskQueue }                            from './core/queue.js';
 import { crawlPage,
          discoverApiRoutesFromPage }            from './core/crawler.js';
-import { validateTargets }                      from './core/validator.js';
-import { getCheckMeta }                         from './core/catalog.js';
+import { normalizeTargetInput, resolveBareIpTargets, validateTargets } from './core/validator.js';
+import { normalizeDeviceCategory }              from './core/device-scanner.js';
+import { getCheckInfo, getCheckMeta }           from './core/catalog.js';
 import { EnrichEngine }                         from './core/enrich.js';
 import { createTrackedFetch }                   from './core/reproduction.js';
 import { NoiseGovernor }                        from './core/egress.js';
 import { validateCustomHeaders }                from './core/headers.js';
 import { evaluateAssetGate, TargetPinStore }    from './core/guard.js';
-import { GraphStore }                           from './core/graph-store.js';
-import { TrafficStore }                         from './core/traffic.js';
-import { EvidenceStore }                        from './core/evidence.js';
-import { LlmPool }                              from './core/llmpool.js';
-import { SkillRegistry }                        from './core/skills.js';
-import { AgentEngine }                          from './core/agent-engine.js';
+import { discoverWebsiteRealIp }                from './core/real-ip-finder.js';
+import { AuthSessionManager,
+         parseLoginFormHtml }                   from './core/auth-session.js';
 import pLimit                                   from 'p-limit';
+
+export { discoverWebsiteRealIp, AuthSessionManager, parseLoginFormHtml };
 
 function inferScopeRuleType(pattern) {
   const pat = String(pattern || '').trim();
@@ -171,7 +168,7 @@ function findHostStack(stacks, targetUrl) {
   return Object.values(stacks)[0] || null;
 }
 
-export async function runScanner(options) {
+export async function runScanner(options = {}) {
   const {
     targets,
     json         = false,
@@ -183,10 +180,21 @@ export async function runScanner(options) {
     audience     = 'pro',
     headers      = {},
     concurrency  = 5,
+    checkConcurrency = null,
     techOverride = null,
     output       = 'report',
     timeout      = 10000,
     auth         = null,
+    authSession  = null,
+    loginUrl     = null,
+    username     = null,
+    password     = null,
+    loginContentType = null,
+    loginType    = null,
+    usernameField = null,
+    passwordField = null,
+    loginPayload = null,
+    recordedSession = null,
     profile      = 'smart',
     forceAll     = false,
     diff         = false,
@@ -211,10 +219,39 @@ export async function runScanner(options) {
     fetcher      = null,
     dnsResolver  = null,
     resolver     = null,
+    resolveCache = null,
+    sourceIp     : rawSourceIp = null,
+    sourceIpMap  = null,
+    autoRealIp   = false,
+    scanRealIp   = false,
+    usePinnedDialer = false,
+    connectToSourceIp = true,
+    baseDialer   = null,
     checks       = null,
+    deviceMode   = false,
+    deviceCategory = 'all',
+    tcpProbe     = null,
+    portProbe    = null,
+    rtspProbe    = null,
+    udpProbe     = null,
+    tlsProbe     = null,
+    tlsConnect   = null,
+    portTimeoutMs = null,
+    probeTimeoutMs = null,
+    multiPort    = undefined,
+    oast         = false,
+    oastServer   = null,
+    templates    = null,
     allowPrivate: rawAllowPrivate = false,
   } = options;
   const allowPrivate = Boolean(rawAllowPrivate);
+  const effectiveDeviceCategory = normalizeDeviceCategory(deviceCategory);
+  const isDeviceProfile = [
+    'device', 'tv', 'smart-tv', 'smart_tv', 'iot',
+    'camera', 'cam', 'nvr', 'ip-camera', 'ip_camera',
+    'pc', 'workstation', 'server', 'pc-workstation', 'pc_workstation', 'lan'
+  ].includes(String(profile || '').toLowerCase());
+  const effectiveDeviceMode = Boolean(deviceMode || isDeviceProfile || effectiveDeviceCategory !== 'all');
 
   const emit = (evt) => {
     if (typeof onProgress === 'function') {
@@ -228,13 +265,31 @@ export async function runScanner(options) {
     if (!silent) console.log(...args);
   };
 
-  const validation = validateTargets(targets, { allowPrivate });
+  const normalizedScopeRules = normalizeScopeRules(scopeRules);
+  const activeDnsResolver = dnsResolver || resolver || null;
+  let bareIpProbeSummary = null;
+  let resolvedInputTargets = targets;
+  if (Array.isArray(targets)) {
+    const bareResolved = await resolveBareIpTargets(targets, {
+      allowPrivate,
+      ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
+      ...(fetcher ? { fetcher } : {}),
+      ...(typeof tcpProbe === 'function' ? { tcpProbe } : {}),
+      timeoutMs: timeout,
+      ...(rawSourceIp ? { sourceIp: rawSourceIp } : {}),
+      ...(sourceIpMap ? { sourceIpMap } : {}),
+      ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
+      ...(resolveCache ? { resolveCache } : {}),
+    });
+    resolvedInputTargets = bareResolved.targets;
+    bareIpProbeSummary = bareResolved.probeSummary;
+  }
+  const validation = validateTargets(resolvedInputTargets, { allowPrivate });
   if (!validation.valid) {
     throw new Error(validation.errors.join('; '));
   }
   const validatedTargets = validation.targets;
 
-  const normalizedScopeRules = normalizeScopeRules(scopeRules);
   if (normalizedScopeRules.length > 0) {
     for (const t of validatedTargets) {
       const gate = evaluateAssetGate(t, { rules: normalizedScopeRules });
@@ -257,7 +312,23 @@ export async function runScanner(options) {
   });
 
   // Curry fetch with timeout + optional auth/custom headers + governance/traffic/DNS-pinning wiring
-  const activeDnsResolver = dnsResolver || resolver || null;
+  let sourceIp = rawSourceIp;
+  if ((autoRealIp === true || scanRealIp === true) && !sourceIp && validatedTargets.length === 1) {
+    try {
+      const realIpReport = await discoverWebsiteRealIp(validatedTargets[0], {
+        allowPrivate,
+        ...(normalizedScopeRules.length ? { rules: normalizedScopeRules } : {}),
+        ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
+        ...(fetcher ? { fetchFn: fetcher } : {}),
+        timeoutMs: timeout || 5000,
+      });
+      if (realIpReport?.realIp) {
+        sourceIp = realIpReport.realIp;
+      }
+    } catch (err) {
+      if (err?.isGovernanceBlock) throw err;
+    }
+  }
   const customHeaders  = validateCustomHeaders(headers);
   const authHeaders    = auth ? { Authorization: auth } : {};
   const governedFetch  = createGovernedFetch({
@@ -266,20 +337,185 @@ export async function runScanner(options) {
     ...(trafficStore ? { trafficStore } : {}),
     ...(fetcher ? { fetcher } : {}),
     ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
+    ...(resolveCache ? { resolveCache } : {}),
+    ...(sourceIp ? { sourceIp } : {}),
+    ...(sourceIpMap ? { sourceIpMap } : {}),
+    ...(baseDialer ? { baseDialer } : {}),
+    usePinnedDialer,
+    connectToSourceIp,
     enforceDnsValidation: true,
     allowPrivate,
     targetPinStore,
     retries: 2,
     timeout,
   });
-  const fetchWithRetry = (url, opts = {}) => governedFetch(url, {
-    ...opts,
-    headers: { ...customHeaders, ...authHeaders, ...(opts.headers || {}) }
-  });
-  fetchWithRetry.governance = governedFetch.governance;
-  fetchWithRetry.tlsAlpnProbe = governedFetch.tlsAlpnProbe;
 
-  const scanners      = await getScanners();
+  let ownedOastServer = null;
+  let activeOastServer = oastServer || null;
+
+  try {
+  if (oast === true && !activeOastServer) {
+    const { OastServer } = await import('./core/oast-server.js');
+    ownedOastServer = new OastServer({ host: '127.0.0.1', port: 0 });
+    await ownedOastServer.start();
+    activeOastServer = ownedOastServer;
+  }
+
+  let loadedDeclarativeTemplates = [];
+  let runDeclarativeTemplateFn = null;
+  if (templates) {
+    const { loadTemplatesFromPath, runDeclarativeTemplate } = await import('./core/template-loader.js');
+    runDeclarativeTemplateFn = runDeclarativeTemplate;
+    if (typeof templates === 'string' && templates.trim()) {
+      loadedDeclarativeTemplates = loadTemplatesFromPath(templates.trim());
+    } else if (Array.isArray(templates)) {
+      for (const item of templates) {
+        if (typeof item === 'string' && item.trim()) {
+          loadedDeclarativeTemplates.push(...loadTemplatesFromPath(item.trim()));
+        } else if (item && typeof item === 'object') {
+          loadedDeclarativeTemplates.push(item);
+        }
+      }
+    } else if (typeof templates === 'object') {
+      loadedDeclarativeTemplates = [templates];
+    }
+  }
+
+  const baseGovernedFetch = (url, opts = {}, ...rest) => governedFetch(url, {
+    ...opts,
+    headers: { ...customHeaders, ...authHeaders, ...(opts?.headers || {}) }
+  }, ...rest);
+  baseGovernedFetch.governance = governedFetch.governance;
+  baseGovernedFetch.tlsAlpnProbe = governedFetch.tlsAlpnProbe;
+  baseGovernedFetch.sourceIp = governedFetch.sourceIp;
+  baseGovernedFetch.sourceIpMap = governedFetch.sourceIpMap;
+  baseGovernedFetch.resolveCache = governedFetch.resolveCache;
+  baseGovernedFetch.targetPinStore = governedFetch.targetPinStore;
+  baseGovernedFetch.hasCustomFetcher = governedFetch.hasCustomFetcher;
+  if (governedFetch.isDefaultFetch !== undefined) {
+    baseGovernedFetch.isDefaultFetch = governedFetch.isDefaultFetch;
+  }
+
+  let authManager = null;
+  const authSessionCfg = (authSession && typeof authSession === 'object' && !(authSession instanceof AuthSessionManager))
+    ? authSession
+    : null;
+  const effectiveRecordedSession = authSessionCfg?.recordedSession || recordedSession || null;
+  const effectiveLoginUrlRaw = authSessionCfg?.loginUrl ?? loginUrl ?? null;
+  const effectiveLoginUrl = (() => {
+    if (!effectiveLoginUrlRaw) return null;
+    const trimmed = String(effectiveLoginUrlRaw).trim();
+    if (trimmed.startsWith('/')) {
+      try {
+        return new URL(trimmed, validatedTargets[0]).toString();
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  })();
+  const effectiveUsername = authSessionCfg?.username ?? username ?? null;
+  const effectivePassword = authSessionCfg?.password ?? password ?? null;
+  const effectiveLoginContentType = authSessionCfg?.loginContentType ?? loginContentType ?? loginType ?? null;
+  const effectiveUsernameField = authSessionCfg?.usernameField ?? usernameField ?? null;
+  const effectivePasswordField = authSessionCfg?.passwordField ?? passwordField ?? null;
+  const effectiveLoginPayload = authSessionCfg?.loginPayload ?? loginPayload ?? null;
+
+  const hasAuthSessionConfig = Boolean(
+    authSession instanceof AuthSessionManager ||
+    effectiveRecordedSession ||
+    effectiveLoginUrl ||
+    effectiveUsername !== null ||
+    effectivePassword !== null ||
+    effectiveLoginPayload !== null
+  );
+
+  if (hasAuthSessionConfig) {
+    if (authSession instanceof AuthSessionManager) {
+      authManager = authSession;
+      if (!authManager.targetUrl) {
+        authManager.targetUrl = validatedTargets[0];
+      }
+    } else if (effectiveRecordedSession) {
+      authManager = AuthSessionManager.fromRecordedSession(effectiveRecordedSession);
+      if (!authManager.targetUrl) authManager.targetUrl = validatedTargets[0];
+      if (effectiveLoginUrl) authManager.loginUrl = effectiveLoginUrl;
+      if (effectiveUsername !== null && effectiveUsername !== undefined) authManager.username = String(effectiveUsername);
+      if (effectivePassword !== null && effectivePassword !== undefined) authManager.password = String(effectivePassword);
+      if (effectiveLoginContentType) authManager.loginContentType = effectiveLoginContentType;
+      if (effectiveUsernameField) authManager.usernameField = effectiveUsernameField;
+      if (effectivePasswordField) authManager.passwordField = effectivePasswordField;
+      if (effectiveLoginPayload !== null && effectiveLoginPayload !== undefined) authManager.loginPayload = effectiveLoginPayload;
+    } else {
+      authManager = new AuthSessionManager({
+        ...(authSessionCfg || {}),
+        targetUrl: authSessionCfg?.targetUrl || validatedTargets[0],
+        ...(effectiveLoginUrl ? { loginUrl: effectiveLoginUrl } : {}),
+        ...(effectiveUsername !== null && effectiveUsername !== undefined ? { username: effectiveUsername } : {}),
+        ...(effectivePassword !== null && effectivePassword !== undefined ? { password: effectivePassword } : {}),
+        ...(effectiveLoginContentType ? { loginContentType: effectiveLoginContentType } : {}),
+        ...(effectiveUsernameField ? { usernameField: effectiveUsernameField } : {}),
+        ...(effectivePasswordField ? { passwordField: effectivePasswordField } : {}),
+        ...(effectiveLoginPayload !== null && effectiveLoginPayload !== undefined ? { loginPayload: effectiveLoginPayload } : {}),
+      });
+    }
+
+    const alreadyAuthenticated = Boolean(authManager.bearerToken || authManager.cookies.size > 0);
+    const hasLoginCreds = Boolean(
+      authManager.loginPayload !== null ||
+      (authManager.username !== null && authManager.password !== null)
+    );
+    if (!alreadyAuthenticated && hasLoginCreds) {
+      const loginOutcome = await authManager.executeLoginMacro(baseGovernedFetch);
+      if (!loginOutcome.authenticated) {
+        log(`⚠️  Auth Session warning: login macro returned HTTP ${loginOutcome.status} without a session cookie or Bearer token.`);
+      }
+    }
+  }
+
+  const fetchWithRetry = authManager ? authManager.wrapFetch(baseGovernedFetch) : baseGovernedFetch;
+  if (authManager) {
+    fetchWithRetry.governance = baseGovernedFetch.governance;
+    fetchWithRetry.tlsAlpnProbe = baseGovernedFetch.tlsAlpnProbe;
+    fetchWithRetry.sourceIp = baseGovernedFetch.sourceIp;
+    fetchWithRetry.sourceIpMap = baseGovernedFetch.sourceIpMap;
+    fetchWithRetry.resolveCache = baseGovernedFetch.resolveCache;
+    fetchWithRetry.targetPinStore = baseGovernedFetch.targetPinStore;
+    fetchWithRetry.hasCustomFetcher = baseGovernedFetch.hasCustomFetcher;
+    if (baseGovernedFetch.isDefaultFetch !== undefined) {
+      fetchWithRetry.isDefaultFetch = baseGovernedFetch.isDefaultFetch;
+    }
+  }
+
+  const allCheckNames = getAvailableCheckNames();
+  let scanners;
+  if (Array.isArray(checks) && checks.length > 0) {
+    const wantedLower = new Set(checks.map(c => String(c).trim().toLowerCase()).filter(Boolean));
+    const neededNames = allCheckNames.filter(name => {
+      if (wantedLower.has(name.toLowerCase())) return true;
+      const info = getCheckInfo(name);
+      return Array.isArray(info?.cveIds) && info.cveIds.some(cve => wantedLower.has(String(cve).toLowerCase()));
+    });
+    const loaded = await getScanners({ onlyChecks: neededNames });
+    const loadedByName = new Map(loaded.map(s => [s.name, s]));
+    scanners = allCheckNames.map(name => loadedByName.get(name) || { name, tags: [], meta: getCheckInfo(name) });
+  } else if (!forceAll) {
+    const profileCheckList = getProfileChecks(profile);
+    if (Array.isArray(profileCheckList)) {
+      const loaded = await getScanners({ onlyChecks: profileCheckList });
+      const loadedByName = new Map(loaded.map(s => [s.name, s]));
+      scanners = allCheckNames.map(name => loadedByName.get(name) || { name, tags: [], meta: getCheckInfo(name) });
+    } else {
+      scanners = await getScanners();
+    }
+  } else {
+    scanners = await getScanners();
+  }
+
+  let notifyMod = null;
+  if (webhook) {
+    notifyMod = await import('./core/notify.js');
+  }
 
   const bar = '═'.repeat(60);
   log(bar);
@@ -289,19 +525,26 @@ export async function runScanner(options) {
   log(`⚙️   Scanners    : ${scanners.length}  |  Profile: ${profile}`);
   log(`🕸️   Max Depth   : ${maxDepth}`);
   log(`🔄  Concurrency : ${concurrency}  |  Timeout: ${timeout}ms`);
+  if (sourceIp || sourceIpMap) log(`🎯  Source IP   : ${typeof sourceIp === 'string' ? sourceIp : JSON.stringify(sourceIp || sourceIpMap)}`);
   if (activeGovernor) log(`🎚️   Noise Prof. : ${activeGovernor.profile}`);
   if (normalizedScopeRules.length) log(`🛡️   Scope Rules : ${normalizedScopeRules.length}`);
   if (allowPrivate) log('🏢  Private Net : enabled (metadata endpoints still blocked)');
   if (agent)   log(`🤖  Agent Mode  : enabled${goal ? ` (${goal})` : ''}`);
   if (auth)    log(`🔑  Authenticated scan`);
+  if (authManager) {
+    const sessSummary = authManager.getRecordedSession({ includeSecrets: false });
+    log(`🔐  Auth Session: ${sessSummary.authenticated ? 'AUTHENTICATED' : 'UNAUTHENTICATED'} (${sessSummary.cookieCount} cookie(s)${sessSummary.hasBearerToken ? ', Bearer JWT' : ''}${sessSummary.loginUrl ? ` via ${sessSummary.loginUrl}` : ''})`);
+  }
   if (Object.keys(customHeaders).length) log(`🧾  Custom Hdrs : ${Object.keys(customHeaders).length} header(s)`);
-  if (webhook) log(`📣  Webhook: ${maskWebhookUrl(webhook)}`);
+  if (webhook) log(`📣  Webhook: ${notifyMod.maskWebhookUrl(webhook)}`);
   log(bar);
 
   // ── Diff: load previous scan ──────────────────────────────────────────────
+  let historyMod = null;
   let previousScan = null;
   if (diff || !noHistory) {
-    previousScan = loadLastHistory(validatedTargets);
+    historyMod = await import('./core/history.js');
+    previousScan = historyMod.loadLastHistory(validatedTargets);
     if (diff && !previousScan) log('ℹ️  No previous scan found for diff — running fresh scan\n');
   }
 
@@ -312,9 +555,26 @@ export async function runScanner(options) {
   let totalPlannedChecks = 0;
   let completedChecks = 0;
 
+  const schemesByHost = new Map();
+  for (const vt of validatedTargets) {
+    try {
+      const u = new URL(vt);
+      const hostKey = String(u.hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+      if (!hostKey) continue;
+      if (!schemesByHost.has(hostKey)) schemesByHost.set(hostKey, new Set());
+      schemesByHost.get(hostKey).add(u.protocol.toLowerCase());
+    } catch {}
+  }
+
   // ── Initial Fingerprinting & Discovery ────────────────────────────────────
   const targetTasks = validatedTargets.map(initialTarget => limit(async () => {
     log(`\n🛰️   Starting crawl: ${initialTarget}`);
+    let siblingSchemes = [];
+    try {
+      const u = new URL(initialTarget);
+      const hostKey = String(u.hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+      siblingSchemes = Array.from(schemesByHost.get(hostKey) || []);
+    } catch {}
     
     // 1. Initial Fingerprint
     const seenBundleUrls = new Set();
@@ -323,10 +583,24 @@ export async function runScanner(options) {
     const fp = await fingerprint(initialTarget, fetchWithRetry, {
       seenBundleUrls,
       seenConfigUrls,
-      budgetState
+      budgetState,
+      allowPrivate,
+      deviceMode: effectiveDeviceMode,
+      deviceCategory: effectiveDeviceCategory,
+      ...(typeof tcpProbe === 'function' ? { tcpProbe } : {}),
+      ...(typeof portProbe === 'function' ? { portProbe } : {}),
+      ...(typeof rtspProbe === 'function' ? { rtspProbe } : {}),
+      ...(typeof udpProbe === 'function' ? { udpProbe } : {}),
+      ...(typeof tlsProbe === 'function' ? { tlsProbe } : {}),
+      ...(Number.isFinite(portTimeoutMs) ? { portTimeoutMs } : {}),
+      ...(Number.isFinite(probeTimeoutMs) ? { probeTimeoutMs } : {}),
+      ...(multiPort !== undefined ? { multiPort } : {}),
     });
     if (fp.apiCommunication) {
       fp.apiCommunication = sanitizeApiCommunication(fp.apiCommunication);
+    }
+    if (fp.runtimeSca) {
+      fp.runtimeSca = sanitizeRuntimeSca(fp.runtimeSca);
     }
     stacks[initialTarget] = fp;
     const stackStr = fp.stack.length
@@ -335,6 +609,29 @@ export async function runScanner(options) {
     log(`    🧠  Detected Stack      : ${fp.summary || stackStr}`);
     if (fp.detectedTags?.length) log(`    🏷️   Ecosystem Tags      : ${fp.detectedTags.join(', ')}`);
     if (fp.recommendedProfile) log(`    🎯  Recommended Profile : ${fp.recommendedProfile}`);
+    if (fp.osInfo?.detected) {
+      log(`    🖥️  Detected OS         : ${fp.osInfo.osName}${fp.osInfo.version ? ' ' + fp.osInfo.version : ''}${fp.osInfo.isEol ? ' [EOL ⚠️]' : ''} (${fp.osInfo.familyLabel})`);
+    }
+    if (fp.deviceInfo?.detected) {
+      const dp = fp.deviceInfo;
+      const devMeta = [
+        dp.categoryLabel || dp.deviceType || 'Network Device',
+        dp.vendor && dp.vendor !== 'Unknown' ? `Vendor: ${dp.vendor}` : null,
+        dp.modelName ? `Model: ${dp.modelName}` : null,
+        dp.os ? `OS: ${dp.os}` : null,
+        dp.macAddress ? `MAC: ${dp.macAddress}` : null
+      ].filter(Boolean).join(' · ');
+      log(`    📺  Detected Device     : ${devMeta}`);
+      if (Array.isArray(dp.openPorts) && dp.openPorts.length > 0) {
+        const origins = [dp.activeHttpOrigin, dp.activeHttpsOrigin].filter(Boolean);
+        const originNote = dp.basePortClosed
+          ? (origins.length > 0
+              ? ` (standard port 80/443 closed — routing checks to ${origins.join(', ')})`
+              : ' (standard port 80/443 closed — no HTTP/HTTPS origin, skipping HTTP-only checks)')
+          : '';
+        log(`    🔌  Open Device Ports   : ${dp.openPorts.join(', ')}${originNote}`);
+      }
+    }
     if (fp.apiCommunication?.usesApi) {
       const apiComm = fp.apiCommunication;
       const clients = Array.isArray(apiComm.clients) && apiComm.clients.length
@@ -348,8 +645,17 @@ export async function runScanner(options) {
       }
     }
 
+    const isDeviceBasePortClosed = Boolean(
+      fp.deviceInfo?.basePortClosed &&
+      (fp.deviceInfo?.detected || effectiveDeviceMode)
+    );
+    const effectiveProfileForSelection =
+      String(profile || 'smart').toLowerCase() === 'smart' && isDeviceBasePortClosed
+        ? 'device'
+        : profile;
+
     const selection = selectScannersForStack(scanners, {
-      profile,
+      profile: effectiveProfileForSelection,
       fp,
       techOverride,
       forceAll
@@ -357,10 +663,71 @@ export async function runScanner(options) {
     let activeScanners = selection.activeScanners;
     let skippedScanners = selection.skippedScanners;
     if (Array.isArray(checks) && checks.length > 0) {
-      const wanted = new Set(checks.map(c => String(c).trim()).filter(Boolean));
-      activeScanners = scanners.filter(s => wanted.has(s.name));
-      skippedScanners = scanners.filter(s => !wanted.has(s.name));
+      const wantedLower = new Set(checks.map(c => String(c).trim().toLowerCase()).filter(Boolean));
+      const matchesCheckOrCve = (s) => {
+        if (wantedLower.has(String(s.name || '').toLowerCase())) return true;
+        const cveList = Array.isArray(s.meta?.cveIds) ? s.meta.cveIds : [];
+        return cveList.some(cve => wantedLower.has(String(cve).toLowerCase()));
+      };
+      activeScanners = scanners.filter(matchesCheckOrCve);
+      skippedScanners = scanners.filter(s => !matchesCheckOrCve(s));
     }
+    const noActiveHttpService = Boolean(
+      isDeviceBasePortClosed &&
+      !fp.deviceInfo?.activeHttpOrigin &&
+      !fp.deviceInfo?.activeHttpsOrigin
+    );
+    if (noActiveHttpService) {
+      const NON_HTTP_DEVICE_CHECKS = new Set(['device-security', 'os-security']);
+      const skippedHttpChecks = activeScanners.filter(s => !NON_HTTP_DEVICE_CHECKS.has(s.name));
+      if (skippedHttpChecks.length > 0) {
+        activeScanners = activeScanners.filter(s => NON_HTTP_DEVICE_CHECKS.has(s.name));
+        skippedScanners = [...skippedScanners, ...skippedHttpChecks];
+      }
+    }
+
+    let isBareIpHttpsSniRestricted = false;
+    try {
+      const parsedTarget = new URL(initialTarget);
+      const rawHost = String(parsedTarget.hostname || '').replace(/^\[|\]$/g, '');
+      if (parsedTarget.protocol === 'https:' && net.isIP(rawHost) !== 0) {
+        let probeMarkedSni = false;
+        if (bareIpProbeSummary instanceof Map) {
+          const normInitial = String(initialTarget).replace(/\/+$/, '');
+          for (const [k, entry] of bareIpProbeSummary.entries()) {
+            if (!entry?.httpsSniRequired) continue;
+            if (k === rawHost) {
+              probeMarkedSni = true;
+              break;
+            }
+            if (
+              Array.isArray(entry.resolvedTargets) &&
+              entry.resolvedTargets.some(rt => String(rt).replace(/\/+$/, '') === normInitial)
+            ) {
+              probeMarkedSni = true;
+              break;
+            }
+          }
+        }
+        const fpFailedNoHttp =
+          siblingSchemes.includes('http:') &&
+          (!fp.summary || fp.summary === 'Unreachable or Unknown') &&
+          (!Array.isArray(fp.stack) || fp.stack.length === 0) &&
+          !fp.deviceInfo?.detected;
+        isBareIpHttpsSniRestricted = Boolean(probeMarkedSni || fpFailedNoHttp);
+      }
+    } catch {}
+
+    if (isBareIpHttpsSniRestricted) {
+      const BARE_IP_SNI_HTTPS_CHECKS = new Set(['ssl-tls', 'origin-source-ip', 'os-security', 'device-security']);
+      const skippedSniHttpChecks = activeScanners.filter(s => !BARE_IP_SNI_HTTPS_CHECKS.has(s.name));
+      if (skippedSniHttpChecks.length > 0) {
+        activeScanners = activeScanners.filter(s => BARE_IP_SNI_HTTPS_CHECKS.has(s.name));
+        skippedScanners = [...skippedScanners, ...skippedSniHttpChecks];
+      }
+      log('    🔒  Bare-IP TLS Note    : Port 443 requires SNI hostname — scoping HTTPS checks to TLS/Origin/OS (full web checks run on sibling HTTP)');
+    }
+
     fp.activeChecksCount = activeScanners.length;
     fp.skippedChecksCount = skippedScanners.length;
     fp.skippedChecks = skippedScanners.map(s => s.name);
@@ -374,6 +741,7 @@ export async function runScanner(options) {
       target: initialTarget,
       stack: fp,
       apiCommunication: fp.apiCommunication || null,
+      runtimeSca: fp.runtimeSca || null,
       activeChecksCount: activeScanners.length,
       skippedChecksCount: skippedScanners.length,
     });
@@ -398,7 +766,7 @@ export async function runScanner(options) {
 
     const normalizedInitialTarget = String(initialTarget || '').replace(/\/+$/, '');
 
-    while (depth < maxDepth && !queue.isEmpty()) {
+    while (!isDeviceBasePortClosed && !isBareIpHttpsSniRestricted && depth < maxDepth && !queue.isEmpty()) {
       emit({
         phase: 'crawl',
         message: `Crawling depth ${depth + 1}/${maxDepth}...`,
@@ -455,26 +823,69 @@ export async function runScanner(options) {
     log(`    ⚙️   Running checks on ${allDiscovered.length} pages (${targetPlanned} total executions planned)...`);
 
     const checkLimit = pLimit(3);
+    const rawCheckConcurrency = Number(checkConcurrency);
+    const effectiveCheckConcurrency = Number.isFinite(rawCheckConcurrency) && rawCheckConcurrency > 0
+      ? Math.max(1, Math.min(12, Math.floor(rawCheckConcurrency)))
+      : 8;
+    const perPageCheckLimit = pLimit(effectiveCheckConcurrency);
 
     const scannerOptions = {
       allowPrivate,
+      deviceMode: effectiveDeviceMode,
+      deviceCategory: effectiveDeviceCategory,
+      siblingSchemes,
+      noActiveHttpService,
+      ...(typeof tcpProbe === 'function' ? { tcpProbe } : {}),
+      ...(typeof portProbe === 'function' ? { portProbe } : {}),
+      ...(typeof rtspProbe === 'function' ? { rtspProbe } : {}),
+      ...(typeof udpProbe === 'function' ? { udpProbe } : {}),
+      ...(typeof tlsProbe === 'function' ? { tlsProbe } : {}),
+      ...(typeof tlsConnect === 'function' ? { tlsConnect } : {}),
+      ...(Number.isFinite(portTimeoutMs) ? { portTimeoutMs } : {}),
+      ...(Number.isFinite(probeTimeoutMs) ? { probeTimeoutMs } : {}),
+      ...(multiPort !== undefined ? { multiPort } : {}),
+      ...(fp.deviceInfo && (fp.deviceInfo.detected || isDeviceBasePortClosed) ? {
+        cachedDeviceScan: {
+          deviceProfile: fp.deviceInfo.detected ? fp.deviceInfo : null,
+          host: fp.deviceInfo.host,
+          openPorts: fp.deviceInfo.openPorts || [],
+          ...(Array.isArray(fp.deviceInfo.openServices) ? { openServices: fp.deviceInfo.openServices } : {}),
+          deviceCategory: effectiveDeviceCategory,
+          basePortClosed: isDeviceBasePortClosed,
+          noActiveHttpService,
+          isQuickFingerprint: true
+        }
+      } : {}),
       ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
       ...(activeGovernor ? { governor: activeGovernor } : {}),
       ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
+      ...(activeOastServer ? { oastServer: activeOastServer } : {}),
       targetPinStore,
     };
 
     const scanResults = await Promise.all(allDiscovered.map(page => checkLimit(async () => {
       const scannersForPage = pageScannersMap.get(page) || [];
-      const pageResults = await Promise.all(scannersForPage.map(async (scan) => {
+      const pageResults = await Promise.all(scannersForPage.map((scan) => perPageCheckLimit(async () => {
         try {
           const trackedFetch = createTrackedFetch(fetchWithRetry);
-          const res = await scan.run(page, trackedFetch, scannerOptions);
+          // When scanning a Smart TV / IoT device where base port 80 is closed, route HTTP/TLS checks
+          // to the discovered active device service origin while device-security audits all ports from page.
+          let targetForCheck = page;
+          if (isDeviceBasePortClosed && scan.name !== 'device-security') {
+            if (scan.name === 'ssl-tls' && fp.deviceInfo.activeHttpsOrigin) {
+              targetForCheck = fp.deviceInfo.activeHttpsOrigin;
+            } else if (fp.deviceInfo.activeHttpOrigin) {
+              targetForCheck = fp.deviceInfo.activeHttpOrigin;
+            } else if (fp.deviceInfo.activeHttpsOrigin) {
+              targetForCheck = fp.deviceInfo.activeHttpsOrigin;
+            }
+          }
+          const res = await scan.run(targetForCheck, trackedFetch, scannerOptions);
           const meta = scan.meta || getCheckMeta(res.name || scan.name);
           const fix = res.fix || meta?.defaultFix || undefined;
 
           const enriched = enrichEngine.enrichFinding({
-            target: page,
+            target: targetForCheck,
             checkId: scan.name,
             ...res,
             meta,
@@ -536,11 +947,38 @@ export async function runScanner(options) {
 
           return errorRes;
         }
-      }));
+      })));
       return pageResults;
     })));
 
-    return scanResults.flat();
+    const flatTargetResults = scanResults.flat();
+
+    if (loadedDeclarativeTemplates.length > 0 && typeof runDeclarativeTemplateFn === 'function') {
+      for (const tpl of loadedDeclarativeTemplates) {
+        try {
+          const trackedFetch = createTrackedFetch(fetchWithRetry);
+          const tplRes = await runDeclarativeTemplateFn(tpl, initialTarget, trackedFetch, scannerOptions);
+          const enrichedTpl = enrichEngine.enrichFinding({
+            target: initialTarget,
+            checkId: tplRes.checkId || tpl.id || 'custom-template',
+            ...tplRes,
+          }, { allowPrivate, capturedTraces: trackedFetch.getTraces() });
+          flatTargetResults.push(enrichedTpl);
+        } catch (err) {
+          const tplId = tpl?.id || 'custom-template';
+          flatTargetResults.push(enrichEngine.enrichFinding({
+            target: initialTarget,
+            checkId: tplId,
+            name: tpl?.info?.name || tplId,
+            status: 'ERROR',
+            severity: 'LOW',
+            reason: err.message
+          }, { allowPrivate }));
+        }
+      }
+    }
+
+    return flatTargetResults;
   }));
 
   const nested = await Promise.all(targetTasks);
@@ -549,6 +987,7 @@ export async function runScanner(options) {
   // ── Summary & CVE Coverage ───────────────────────────────────────────────
   const risk       = calculateRisk(allResults);
   const apiCommunication = mergeApiCommunication(stacks, allResults);
+  const runtimeSca = mergeRuntimeSca(stacks, allResults);
 
   for (const [targetKey, fp] of Object.entries(stacks)) {
     if (!fp || typeof fp !== 'object') continue;
@@ -556,6 +995,10 @@ export async function runScanner(options) {
     const mergedForTarget = mergeApiCommunication({ [targetKey]: fp }, targetFindings);
     if (mergedForTarget) {
       fp.apiCommunication = mergedForTarget;
+    }
+    const mergedScaForTarget = mergeRuntimeSca({ [targetKey]: fp }, targetFindings);
+    if (mergedScaForTarget) {
+      fp.runtimeSca = mergedScaForTarget;
     }
   }
 
@@ -576,6 +1019,7 @@ export async function runScanner(options) {
 
   let cveCoverage = null;
   try {
+    const { auditCveCoverage } = await import('./core/cve-audit.js');
     const cveAudit = await auditCveCoverage({ scanners, techTags: Array.from(detectedTagSet) });
     cveCoverage = summarizeCveAudit(cveAudit);
   } catch {}
@@ -583,7 +1027,14 @@ export async function runScanner(options) {
   let aiSummary = null;
   let apiAnalysis = null;
   if (aiFix) {
-    const advisorPool = llmPool || new LlmPool({ autoDiscoverEnv: true });
+    const [
+      { generateFixSolution, summarizeScanForAudience, analyzeApiCommunication },
+      llmMod
+    ] = await Promise.all([
+      import('./core/ai-advisor.js'),
+      llmPool ? Promise.resolve(null) : import('./core/llmpool.js')
+    ]);
+    const advisorPool = llmPool || new llmMod.LlmPool({ autoDiscoverEnv: true });
     const aiLimit = pLimit(4);
     await Promise.all(
       allResults
@@ -631,9 +1082,36 @@ export async function runScanner(options) {
   log(`🚨 Vulnerable  : ${vulns.length}`);
   log(`⚠️  Suspicious  : ${suspicious.length}`);
   log(`📋 Total checks: ${grouped.length} unique checks (${allResults.length} page executions)`);
+  for (const [tKey, fp] of Object.entries(stacks)) {
+    const dp = fp?.deviceInfo;
+    if (dp?.detected) {
+      const devLine = [
+        dp.categoryLabel || dp.category || 'Network Device',
+        dp.vendor && dp.vendor !== 'Unknown' ? `Vendor: ${dp.vendor}` : null,
+        dp.modelName ? `Model: ${dp.modelName}` : null,
+        dp.os ? `OS: ${dp.os}` : null,
+        dp.macAddress ? `MAC: ${dp.macAddress}` : null
+      ].filter(Boolean).join(' · ');
+      log(`📺 Device (${tKey}): ${devLine}`);
+      if (Array.isArray(dp.openPorts) && dp.openPorts.length > 0) {
+        log(`🔌 Open Ports  : ${dp.openPorts.join(', ')}`);
+      }
+    }
+  }
   if (cveCoverage) {
     log(`🛡️  CVE Coverage: ${cveCoverage.coveredCount}/${cveCoverage.totalAdvisories} advisories (${cveCoverage.coveragePercent}%), missing=${cveCoverage.missingCount}`);
   }
+  let scanDiff = null;
+  if (previousScan) {
+    if (!historyMod) historyMod = await import('./core/history.js');
+    scanDiff = historyMod.diffScans(previousScan, allResults);
+  }
+  const executiveResume = buildExecutiveResume(allResults, stacks, {
+    diff: scanDiff,
+    cveCoverage,
+    bareIpProbeSummary,
+  });
+  executiveResume.cliLines.forEach(line => log(line));
   if (aiSummary) {
     const summaryMode = aiSummary.mode === 'ai' ? `AI (${aiSummary.provider}/${aiSummary.model})` : 'Playbook';
     log(`🧠  AI Advisor (${summaryMode}, ${aiSummary.audience}): ${aiSummary.headline}`);
@@ -659,6 +1137,14 @@ export async function runScanner(options) {
       const pages = Array.isArray(v.pages) && v.pages.length ? v.pages : [v.target];
       log(`    Pages (${pages.length}):`);
       pages.forEach(p => log(`      - ${p}`));
+      if ((v.checkId === 'device-security' || v.name === 'device-security') && Array.isArray(v.files) && v.files.length > 0) {
+        log(`    🔎 Device Sub-Findings (${v.files.length}):`);
+        v.files.forEach(f => {
+          const sevLabel = f.severity || v.severity || 'MEDIUM';
+          const portLabel = f.port ? ` (port ${f.port})` : '';
+          log(`      - [${sevLabel}] ${f.name || f.matchedSignal || 'Device finding'}${portLabel}`);
+        });
+      }
       if (v.reproduction?.curl || v.reproduction?.steps?.[0]) {
         log(`    🔁 Reproduce : ${v.reproduction.steps?.[0] || v.reproduction.summary}`);
         if (v.reproduction.curl) log(`    📋 Command   : ${v.reproduction.curl}`);
@@ -680,6 +1166,14 @@ export async function runScanner(options) {
       const pages = Array.isArray(s.pages) && s.pages.length ? s.pages : [s.target];
       log(`    Pages (${pages.length}):`);
       pages.forEach(p => log(`      - ${p}`));
+      if ((s.checkId === 'device-security' || s.name === 'device-security') && Array.isArray(s.files) && s.files.length > 0) {
+        log(`    🔎 Device Sub-Findings (${s.files.length}):`);
+        s.files.forEach(f => {
+          const sevLabel = f.severity || s.severity || 'MEDIUM';
+          const portLabel = f.port ? ` (port ${f.port})` : '';
+          log(`      - [${sevLabel}] ${f.name || f.matchedSignal || 'Device finding'}${portLabel}`);
+        });
+      }
       if (s.reproduction?.curl || s.reproduction?.steps?.[0]) {
         log(`    🔁 Reproduce : ${s.reproduction.steps?.[0] || s.reproduction.summary}`);
         if (s.reproduction.curl) log(`    📋 Command   : ${s.reproduction.curl}`);
@@ -697,10 +1191,13 @@ export async function runScanner(options) {
   let autoReports = null;
   const reportExtra = {
     cveCoverage,
+    executiveResume,
     ...(apiCommunication ? { apiCommunication } : {}),
+    ...(runtimeSca ? { runtimeSca } : {}),
   };
   if (!noHistory) {
-    historyFile = saveHistory(validatedTargets, allResults, risk, stacks);
+    if (!historyMod) historyMod = await import('./core/history.js');
+    historyFile = historyMod.saveHistory(validatedTargets, allResults, risk, stacks);
     autoReports = saveAutoReports(validatedTargets, allResults, risk, stacks, reportExtra);
     log(`\n📁  History saved     → ${historyFile}`);
     log(`🌐  HTML report saved → ${autoReports.htmlPath}`);
@@ -708,9 +1205,8 @@ export async function runScanner(options) {
   }
 
   // ── Diff output ───────────────────────────────────────────────────────────
-  if (diff && previousScan) {
-    const d = diffScans(previousScan, allResults);
-    printDiff(d, log);
+  if (diff && scanDiff) {
+    printDiff(scanDiff, log);
   }
 
   // ── Graph Ingestion & Agentic Loop ───────────────────────────────────────
@@ -738,11 +1234,26 @@ export async function runScanner(options) {
         message: 'Running Agentic Verification loop...',
         percent: 97,
       });
-      const activeGraph = graphStore || (ownedGraphStore = new GraphStore({ dbPath: ':memory:' }));
-      const activeTraffic = trafficStore || (ownedTrafficStore = new TrafficStore({ dbPath: ':memory:' }));
-      const activeEvidence = evidenceStore || (ownedEvidenceStore = new EvidenceStore({ dbPath: ':memory:', trafficStore: activeTraffic }));
-      const activeSkills = skillRegistry || new SkillRegistry();
-      const activePool = llmPool || new LlmPool({ autoDiscoverEnv: true });
+      const [
+        graphMod,
+        trafficMod,
+        evidenceMod,
+        skillsMod,
+        llmMod,
+        agentMod
+      ] = await Promise.all([
+        graphStore ? Promise.resolve(null) : import('./core/graph-store.js'),
+        trafficStore ? Promise.resolve(null) : import('./core/traffic.js'),
+        evidenceStore ? Promise.resolve(null) : import('./core/evidence.js'),
+        skillRegistry ? Promise.resolve(null) : import('./core/skills.js'),
+        llmPool ? Promise.resolve(null) : import('./core/llmpool.js'),
+        import('./core/agent-engine.js'),
+      ]);
+      const activeGraph = graphStore || (ownedGraphStore = new graphMod.GraphStore({ dbPath: ':memory:' }));
+      const activeTraffic = trafficStore || (ownedTrafficStore = new trafficMod.TrafficStore({ dbPath: ':memory:' }));
+      const activeEvidence = evidenceStore || (ownedEvidenceStore = new evidenceMod.EvidenceStore({ dbPath: ':memory:', trafficStore: activeTraffic }));
+      const activeSkills = skillRegistry || new skillsMod.SkillRegistry();
+      const activePool = llmPool || new llmMod.LlmPool({ autoDiscoverEnv: true });
       const primaryTarget = validatedTargets[0];
 
       const agentTask = activeGraph.createTask({
@@ -756,7 +1267,7 @@ export async function runScanner(options) {
         allowPrivate,
       });
 
-      const engine = new AgentEngine({
+      const engine = new agentMod.AgentEngine({
         graphStore: activeGraph,
         llmPool: activePool,
         trafficStore: activeTraffic,
@@ -786,6 +1297,7 @@ export async function runScanner(options) {
 
   if (json) {
     const report = generateReport(allResults, risk, stacks, reportExtra);
+    if (runtimeSca && !report.runtimeSca) report.runtimeSca = runtimeSca;
     const file   = saveReport(report, stem);
     log(`\n💾  JSON report → ${file}`);
   }
@@ -806,6 +1318,7 @@ export async function runScanner(options) {
       risk,
       stacks,
       cveCoverage,
+      executiveResume,
       ...(apiCommunication ? { apiCommunication } : {}),
     });
     fs.writeFileSync(mdName, mdContent, 'utf8');
@@ -850,7 +1363,8 @@ export async function runScanner(options) {
 
   // ── Webhook ───────────────────────────────────────────────────────────────
   if (webhook) {
-    await sendWebhook(webhook, allResults, risk, validatedTargets);
+    if (!notifyMod) notifyMod = await import('./core/notify.js');
+    await notifyMod.sendWebhook(webhook, allResults, risk, validatedTargets);
   }
 
   emit({
@@ -862,10 +1376,13 @@ export async function runScanner(options) {
     vulnerable: vulns.length,
     suspicious: suspicious.length,
     ...(apiCommunication ? { apiCommunication } : {}),
+    ...(runtimeSca ? { runtimeSca } : {}),
     ...(cveCoverage ? { cveCoverage } : {}),
   });
 
   log(bar);
+
+  const authSessionSummary = authManager ? authManager.getRecordedSession({ includeSecrets: false }) : null;
 
   // ── CI/CD exit codes ──────────────────────────────────────────────────────
   // 0 = all clear | 1 = HIGH risk | 2 = VULNERABLE or CRITICAL
@@ -883,7 +1400,13 @@ export async function runScanner(options) {
       risk,
       historyFile,
       stacks,
+      executiveResume,
+      ...(bareIpProbeSummary && bareIpProbeSummary.size > 0
+        ? { bareIpProbeSummary: Object.fromEntries(bareIpProbeSummary) }
+        : {}),
+      ...(authSessionSummary ? { authSession: authSessionSummary } : {}),
       ...(apiCommunication ? { apiCommunication } : {}),
+      ...(runtimeSca ? { runtimeSca } : {}),
       ...(apiAnalysis ? { apiAnalysis } : {}),
       ...(cveCoverage ? { cveCoverage } : {}),
       ...(markdownFile ? { markdownFile } : {}),
@@ -896,4 +1419,14 @@ export async function runScanner(options) {
   }
 
   return allResults;
+  } finally {
+    if (ownedOastServer) {
+      try {
+        await ownedOastServer.stop();
+      } catch {}
+    }
+    try {
+      governedFetch.destroyAgents?.();
+    } catch {}
+  }
 }

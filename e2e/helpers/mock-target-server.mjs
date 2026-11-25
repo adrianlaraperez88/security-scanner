@@ -416,6 +416,9 @@ export function buildStackPresetConfig(preset, variant = 'vulnerable') {
         // Open redirect via UriComponentsBuilder (CVE-2024-22262)
         const targetRedirect = reqInfo.searchParams.get('url') || reqInfo.searchParams.get('redirect');
         if (targetRedirect) {
+          if (/[\r\n\u0000-\u001f\u007f]/.test(targetRedirect)) {
+            return { status: 400, body: 'Bad Request' };
+          }
           return { status: 302, headers: { Location: targetRedirect }, body: '' };
         }
         if (p === '/') {
@@ -719,7 +722,7 @@ export function buildStackPresetConfig(preset, variant = 'vulnerable') {
       return {
         defaultHeaders: {
           ...HARDENED_SECURITY_HEADERS,
-          'X-Powered-By': 'PHP/8.4.5'
+          'X-Powered-By': 'PHP/8.4.28'
         },
         defaultResponse: { status: 404, body: 'Not Found' },
         routes: {

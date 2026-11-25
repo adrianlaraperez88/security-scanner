@@ -468,7 +468,7 @@ export class LlmPool {
 
   /**
    * Configures a task's LLM profile chain and worker round-robin rotation flag.
-   * Omitting `llmRotate` on update preserves its existing boolean value (matching ARTEX PUT /api/tasks/{id}/llm).
+   * Omitting `llmRotate` on update preserves its existing boolean value (matching SecScan PUT /api/tasks/{id}/llm).
    *
    * @param {string} taskId
    * @param {{ profileIds?: string[], llmRotate?: boolean }} [options]
@@ -580,7 +580,7 @@ export class LlmPool {
   }
 
   /**
-   * Selects the profile for a task role/intent according to ARTEX worker round-robin rotation rules:
+   * Selects the profile for a task role/intent according to SecScan worker round-robin rotation rules:
    * - When `llmRotate: true` and `role === 'worker'`, assigns successive worker intents A, B, A, B
    *   across the task's `profileIds` regardless of completion order.
    * - Pins each `intentId` to its assigned profile; if that profile's circuit breaker is open/excluded,

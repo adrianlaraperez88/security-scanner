@@ -76,7 +76,7 @@ function resolveShownLimit(expandedParents, groupId, parentId) {
 
 /**
  * Top-down cascading sibling fold (`FOLD_LIMIT = 20` per kind under each parent).
- * Supports both GraphStore edges (`from` parent -> `to` child) and ARTEX edges (`src` child -> `dst` parent).
+ * Supports both GraphStore edges (`from` parent -> `to` child) and SecScan edges (`src` child -> `dst` parent).
  */
 export function computeVisible(nodes = [], edges = [], expandedParents = new Map()) {
   const safeNodes = Array.isArray(nodes) ? nodes : [];
@@ -113,7 +113,7 @@ export function computeVisible(nodes = [], edges = [], expandedParents = new Map
       const childId = String(e.to ?? e.toAssetId ?? '');
       linkParentChild(parentId, childId);
     } else if (e.src !== undefined && e.dst !== undefined) {
-      // ARTEX convention: src is child, dst is parent
+      // SecScan convention: src is child, dst is parent
       linkParentChild(String(e.dst), String(e.src));
     }
   }

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font: 13px system-ui, sans-serif; width: 340px; margin: 0; padding: 12px; background: #0f172a; color: #f8fafc; }
+    h1 { font-size: 14px; margin: 0 0 10px; color: #38bdf8; }
+    label { display: block; margin: 8px 0 2px; color: #cbd5e1; font-size: 12px; }
+    input[type="text"], input[type="password"] { width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #334155; background: #1e293b; color: #f8fafc; }
+    .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    button { margin-top: 10px; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: 600; }
+    #start { background: #2563eb; color: #fff; border: 0; }
+    #stop, #save, #flush { background: #1e293b; color: #e2e8f0; border: 1px solid #475569; }
+    #status { margin-top: 10px; line-height: 1.5; color: #e2e8f0; white-space: pre-line; font-family: monospace; font-size: 12px; }
+    #error { color: #f87171; white-space: pre-wrap; margin-top: 6px; font-size: 12px; }
+    .muted { color: #94a3b8; font-size: 11px; margin-top: 10px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <h1>🛡️ Security Scanner Traffic Capture</h1>
+
+  <label for="serverUrl">Scanner Server URL</label>
+  <input id="serverUrl" type="text" placeholder="http://127.0.0.1:4321" value="http://127.0.0.1:4321" />
+
+  <label for="token">Optional Auth Token</label>
+  <input id="token" type="password" placeholder="Optional Bearer token" />
+
+  <div class="row">
+    <input id="passiveScan" type="checkbox" checked />
+    <label for="passiveScan" style="margin:0;">Run Live Passive Security Checks on Capture</label>
+  </div>
+
+  <div>
+    <button id="save">Save</button>
+    <button id="start">● Start Capture</button>
+    <button id="stop">■ Stop</button>
+    <button id="flush">Flush</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="error"></div>
+
+  <p class="muted">
+    Attaches via Chrome DevTools Protocol to the active tab and streams HTTP/XHR/GraphQL
+    exchanges into Tab 5 (Traffic &amp; Burp Workbench) for Repeater, Intruder §, Autorize, and S1 Evidence.
+  </p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

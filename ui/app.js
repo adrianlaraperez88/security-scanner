@@ -43,8 +43,40 @@ const state = {
     selectedTaskId: '',
     dslCtrl: null,
     lastDsl: ''
-  }
+  },
+  loginSequence: createDefaultLoginSequence(),
+  savedSequences: [],
+  systemVariables: [],
+  selectedLsrStepIndex: -1,
+  lastInspectedPage: null,
+  lastLsrPlayResult: null
 };
+
+function createDefaultLoginSequence() {
+  return {
+    sequenceId: '',
+    name: 'WrapperSequence.lsr',
+    updatedAt: new Date().toISOString(),
+    targetUrl: '',
+    secrets: [],
+    otpConfig: {
+      enabled: false,
+      secret: '',
+      digits: 6,
+      period: 30,
+      algorithm: 'SHA1',
+      inputSelector: 'auto'
+    },
+    actions: [],
+    restrictions: ['/logout', '/signout', '/logoff'],
+    sessionDetection: {
+      statusCodes: [401, 403],
+      redirectPattern: '/login',
+      loggedOutPattern: '',
+      loggedInPattern: ''
+    }
+  };
+}
 
 const PRESET_ICONS = {
   smart: '🧠',
@@ -53,6 +85,7 @@ const PRESET_ICONS = {
   modern: '🤖',
   cms: '🛍️',
   api: '🔌',
+  device: '📺',
   ops: '🩺'
 };
 
@@ -65,6 +98,266 @@ export function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function isValidIpLiteral(value) {
+  const str = String(value || '').trim();
+  if (!str || /\s/.test(str)) return false;
+  const v4 = str.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    return v4.slice(1).every(octet => {
+      if (!/^(0|[1-9]\d{0,2})$/.test(octet)) return false;
+      const n = Number(octet);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  if (str.includes(':') && !str.includes('[') && !str.includes(']')) {
+    const zoneMatch = str.match(/^([^%]+)(?:%([A-Za-z0-9_.-]+))?$/);
+    if (!zoneMatch) return false;
+    try {
+      const u = new URL(`http://[${zoneMatch[1]}]`);
+      return u.hostname.startsWith('[') && u.hostname.endsWith(']');
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function normalizeTargetScheme(rawTarget) {
+  if (typeof rawTarget !== 'string') return '';
+  let s = rawTarget.trim();
+  if (!s) return '';
+
+  let prev;
+  do {
+    prev = s;
+    s = s.trim();
+    s = s.replace(/^['"]+|['"]+$/g, '').trim();
+    const schemeMatch = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)([\s\S]*)$/);
+    if (schemeMatch) {
+      const [, scheme, rest] = schemeMatch;
+      const tailRe = /[?#]/.test(rest) ? /\\+$/ : /[\\/]+$/;
+      s = `${scheme}${rest.replace(tailRe, '')}`;
+    } else {
+      const tailRe = /[?#]/.test(s) ? /\\+$/ : /[\\/]+$/;
+      s = s.replace(tailRe, '');
+    }
+  } while (s !== prev);
+
+  if (!s) return '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s) || /^(?:javascript|data|vbscript|file):/i.test(s)) {
+    return s;
+  }
+  if (/\s/.test(s)) return s;
+
+  const sepIdx = s.search(/[/?#]/);
+  const hostCandidate = sepIdx === -1 ? s : s.slice(0, sepIdx);
+  const tailCandidate = sepIdx === -1 ? '' : s.slice(sepIdx);
+  if (isValidIpLiteral(hostCandidate) && hostCandidate.includes(':')) {
+    return `http://[${hostCandidate}]${tailCandidate}`;
+  }
+
+  const v6Match = s.match(/^\[([^\]]+)\](?::(\d+))?(?:[/?#].*)?$/);
+  if (v6Match && isValidIpLiteral(v6Match[1]) && v6Match[1].includes(':')) {
+    const port = v6Match[2] || '';
+    const scheme = port === '443' || port === '8443' ? 'https://' : 'http://';
+    return `${scheme}${s}`;
+  }
+
+  const v4Match = s.match(/^(\d{1,3}(?:\.\d{1,3}){3})\.?(?::(\d+))?(?:[/?#].*)?$/);
+  if (v4Match && isValidIpLiteral(v4Match[1])) {
+    const port = v4Match[2] || '';
+    const scheme = port === '443' || port === '8443' ? 'https://' : 'http://';
+    return `${scheme}${s}`;
+  }
+
+  const localMatch = s.match(/^(?:[a-zA-Z0-9-]+\.)*localhost\.?(?::(\d+))?(?:[/?#].*)?$/i);
+  if (localMatch) {
+    const port = localMatch[1] || '';
+    const scheme = port === '443' || port === '8443' ? 'https://' : 'http://';
+    return `${scheme}${s}`;
+  }
+
+  const domPortMatch = s.match(/^[^/?#:]+:(\d+)(?:[/?#]|$)/);
+  const domScheme = domPortMatch && domPortMatch[1] === '80' ? 'http://' : 'https://';
+  return `${domScheme}${s}`;
+}
+
+function stripOuterTargetInput(rawTarget) {
+  if (typeof rawTarget !== 'string') return '';
+  let s = rawTarget.trim();
+  if (!s) return '';
+  let prev;
+  do {
+    prev = s;
+    s = s.trim();
+    s = s.replace(/^['"]+|['"]+$/g, '').trim();
+    const schemeMatch = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)([\s\S]*)$/);
+    if (schemeMatch) {
+      const [, scheme, rest] = schemeMatch;
+      const tailRe = /[?#]/.test(rest) ? /\\+$/ : /[\\/]+$/;
+      s = `${scheme}${rest.replace(tailRe, '')}`;
+    } else {
+      const tailRe = /[?#]/.test(s) ? /\\+$/ : /[\\/]+$/;
+      s = s.replace(tailRe, '');
+    }
+  } while (s !== prev);
+  return s;
+}
+
+export function isBareIpInput(rawTarget) {
+  const s = stripOuterTargetInput(rawTarget);
+  if (!s) return false;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s) || /^(?:javascript|data|vbscript|file):/i.test(s)) {
+    return false;
+  }
+  if (/\s/.test(s)) return false;
+
+  const sepIdx = s.search(/[/?#]/);
+  const hostCandidate = sepIdx === -1 ? s : s.slice(0, sepIdx);
+  if (isValidIpLiteral(hostCandidate) && hostCandidate.includes(':')) {
+    return true;
+  }
+
+  const v6Match = s.match(/^\[([^\]]+)\](?::(\d+))?(?:[/?#].*)?$/);
+  if (v6Match && isValidIpLiteral(v6Match[1]) && v6Match[1].includes(':')) {
+    return !v6Match[2];
+  }
+
+  const v4Match = s.match(/^(\d{1,3}(?:\.\d{1,3}){3})\.?(?::(\d+))?(?:[/?#].*)?$/);
+  if (v4Match && isValidIpLiteral(v4Match[1])) {
+    return !v4Match[2];
+  }
+
+  return false;
+}
+
+export function preserveBareIpOrNormalize(rawTarget) {
+  const s = stripOuterTargetInput(rawTarget);
+  if (isBareIpInput(s)) return s;
+  return normalizeTargetScheme(rawTarget);
+}
+
+export function validateInputUrl(val) {
+  if (typeof document === 'undefined') return true;
+  const banner = document.getElementById('url-validation-banner');
+  const bannerText = document.getElementById('url-validation-text');
+  const allowPrivateEl = document.getElementById('allow-private-toggle');
+  if (!banner || !bannerText) return true;
+
+  const trimmed = String(val || '').trim();
+  if (!trimmed) {
+    banner.classList.add('hidden');
+    return true;
+  }
+
+  const candidate = normalizeTargetScheme(trimmed) || trimmed;
+  const allowPrivate = Boolean(allowPrivateEl?.checked);
+  const METADATA_PATTERN = /^(https?:\/\/)?(169\.254\.|100\.100\.100\.200\b|metadata\.google\.internal\b|metadata\.goog\b|metadata\b|instance-data\b|0\.0\.0\.0\b)/i;
+  if (METADATA_PATTERN.test(candidate)) {
+    banner.className = 'validation-banner';
+    bannerText.textContent =
+      '⚠️ SSRF Protection: Cloud metadata and reserved link-local addresses are always blocked.';
+    banner.classList.remove('hidden');
+    return false;
+  }
+
+  const PRIVATE_PATTERN = /^(https?:\/\/)?(localhost\b|[^/?#]+\.localhost\b|127\.|0\.0\.0\.0|::1|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|([^/?#]+\.)?(local|internal)(?::\d+)?(?:[/?#]|$))/i;
+  if (!allowPrivate && PRIVATE_PATTERN.test(candidate)) {
+    banner.className = 'validation-banner';
+    bannerText.textContent =
+      '⚠️ SSRF Protection: Localhost and private network IP addresses cannot be scanned unless "Allow Authorized Internal / Private Targets" is enabled.';
+    banner.classList.remove('hidden');
+    return false;
+  }
+
+  banner.classList.add('hidden');
+  return true;
+}
+
+export function normalizeStacksList(stacks) {
+  if (!stacks || typeof stacks !== 'object') return [];
+  if (Array.isArray(stacks)) {
+    return stacks.filter(s => s && typeof s === 'object');
+  }
+  if (
+    typeof stacks.primary === 'string' ||
+    Array.isArray(stacks.stack) ||
+    Array.isArray(stacks.detectedTags) ||
+    (stacks.deviceInfo && typeof stacks.deviceInfo === 'object')
+  ) {
+    return [stacks];
+  }
+  return Object.entries(stacks)
+    .filter(([, fp]) => fp && typeof fp === 'object')
+    .map(([target, fp]) => ({ target, ...fp }));
+}
+
+export function renderDeviceInfoHtml(deviceInfo) {
+  if (!deviceInfo || typeof deviceInfo !== 'object') return '';
+  const hasPorts = Array.isArray(deviceInfo.openPorts) && deviceInfo.openPorts.length > 0;
+  const hasServices = Array.isArray(deviceInfo.openServices) && deviceInfo.openServices.length > 0;
+  if (!deviceInfo.detected && !deviceInfo.category && !hasPorts && !hasServices) {
+    return '';
+  }
+
+  const categoryText = deviceInfo.categoryLabel || deviceInfo.category || 'Network Device';
+  const titleText = deviceInfo.deviceName || deviceInfo.deviceType || '';
+  const metaItems = [];
+  if (deviceInfo.vendor && deviceInfo.vendor !== 'Unknown') {
+    metaItems.push(`<span class="device-meta-item"><strong>Vendor:</strong> ${escapeHtml(deviceInfo.vendor)}</span>`);
+  }
+  if (deviceInfo.modelName) {
+    metaItems.push(`<span class="device-meta-item"><strong>Model:</strong> ${escapeHtml(deviceInfo.modelName)}</span>`);
+  }
+  const osLabel = deviceInfo.os || deviceInfo.osFamily || '';
+  if (osLabel) {
+    metaItems.push(`<span class="device-meta-item"><strong>OS:</strong> ${escapeHtml(osLabel)}</span>`);
+  }
+  if (deviceInfo.macAddress) {
+    metaItems.push(`<span class="device-meta-item"><strong>MAC:</strong> <code>${escapeHtml(deviceInfo.macAddress)}</code></span>`);
+  }
+  if (deviceInfo.firmwareVersion) {
+    metaItems.push(`<span class="device-meta-item"><strong>Firmware:</strong> <code>${escapeHtml(deviceInfo.firmwareVersion)}</code></span>`);
+  }
+  if (deviceInfo.activeHttpOrigin) {
+    metaItems.push(`<span class="device-meta-item"><strong>HTTP Origin:</strong> <code>${escapeHtml(deviceInfo.activeHttpOrigin)}</code></span>`);
+  }
+  if (deviceInfo.activeHttpsOrigin) {
+    metaItems.push(`<span class="device-meta-item"><strong>HTTPS Origin:</strong> <code>${escapeHtml(deviceInfo.activeHttpsOrigin)}</code></span>`);
+  }
+
+  let portsHtml = '';
+  if (hasServices) {
+    const chips = deviceInfo.openServices.slice(0, 16).map(s => {
+      const scheme = String(s?.scheme || 'tcp').toUpperCase();
+      const label = s?.label || s?.service || '';
+      return `<span class="device-port-chip"><code>${escapeHtml(s?.port)}/${escapeHtml(scheme)}</code>${label ? ` ${escapeHtml(label)}` : ''}</span>`;
+    }).join('');
+    portsHtml = `<div class="device-ports-list">${chips}</div>`;
+  } else if (hasPorts) {
+    const chips = deviceInfo.openPorts.slice(0, 16).map(p =>
+      `<span class="device-port-chip"><code>${escapeHtml(p)}/TCP</code></span>`
+    ).join('');
+    portsHtml = `<div class="device-ports-list">${chips}</div>`;
+  }
+
+  const baseClosedNote = deviceInfo.basePortClosed
+    ? '<div class="form-hint">Standard HTTP(S) 80/443 closed — device checks routed to active device ports.</div>'
+    : '';
+
+  return `
+    <div class="device-info-card">
+      <div class="device-info-header">
+        <span class="device-cat-badge">📺 ${escapeHtml(categoryText)}</span>
+        ${titleText ? `<span class="device-info-title">${escapeHtml(titleText)}</span>` : ''}
+      </div>
+      ${metaItems.length > 0 ? `<div class="device-meta-grid">${metaItems.join('')}</div>` : ''}
+      ${portsHtml}
+      ${baseClosedNote}
+    </div>
+  `;
 }
 
 function showInlineBanner(elementId, message, isError = true) {
@@ -160,6 +453,7 @@ if (typeof document !== 'undefined') {
     initNavigation();
     initSystemDoctorModal();
     initNewScanForm();
+    initLoginSequenceRecorder();
     initResultsToolbar();
     initEvidenceDrawer();
     initDualGraphTab();
@@ -168,6 +462,8 @@ if (typeof document !== 'undefined') {
 
     loadMeta();
     loadHistory();
+    loadSystemVariables();
+    loadSavedLoginSequences();
   });
 }
 
@@ -291,6 +587,7 @@ async function loadMeta() {
     renderCatalogGrid();
   } catch (err) {
     console.warn('Could not load /api/meta:', err.message);
+    renderPresetCards();
   }
 }
 
@@ -578,10 +875,8 @@ async function runDoctorTargetDiagnose() {
     input.focus();
     return;
   }
-  if (!/^https?:\/\//i.test(target) && target.includes('.')) {
-    target = `https://${target}`;
-    input.value = target;
-  }
+  target = normalizeTargetScheme(target);
+  input.value = target;
 
   const allowPrivate = Boolean(allowPrivateEl?.checked);
   if (btn) {
@@ -646,13 +941,48 @@ function initNewScanForm() {
   const techBanner = document.getElementById('tech-detect-banner');
   const btnCloseDetect = document.getElementById('btn-close-tech-detect');
   const btnApplyProfile = document.getElementById('btn-apply-recommended-profile');
+  const btnGetRealIp = document.getElementById('get-real-ip-btn');
+  const btnAdvGetRealIp = document.getElementById('adv-get-real-ip-btn');
+  const realIpSpinner = document.getElementById('real-ip-spinner');
+  const realIpBtnText = document.getElementById('real-ip-btn-text');
+  const realIpBanner = document.getElementById('real-ip-banner');
+  const btnCloseRealIp = document.getElementById('real-ip-close-btn');
   const allowPrivateEl = document.getElementById('allow-private-toggle');
+  const authUsernameEl = document.getElementById('adv-auth-username');
+  const authPasswordEl = document.getElementById('adv-auth-password');
+  const authLoginUrlEl = document.getElementById('adv-auth-login-url');
+  const authTypeEl = document.getElementById('adv-auth-type');
+  const recordedSessionIdEl = document.getElementById('adv-recorded-session-id');
+  const btnRecordLogin = document.getElementById('btn-test-record-login');
+  const btnDiscoverOpenApi = document.getElementById('btn-discover-openapi');
+  const recordedSessionBanner = document.getElementById('recorded-session-banner');
+  const btnCloseRecordedSession = document.getElementById('recorded-session-close-btn');
 
   if (btnCloseDetect && techBanner) {
     btnCloseDetect.addEventListener('click', () => {
       techBanner.classList.add('hidden');
     });
   }
+
+  if (btnCloseRealIp && realIpBanner) {
+    btnCloseRealIp.addEventListener('click', () => {
+      realIpBanner.classList.add('hidden');
+    });
+  }
+
+  if (btnCloseRecordedSession && recordedSessionBanner) {
+    btnCloseRecordedSession.addEventListener('click', () => {
+      recordedSessionBanner.classList.add('hidden');
+    });
+  }
+
+  [authUsernameEl, authPasswordEl, authLoginUrlEl].forEach(el => {
+    if (el && recordedSessionIdEl) {
+      el.addEventListener('input', () => {
+        recordedSessionIdEl.value = '';
+      });
+    }
+  });
 
   if (btnApplyProfile) {
     btnApplyProfile.addEventListener('click', () => {
@@ -666,9 +996,9 @@ function initNewScanForm() {
 
   urlInput.addEventListener('blur', () => {
     let val = urlInput.value.trim();
-    if (val && !/^https?:\/\//i.test(val) && val.includes('.')) {
-      urlInput.value = 'https://' + val;
-      val = urlInput.value;
+    if (val) {
+      val = preserveBareIpOrNormalize(val);
+      urlInput.value = val;
     }
     validateInputUrl(val);
   });
@@ -683,33 +1013,6 @@ function initNewScanForm() {
     });
   }
 
-  function validateInputUrl(val) {
-    if (!val) {
-      banner.classList.add('hidden');
-      return true;
-    }
-
-    const allowPrivate = Boolean(allowPrivateEl?.checked);
-    const METADATA_PATTERN = /^(https?:\/\/)?(169\.254\.|100\.100\.100\.200\b|metadata\.google\.internal\b|metadata\.goog\b|metadata\b|instance-data\b|0\.0\.0\.0\b)/i;
-    if (METADATA_PATTERN.test(val)) {
-      bannerText.textContent =
-        '⚠️ SSRF Protection: Cloud metadata and reserved link-local addresses are always blocked.';
-      banner.classList.remove('hidden');
-      return false;
-    }
-
-    const PRIVATE_PATTERN = /^(https?:\/\/)?(localhost|127\.|0\.0\.0\.0|::1|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i;
-    if (!allowPrivate && PRIVATE_PATTERN.test(val)) {
-      bannerText.textContent =
-        '⚠️ SSRF Protection: Localhost and private network IP addresses cannot be scanned unless "Allow Authorized Internal / Private Targets" is enabled.';
-      banner.classList.remove('hidden');
-      return false;
-    }
-
-    banner.classList.add('hidden');
-    return true;
-  }
-
   if (btnDetect) {
     btnDetect.addEventListener('click', async () => {
       let target = urlInput.value.trim();
@@ -718,10 +1021,8 @@ function initNewScanForm() {
         return;
       }
 
-      if (!/^https?:\/\//i.test(target) && target.includes('.')) {
-        target = 'https://' + target;
-        urlInput.value = target;
-      }
+      target = preserveBareIpOrNormalize(target);
+      urlInput.value = target;
 
       if (!validateInputUrl(target)) {
         return;
@@ -730,13 +1031,21 @@ function initNewScanForm() {
       const auth = document.getElementById('adv-auth')?.value.trim() || null;
       const timeout = parseInt(document.getElementById('adv-timeout')?.value, 10) || 10000;
       const allowPrivate = Boolean(allowPrivateEl?.checked);
+      const deviceMode = state.selectedPreset === 'device';
+      const deviceCategory = deviceMode ? (document.getElementById('opt-device-category')?.value || 'all') : 'all';
 
       btnDetect.disabled = true;
       if (detectSpinner) detectSpinner.classList.remove('hidden');
       if (detectBtnText) detectBtnText.textContent = 'Detecting...';
 
       try {
-        const data = await apiPost('/api/fingerprint', { target, auth, timeout, allowPrivate });
+        const data = await apiPost('/api/fingerprint', {
+          target,
+          auth,
+          timeout,
+          allowPrivate,
+          ...(deviceMode ? { deviceMode: true, deviceCategory } : {})
+        });
         renderTechDetectPreview(data);
       } catch (err) {
         if (bannerText) bannerText.textContent = `Tech detection failed: ${err.message}`;
@@ -749,17 +1058,188 @@ function initNewScanForm() {
     });
   }
 
+  async function handleRealIpDiscovery() {
+    let target = urlInput.value.trim();
+    if (!target) {
+      urlInput.focus();
+      return;
+    }
+
+    target = preserveBareIpOrNormalize(target);
+    urlInput.value = target;
+
+    if (!validateInputUrl(target)) {
+      return;
+    }
+
+    const allowPrivate = Boolean(allowPrivateEl?.checked);
+
+    if (btnGetRealIp) btnGetRealIp.disabled = true;
+    if (btnAdvGetRealIp) {
+      btnAdvGetRealIp.disabled = true;
+      btnAdvGetRealIp.textContent = '🌐 Resolving Real IP...';
+    }
+    if (realIpSpinner) realIpSpinner.classList.remove('hidden');
+    if (realIpBtnText) realIpBtnText.textContent = 'Resolving...';
+
+    try {
+      const data = await apiPost('/api/real-ip', { target, allowPrivate });
+      renderRealIpPreview(data);
+    } catch (err) {
+      if (bannerText) bannerText.textContent = `Real IP discovery failed: ${err.message}`;
+      if (banner) banner.classList.remove('hidden');
+    } finally {
+      if (btnGetRealIp) btnGetRealIp.disabled = false;
+      if (btnAdvGetRealIp) {
+        btnAdvGetRealIp.disabled = false;
+        btnAdvGetRealIp.textContent = '🌐 Auto-Find Real IP from Target URL';
+      }
+      if (realIpSpinner) realIpSpinner.classList.add('hidden');
+      if (realIpBtnText) realIpBtnText.textContent = '🌐 Get Real IP';
+    }
+  }
+
+  if (btnGetRealIp) {
+    btnGetRealIp.addEventListener('click', handleRealIpDiscovery);
+  }
+  if (btnAdvGetRealIp) {
+    btnAdvGetRealIp.addEventListener('click', handleRealIpDiscovery);
+  }
+
+  async function handleRecordLoginSession() {
+    let target = urlInput.value.trim();
+    if (!target) {
+      urlInput.focus();
+      return;
+    }
+
+    target = normalizeTargetScheme(target);
+    urlInput.value = target;
+
+    if (!validateInputUrl(target)) {
+      return;
+    }
+
+    const username = authUsernameEl?.value.trim() || '';
+    const password = authPasswordEl?.value || '';
+    const loginUrlRaw = authLoginUrlEl?.value.trim() || '';
+    const loginUrl = loginUrlRaw ? normalizeTargetScheme(loginUrlRaw) : '';
+    const loginContentType = authTypeEl?.value || 'auto';
+    const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || '';
+    const allowPrivate = Boolean(allowPrivateEl?.checked);
+
+    if (btnRecordLogin) {
+      btnRecordLogin.disabled = true;
+      btnRecordLogin.textContent = '🔐 Recording Login Session...';
+    }
+
+    try {
+      const data = await apiPost('/api/auth/record-session', {
+        targetUrl: target,
+        ...(loginUrl ? { loginUrl } : {}),
+        username,
+        password,
+        loginContentType,
+        ...(sourceIp ? { sourceIp } : {}),
+        allowPrivate
+      });
+      if (recordedSessionIdEl) {
+        recordedSessionIdEl.value = data.sessionId || '';
+      }
+      renderRecordedSessionPreview(data);
+    } catch (err) {
+      if (bannerText) bannerText.textContent = `Login recording failed: ${err.message}`;
+      if (banner) banner.classList.remove('hidden');
+    } finally {
+      if (btnRecordLogin) {
+        btnRecordLogin.disabled = false;
+        btnRecordLogin.textContent = '🔐 Test & Record Login Session';
+      }
+    }
+  }
+
+  async function handleDiscoverOpenApi() {
+    let target = urlInput.value.trim();
+    if (!target) {
+      urlInput.focus();
+      return;
+    }
+
+    target = normalizeTargetScheme(target);
+    urlInput.value = target;
+
+    if (!validateInputUrl(target)) {
+      return;
+    }
+
+    const allowPrivate = Boolean(allowPrivateEl?.checked);
+    if (btnDiscoverOpenApi) {
+      btnDiscoverOpenApi.disabled = true;
+      btnDiscoverOpenApi.textContent = '📋 Discovering OpenAPI Routes...';
+    }
+
+    try {
+      const data = await apiPost('/api/openapi/import', {
+        targetUrl: target,
+        allowPrivate
+      });
+      renderOpenApiDiscoveryPreview(data);
+    } catch (err) {
+      if (bannerText) bannerText.textContent = `OpenAPI discovery failed: ${err.message}`;
+      if (banner) banner.classList.remove('hidden');
+    } finally {
+      if (btnDiscoverOpenApi) {
+        btnDiscoverOpenApi.disabled = false;
+        btnDiscoverOpenApi.textContent = '📋 Discover OpenAPI / Swagger Routes';
+      }
+    }
+  }
+
+  if (btnRecordLogin) {
+    btnRecordLogin.addEventListener('click', handleRecordLoginSession);
+  }
+  if (btnDiscoverOpenApi) {
+    btnDiscoverOpenApi.addEventListener('click', handleDiscoverOpenApi);
+  }
+
   const btnAnalyzeDetectApi = document.getElementById('btn-analyze-detect-api');
   if (btnAnalyzeDetectApi) {
     btnAnalyzeDetectApi.addEventListener('click', generateDetectApiAiAnalysis);
   }
 
-  // Delegated listener for "🎯 Scan Backend API" buttons across the application
+  // Delegated listener for backend API scan & Real IP candidate actions
   document.addEventListener('click', e => {
     const scanOriginBtn = e.target.closest('[data-scan-origin]');
     if (scanOriginBtn) {
       const rawOrigin = scanOriginBtn.getAttribute('data-scan-origin') || '';
       handleScanOriginTrigger(rawOrigin);
+      return;
+    }
+
+    const pinSourceBtn = e.target.closest('[data-pin-source-ip]');
+    if (pinSourceBtn) {
+      const ip = (pinSourceBtn.getAttribute('data-pin-source-ip') || '').trim();
+      if (!isValidIpLiteral(ip)) return;
+      const sourceIpInput = document.getElementById('adv-source-ip');
+      if (sourceIpInput) {
+        sourceIpInput.value = ip;
+      }
+      if (advDrawer && advDrawer.classList.contains('hidden')) {
+        btnToggleAdv?.setAttribute('aria-expanded', 'true');
+        advDrawer.classList.remove('hidden');
+      }
+      sourceIpInput?.focus();
+      return;
+    }
+
+    const useDirectBtn = e.target.closest('[data-use-direct-ip]');
+    if (useDirectBtn) {
+      const ip = (useDirectBtn.getAttribute('data-use-direct-ip') || '').trim();
+      if (!isValidIpLiteral(ip)) return;
+      const formattedHost = ip.includes(':') ? `[${ip}]` : ip;
+      urlInput.value = 'http://' + formattedHost;
+      validateInputUrl(urlInput.value.trim());
+      urlInput.focus();
     }
   });
 
@@ -778,10 +1258,8 @@ function initNewScanForm() {
       return;
     }
 
-    if (!/^https?:\/\//i.test(target)) {
-      target = 'https://' + target;
-      urlInput.value = target;
-    }
+    target = preserveBareIpOrNormalize(target);
+    urlInput.value = target;
 
     if (!validateInputUrl(target)) {
       return;
@@ -792,12 +1270,26 @@ function initNewScanForm() {
     const timeout = parseInt(document.getElementById('adv-timeout').value, 10) || 10000;
     const auth = document.getElementById('adv-auth').value.trim() || null;
     const tech = document.getElementById('adv-tech').value.trim() || null;
+    const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || null;
+    const checksFilter = document.getElementById('adv-checks')?.value.trim() || null;
     const forceAll = Boolean(document.getElementById('opt-force-all')?.checked);
     const saveHistory = document.getElementById('adv-save-history').checked;
     const agentMode = Boolean(document.getElementById('opt-agent-mode')?.checked);
     const goal = document.getElementById('opt-agent-goal')?.value.trim() || '';
     const noiseProfile = document.getElementById('opt-noise-profile')?.value || 'balanced';
     const allowPrivate = Boolean(allowPrivateEl?.checked);
+    const username = document.getElementById('adv-auth-username')?.value.trim() || null;
+    const password = document.getElementById('adv-auth-password')?.value || null;
+    const loginUrlRaw = document.getElementById('adv-auth-login-url')?.value.trim() || null;
+    const loginContentType = document.getElementById('adv-auth-type')?.value || 'auto';
+    const recordedSessionId = document.getElementById('adv-recorded-session-id')?.value.trim() || null;
+    const authMethod = document.getElementById('adv-auth-method')?.value || 'login_sequence';
+    syncLsrConfigFromInputs();
+    const lsrPayload = buildLoginSequencePayload({ includeSecrets: true });
+    const hasLsrActions = Array.isArray(lsrPayload.actions) && lsrPayload.actions.length > 0;
+    const hasLsrSecrets = Array.isArray(lsrPayload.secrets) && lsrPayload.secrets.length > 0;
+    const hasLsrOtp = Boolean(lsrPayload.otpConfig?.secret || lsrPayload.otpConfig?.enabled);
+    const useLoginSequence = authMethod === 'login_sequence' || hasLsrActions;
 
     const customHeadersRaw = document.getElementById('custom-headers-input')?.value || '';
     const parsedHeaders = parseCustomHeadersInput(customHeadersRaw);
@@ -812,15 +1304,32 @@ function initNewScanForm() {
       return;
     }
 
+    const deviceMode = state.selectedPreset === 'device';
+    const deviceCategory = deviceMode ? (document.getElementById('opt-device-category')?.value || 'all') : 'all';
+
     await startScan({
       target,
       profile: state.selectedPreset,
+      ...(deviceMode ? { deviceMode: true, deviceCategory } : {}),
       forceAll,
       maxDepth: depth,
       concurrency,
       timeout,
       auth,
+      ...(sourceIp ? { sourceIp } : {}),
+      ...(checksFilter ? { checks: checksFilter } : {}),
       ...(parsedHeaders.headers ? { headers: parsedHeaders.headers } : {}),
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+      ...(loginUrlRaw ? { loginUrl: normalizeTargetScheme(loginUrlRaw) } : {}),
+      ...(username || loginUrlRaw ? { loginContentType } : {}),
+      ...(recordedSessionId ? { recordedSessionId } : {}),
+      ...(useLoginSequence && (hasLsrActions || lsrPayload.sequenceId) ? { loginSequence: lsrPayload, sequenceId: state.loginSequence.sequenceId || '' } : {}),
+      systemVariables: state.systemVariables,
+      ...(hasLsrSecrets ? { secrets: lsrPayload.secrets } : {}),
+      ...(hasLsrOtp ? { otpConfig: lsrPayload.otpConfig } : {}),
+      ...(lsrPayload.restrictions?.length ? { restrictions: lsrPayload.restrictions } : {}),
+      ...(useLoginSequence ? { sessionDetection: lsrPayload.sessionDetection } : {}),
       techOverride: tech,
       noHistory: !saveHistory,
       agent: agentMode,
@@ -840,6 +1349,21 @@ function selectPreset(presetId) {
       const isMatch = c.getAttribute('data-preset-id') === presetId;
       c.classList.toggle('active', isMatch);
     });
+  }
+  const isDevice = presetId === 'device';
+  const catWrap = document.getElementById('device-category-wrap');
+  if (catWrap) {
+    catWrap.classList.toggle('hidden', !isDevice);
+  }
+  if (isDevice) {
+    const allowPrivateEl = document.getElementById('allow-private-toggle');
+    if (allowPrivateEl && !allowPrivateEl.checked) {
+      allowPrivateEl.checked = true;
+    }
+    const urlInput = document.getElementById('target-url');
+    if (urlInput) {
+      validateInputUrl(urlInput.value.trim());
+    }
   }
 }
 
@@ -1115,7 +1639,8 @@ export async function generateDetectApiAiAnalysis() {
 export async function generateResultsApiAiAnalysis() {
   const resData = state.currentResults || {};
   const audience = state.viewMode === 'developer' ? 'pro' : 'beginner';
-  const apiComm = resData.apiCommunication || resData.stacks?.[0]?.apiCommunication || null;
+  const primaryStack = normalizeStacksList(resData.stacks)[0] || null;
+  const apiComm = resData.apiCommunication || primaryStack?.apiCommunication || null;
   const primaryTarget = resData.results?.[0]?.target || resData.target || undefined;
   const scanId = resData.scanId || resData.historyFile || state.activeScanId || undefined;
   const outputEl = typeof document !== 'undefined' ? document.getElementById('results-api-ai-output') : null;
@@ -1175,6 +1700,15 @@ export function renderTechDetectPreview(data) {
     }).join('');
   }
 
+  const deviceRowEl = document.getElementById('tech-detect-device-row');
+  if (deviceRowEl) {
+    const devHtml = renderDeviceInfoHtml(fp.deviceInfo || data.deviceInfo || null);
+    deviceRowEl.innerHTML = devHtml;
+    deviceRowEl.classList.toggle('hidden', !devHtml);
+  }
+
+  renderTechDetectScaPreview(fp.runtimeSca || data.runtimeSca || null);
+
   const activeCount = Number(data.activeChecksCount) || 0;
   const skippedCount = Number(data.skippedChecksCount) || 0;
   if (counterEl) {
@@ -1211,6 +1745,205 @@ export function renderTechDetectPreview(data) {
   banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+export function renderRealIpPreview(data) {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('real-ip-banner');
+  if (!banner || !data) return;
+
+  const primaryBadge = document.getElementById('real-ip-primary-badge');
+  const cdnBadge = document.getElementById('real-ip-cdn-badge');
+  const bodyEl = document.getElementById('real-ip-body');
+
+  if (primaryBadge) {
+    primaryBadge.textContent = data.realIp
+      ? `Real IP: ${data.realIp} (${data.realIpConfidence || 100}% confidence)`
+      : 'No Origin IP Found';
+  }
+
+  if (cdnBadge) {
+    cdnBadge.textContent = data.isBehindCdn
+      ? `Behind CDN/WAF: ${data.cdnProvider || 'Detected'}`
+      : 'Direct Server (No CDN)';
+  }
+
+  if (bodyEl) {
+    const primaryIpsText = (Array.isArray(data.primaryIps) ? data.primaryIps : []).join(', ') || 'None';
+    const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+
+    const candidateRowsHtml = candidates.length > 0
+      ? candidates.map(c => {
+          const ip = String(c?.ip || '');
+          const sourcesText = (Array.isArray(c?.sources) ? c.sources : []).join(', ') || '—';
+          const statusLabel = c?.blockedByPolicy
+            ? 'Blocked by Policy'
+            : c?.isCdnEdge
+              ? `CDN Edge (${c.cdnProvider || 'CDN'})`
+              : c?.verifiedOriginMatch
+                ? '✅ Verified Origin Match'
+                : 'Origin Candidate';
+          const confidenceText = `${Number(c?.confidence) || 0}%`;
+          const reasonText = String(c?.reason || '');
+          const actionsHtml = !c?.blockedByPolicy && isValidIpLiteral(ip)
+            ? `
+              <div class="real-ip-candidate-actions">
+                <button type="button" class="btn-secondary btn-small" data-pin-source-ip="${escapeHtml(ip)}">📌 Pin as --source-ip</button>
+                <button type="button" class="btn-secondary btn-small" data-use-direct-ip="${escapeHtml(ip)}">🎯 Switch Target to http://${escapeHtml(ip)}</button>
+              </div>
+            `
+            : '';
+
+          return `
+            <div class="real-ip-candidate-row">
+              <div class="real-ip-candidate-meta">
+                <code>${escapeHtml(ip)}</code>
+                <span class="badge">${escapeHtml(statusLabel)}</span>
+                <span class="badge badge-confidence">${escapeHtml(confidenceText)}</span>
+                <span class="form-hint">Sources: ${escapeHtml(sourcesText)}</span>
+              </div>
+              ${reasonText ? `<div class="real-ip-candidate-reason">${escapeHtml(reasonText)}</div>` : ''}
+              ${actionsHtml}
+            </div>
+          `;
+        }).join('')
+      : '<div class="form-hint">No candidate IP addresses discovered.</div>';
+
+    bodyEl.innerHTML = `
+      <div class="tech-detect-summary-row">
+        <span><strong>Hostname:</strong> <code>${escapeHtml(data.hostname || '—')}</code></span>
+        <span> · <strong>Primary DNS A/AAAA:</strong> <code>${escapeHtml(primaryIpsText)}</code></span>
+        <span> · <strong>Recommended Real IP:</strong> <code>${escapeHtml(data.realIp || 'N/A')}</code></span>
+      </div>
+      <div class="real-ip-candidates-list">
+        ${candidateRowsHtml}
+      </div>
+    `;
+  }
+
+  banner.classList.remove('hidden');
+  banner.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+}
+
+export function renderRecordedSessionPreview(data) {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('recorded-session-banner');
+  if (!banner || !data) return;
+
+  const statusBadge = document.getElementById('recorded-session-status-badge');
+  const cookiesBadge = document.getElementById('recorded-session-cookies-badge');
+  const bodyEl = document.getElementById('recorded-session-body');
+
+  if (statusBadge) {
+    statusBadge.textContent = data.authenticated
+      ? `Authenticated (Session ${String(data.sessionId || '').slice(0, 8)})`
+      : 'Login Incomplete';
+  }
+
+  if (cookiesBadge) {
+    cookiesBadge.textContent = `${data.cookieCount || 0} Cookie(s) · JWT: ${data.hasBearerToken ? 'Captured' : 'None'}`;
+  }
+
+  if (bodyEl) {
+    const cookieNamesText = Array.isArray(data.cookieNames) && data.cookieNames.length > 0
+      ? data.cookieNames.join(', ')
+      : 'None';
+    const csrfText = data.csrfHeaderName || data.csrfFormField || 'None';
+    const jwtText = data.bearerTokenPreview || (data.hasBearerToken ? 'Captured' : 'None');
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+
+    const stepsHtml = steps.length > 0
+      ? steps.map(step => {
+          const stepNum = Number(step?.step) || 0;
+          const action = String(step?.action || 'step');
+          const url = String(step?.url || '');
+          const status = Number(step?.status) || 0;
+          const extra = [];
+          if (step?.contentType) extra.push(`type=${step.contentType}`);
+          if (step?.csrfDetected) extra.push('CSRF detected');
+          if (step?.tokenExtracted) extra.push('JWT captured');
+          if (Array.isArray(step?.cookiesHarvested) && step.cookiesHarvested.length > 0) {
+            extra.push(`cookies: ${step.cookiesHarvested.join(', ')}`);
+          }
+          if (step?.error) extra.push(`error: ${step.error}`);
+          return `
+            <div class="real-ip-candidate-row">
+              <div class="real-ip-candidate-meta">
+                <span class="badge">Step ${escapeHtml(stepNum)}</span>
+                <strong>${escapeHtml(action)}</strong>
+                <code>${escapeHtml(url)}</code>
+                <span class="badge badge-confidence">HTTP ${escapeHtml(status)}</span>
+              </div>
+              ${extra.length > 0 ? `<div class="real-ip-candidate-reason">${escapeHtml(extra.join(' · '))}</div>` : ''}
+            </div>
+          `;
+        }).join('')
+      : '<div class="form-hint">No login macro steps recorded yet.</div>';
+
+    bodyEl.innerHTML = `
+      <div class="tech-detect-summary-row">
+        <span><strong>Login URL:</strong> <code>${escapeHtml(data.loginUrl || '—')}</code></span>
+        <span> · <strong>Username:</strong> <code>${escapeHtml(data.username || '—')}</code></span>
+        <span> · <strong>Cookies Captured:</strong> <code>${escapeHtml(cookieNamesText)}</code></span>
+        <span> · <strong>CSRF Header/Field:</strong> <code>${escapeHtml(csrfText)}</code></span>
+        <span> · <strong>Bearer JWT:</strong> <code>${escapeHtml(jwtText)}</code></span>
+      </div>
+      <div class="real-ip-candidates-list">
+        ${stepsHtml}
+      </div>
+    `;
+  }
+
+  banner.classList.remove('hidden');
+  banner.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+}
+
+export function renderOpenApiDiscoveryPreview(data) {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('recorded-session-banner');
+  if (!banner || !data) return;
+
+  const statusBadge = document.getElementById('recorded-session-status-badge');
+  const cookiesBadge = document.getElementById('recorded-session-cookies-badge');
+  const bodyEl = document.getElementById('recorded-session-body');
+
+  const endpoints = Array.isArray(data.endpoints) ? data.endpoints : [];
+  if (statusBadge) {
+    statusBadge.textContent = data.discovered ? 'OpenAPI / Swagger Discovered' : 'No OpenAPI Schema Found';
+  }
+  if (cookiesBadge) {
+    cookiesBadge.textContent = `${Number(data.totalEndpoints) || endpoints.length} Endpoint(s)`;
+  }
+
+  if (bodyEl) {
+    const routesHtml = endpoints.length > 0
+      ? endpoints.slice(0, 50).map(ep => `
+          <div class="real-ip-candidate-row">
+            <div class="real-ip-candidate-meta">
+              <span class="badge">${escapeHtml(ep?.method || 'GET')}</span>
+              <code>${escapeHtml(ep?.url || ep?.pathTemplate || '')}</code>
+              ${ep?.operationId ? `<span class="form-hint">${escapeHtml(ep.operationId)}</span>` : ''}
+              ${ep?.requiresAuth ? '<span class="badge badge-confidence">Auth</span>' : ''}
+            </div>
+            ${ep?.summary ? `<div class="real-ip-candidate-reason">${escapeHtml(ep.summary)}</div>` : ''}
+          </div>
+        `).join('')
+      : '<div class="form-hint">No OpenAPI or Swagger specification found at standard discovery paths (/openapi.json, /swagger.json, /v3/api-docs).</div>';
+
+    bodyEl.innerHTML = `
+      <div class="tech-detect-summary-row">
+        <span><strong>Specification:</strong> <code>${escapeHtml(data.title || 'OpenAPI')} (${escapeHtml(data.version || 'N/A')})</code></span>
+        <span> · <strong>Schema URL:</strong> <code>${escapeHtml(data.schemaUrl || 'Not Found')}</code></span>
+        <span> · <strong>Endpoints:</strong> <code>${escapeHtml(Number(data.totalEndpoints) || endpoints.length)}</code></span>
+      </div>
+      <div class="real-ip-candidates-list">
+        ${routesHtml}
+      </div>
+    `;
+  }
+
+  banner.classList.remove('hidden');
+  banner.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+}
+
 function renderPresetCards() {
   const container = document.getElementById('preset-cards');
   if (!container) return;
@@ -1222,8 +1955,22 @@ function renderPresetCards() {
     { id: 'modern', name: 'Modern Web & AI App', tagline: 'React, Next.js, Node.js, AI/LLM & supply chain' },
     { id: 'cms', name: 'CMS & E-Commerce', tagline: 'WordPress, Laravel, Magento, Drupal & PHP security' },
     { id: 'api', name: 'API & Backend Service', tagline: 'CORS, JWT, Rate Limiting, GraphQL & Auth' },
+    {
+      id: 'device',
+      name: 'Smart TV, Camera, PC & LAN Device',
+      tagline: 'Smart TVs, IP Cameras / NVRs, PCs / Workstations / Dev Servers, Routers & IoT',
+      description: 'Non-intrusive multi-port device discovery and security audit for Smart TVs, IP cameras / NVRs, PCs / workstations / local servers, routers, printers, NAS, and smart home IoT hubs.'
+    },
     { id: 'ops', name: 'Ops & System Health', tagline: 'Server health, metrics, actuator, TLS & availability checks' }
   ];
+
+  if (!basePresets.some(p => p.id === 'device') && state.profiles?.device) {
+    basePresets.push({
+      id: 'device',
+      name: 'Smart TV, Camera, PC & LAN Device',
+      tagline: state.profiles.device.description || 'Smart TVs, IP Cameras / NVRs, PCs / Workstations / Dev Servers, Routers & IoT'
+    });
+  }
 
   if (!basePresets.some(p => p.id === 'ops') && state.profiles?.ops) {
     basePresets.push({
@@ -1294,6 +2041,11 @@ async function startScan(options) {
   liveProgressPct.textContent = '5%';
   livePagesCount.textContent = '1';
   liveTechChips.innerHTML = '<span class="chip-muted">Analyzing technology stack...</span>';
+  const liveDeviceSummaryEl = document.getElementById('live-device-summary');
+  if (liveDeviceSummaryEl) {
+    liveDeviceSummaryEl.classList.add('hidden');
+    liveDeviceSummaryEl.innerHTML = '';
+  }
   activityFeed.innerHTML = '';
   hideInlineBanner('live-sse-banner');
 
@@ -1339,6 +2091,10 @@ async function startScan(options) {
           livePhaseBadge.textContent = formatPhaseName(data.phase);
         }
 
+        if (data.type === 'auth_session' && data.authSession) {
+          renderRecordedSessionPreview(data.authSession);
+        }
+
         if (data.type === 'fingerprint') {
           const tags = Array.isArray(data.detectedTags) && data.detectedTags.length > 0
             ? data.detectedTags
@@ -1364,6 +2120,26 @@ async function startScan(options) {
             apiChip.className = 'chip chip-api-active';
             apiChip.textContent = '🔌 API Client';
             liveTechChips.appendChild(apiChip);
+          }
+
+          const deviceInfo = data.deviceInfo || data.fingerprint?.deviceInfo || null;
+          if (deviceInfo && (deviceInfo.detected || deviceInfo.category || (Array.isArray(deviceInfo.openPorts) && deviceInfo.openPorts.length > 0))) {
+            const devChip = document.createElement('span');
+            devChip.className = 'chip chip-device-active';
+            devChip.textContent = `📺 ${deviceInfo.categoryLabel || deviceInfo.category || 'Device'}`;
+            liveTechChips.appendChild(devChip);
+            if (Array.isArray(deviceInfo.openPorts) && deviceInfo.openPorts.length > 0) {
+              const portsChip = document.createElement('span');
+              portsChip.className = 'chip';
+              portsChip.textContent = `Ports: ${deviceInfo.openPorts.slice(0, 8).join(', ')}`;
+              liveTechChips.appendChild(portsChip);
+            }
+            const liveDevEl = document.getElementById('live-device-summary');
+            if (liveDevEl) {
+              const devHtml = renderDeviceInfoHtml(deviceInfo);
+              liveDevEl.innerHTML = devHtml;
+              liveDevEl.classList.toggle('hidden', !devHtml);
+            }
           }
         }
 
@@ -1440,6 +2216,7 @@ async function startScan(options) {
     es.onmessage = handleSseMessage;
     [
       'start',
+      'auth_session',
       'fingerprinting',
       'fingerprint',
       'crawling',
@@ -1645,7 +2422,7 @@ function openEvidenceDrawer(finding) {
 
   backdrop.classList.remove('hidden');
   renderEvidenceViewer(body, finding, {
-    stack: state.currentResults?.stacks?.[0] || null,
+    stack: normalizeStacksList(state.currentResults?.stacks)[0] || null,
     audience: state.viewMode === 'developer' ? 'pro' : 'beginner',
     onClose: closeEvidenceDrawer
   });
@@ -1924,28 +2701,31 @@ export function renderScanResults(resultData) {
   document.getElementById('count-suspicious').textContent = String(suspicious.length);
   document.getElementById('count-safe').textContent = String(safe.length);
 
+  const stackList = normalizeStacksList(resultData.stacks);
+  const primaryStack = stackList[0] || null;
+  const deviceInfo = stackList.find(s => s?.deviceInfo)?.deviceInfo || resultData.deviceInfo || null;
   const stackCard = document.getElementById('results-stack-card');
   if (stackCard) {
-    if (Array.isArray(resultData.stacks) && resultData.stacks.length > 0) {
-      const primaryStack = resultData.stacks[0];
+    if (stackList.length > 0 || deviceInfo?.detected) {
       const summaryEl = document.getElementById('results-stack-summary');
       const counterEl = document.getElementById('results-stack-counter');
       const badgesEl = document.getElementById('results-stack-badges');
+      const deviceInfoEl = document.getElementById('results-device-info');
 
       if (summaryEl) {
-        summaryEl.textContent = primaryStack.summary || 'Generic Web Application';
+        summaryEl.textContent = primaryStack?.summary || deviceInfo?.summary || 'Generic Web Application';
       }
 
-      const activeCount = Number(primaryStack.activeChecksCount) || grouped.length;
-      const skippedCount = Number(primaryStack.skippedChecksCount) || 0;
+      const activeCount = Number(primaryStack?.activeChecksCount) || grouped.length;
+      const skippedCount = Number(primaryStack?.skippedChecksCount) || 0;
 
       if (counterEl) {
         counterEl.innerHTML = `<strong>${activeCount} Relevant Checks Executed · ${skippedCount} Irrelevant Framework Checks Skipped</strong>`;
       }
 
-      const tags = Array.isArray(primaryStack.detectedTags) && primaryStack.detectedTags.length > 0
+      const tags = Array.isArray(primaryStack?.detectedTags) && primaryStack.detectedTags.length > 0
         ? primaryStack.detectedTags
-        : Array.isArray(primaryStack.stack) && primaryStack.stack.length > 0
+        : Array.isArray(primaryStack?.stack) && primaryStack.stack.length > 0
         ? primaryStack.stack.map(s => s.tech)
         : ['generic'];
 
@@ -1955,6 +2735,12 @@ export function renderScanResults(resultData) {
           const safeClass = cleanTag.toLowerCase().replace(/[^a-z0-9_-]/gi, '');
           return `<span class="tech-badge tech-tag-${safeClass}">${cleanTag}</span>`;
         }).join('');
+      }
+
+      if (deviceInfoEl) {
+        const devHtml = renderDeviceInfoHtml(deviceInfo);
+        deviceInfoEl.innerHTML = devHtml;
+        deviceInfoEl.classList.toggle('hidden', !devHtml);
       }
 
       stackCard.classList.remove('hidden');
@@ -1974,7 +2760,7 @@ export function renderScanResults(resultData) {
     resultsAiOutput.innerHTML = '';
   }
 
-  const apiComm = resultData.apiCommunication || resultData.stacks?.[0]?.apiCommunication || null;
+  const apiComm = resultData.apiCommunication || primaryStack?.apiCommunication || null;
   if (apiCard) {
     if (apiComm && apiComm.usesApi) {
       if (apiSummary) {
@@ -1999,6 +2785,13 @@ export function renderScanResults(resultData) {
     aiSummaryBox.innerHTML = '';
   }
 
+  const runtimeSca = resultData.runtimeSca
+    || primaryStack?.runtimeSca
+    || stackList.find(s => s?.runtimeSca)?.runtimeSca
+    || results.find(r => r && (r.name === 'runtime-sca' || r.checkId === 'runtime-sca') && r.runtimeSca)?.runtimeSca
+    || null;
+  renderRuntimeScaTable(runtimeSca);
+
   renderResultsCveCoverageBanner(resultData.cveCoverage);
   renderPriorityActionPlan(vulns, suspicious);
   filterAndRenderFindings();
@@ -2020,9 +2813,10 @@ function buildCompactSummaryPayload(sr) {
       cwe: f.cwe,
       target: f.target
     }));
+  const primaryForCompact = normalizeStacksList(src.stacks)[0] || null;
   return {
     targets: Array.isArray(src.targets) ? src.targets.slice(0, 10) : [],
-    stacks: src.stacks?.primary ? { primary: src.stacks.primary } : null,
+    stacks: primaryForCompact?.primary ? { primary: primaryForCompact.primary } : null,
     cveCoverage: src.cveCoverage?.summary ? { summary: src.cveCoverage.summary } : null,
     results: compactFindings
   };
@@ -2188,7 +2982,7 @@ function renderPriorityActionPlan(vulns, suspicious) {
     .join('');
 }
 
-function renderMatchedEvidenceHtml(item) {
+export function renderMatchedEvidenceHtml(item) {
   if (!item) return '';
   const files = Array.isArray(item.files) && item.files.length > 0
     ? item.files
@@ -2198,7 +2992,31 @@ function renderMatchedEvidenceHtml(item) {
   if (files.length === 0 && quotes.length === 0 && missing.length === 0) return '';
 
   const filesHtml = files.length > 0
-    ? `<div class="finding-why-box"><strong>📂 Matched Paths / Evidence (${files.length}):</strong> ${files.slice(0, 8).map(f => `<code>${escapeHtml(f.path || f.url || f.name || '')}</code>${f.status ? ` (HTTP ${escapeHtml(f.status)})` : ''}${f.matchedSignal ? ` — ${escapeHtml(f.matchedSignal)}` : (f.detail || f.issue || f.reason ? ` — ${escapeHtml(f.detail || f.issue || f.reason)}` : '')}${f.preview ? ` · <code>${escapeHtml(f.preview)}</code>` : ''}`).join('<br>')}</div>`
+    ? `<div class="finding-why-box"><strong>📂 Matched Paths / Evidence (${files.length}):</strong><div class="evidence-files-list">${files.slice(0, 12).map(f => {
+        const statusTag = f?.statusTag ? String(f.statusTag).trim().toUpperCase() : '';
+        const statusTagClass = statusTag.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        const statusTagBadge = statusTag
+          ? `<span class="finding-status-badge ${escapeHtml(statusTagClass)}">${escapeHtml(statusTag)}</span> `
+          : '';
+        const hasPort = f?.port !== undefined && f?.port !== null && f?.port !== '';
+        const schemeSuffix = f?.scheme ? `/${escapeHtml(String(f.scheme).toUpperCase())}` : '';
+        const portBadge = hasPort
+          ? `<span class="ev-pill device-port-pill">Port ${escapeHtml(f.port)}${schemeSuffix}</span> `
+          : '';
+        const labelText = f?.name && (!f?.path || f.path === '/')
+          ? `${f.name}${f.url ? ` (${f.url})` : ''}`
+          : (f?.path || f?.url || f?.name || '');
+        const protoMethod = f?.method ? String(f.method).trim().toUpperCase() : '';
+        const isNonHttp = /^(TCP|UDP|RTSP|MDNS)$/.test(protoMethod);
+        const statusText = isNonHttp
+          ? ` (${escapeHtml(protoMethod)})`
+          : (f?.status ? ` (HTTP ${escapeHtml(f.status)})` : '');
+        const detailText = f?.matchedSignal
+          ? ` — ${escapeHtml(f.matchedSignal)}`
+          : (f?.detail || f?.issue || f?.reason ? ` — ${escapeHtml(f.detail || f.issue || f.reason)}` : '');
+        const previewText = f?.preview ? ` · <code>${escapeHtml(f.preview)}</code>` : '';
+        return `<div class="evidence-file-row">${statusTagBadge}${portBadge}<code>${escapeHtml(labelText)}</code>${statusText}${detailText}${previewText}</div>`;
+      }).join('')}</div></div>`
     : '';
   const missingHtml = missing.length > 0
     ? `<div class="finding-why-box"><strong>⚠️ Missing Security Headers (${missing.length}):</strong> ${missing.map(m => `<code>${escapeHtml(m)}</code>`).join(', ')}</div>`
@@ -2365,7 +3183,7 @@ function filterAndRenderFindings() {
       try {
         const solution = await apiPost('/api/ai/remediate', {
           finding,
-          stack: state.currentResults?.stacks?.[0] || null,
+          stack: normalizeStacksList(state.currentResults?.stacks)[0] || null,
           audience: state.viewMode === 'developer' ? 'pro' : 'beginner'
         });
         renderAiFixIntoSlot(slot, solution, msg => showInlineBanner('results-status-banner', msg, false));
@@ -3115,7 +3933,7 @@ function initCatalogAndBuilder() {
       if (root) renderSystemGuardrails(root);
     } else if (target === 'cve-coverage') {
       const root = document.getElementById('cve-coverage-root');
-      const primaryStackTags = state.currentResults?.stacks?.[0]?.detectedTags || [];
+      const primaryStackTags = normalizeStacksList(state.currentResults?.stacks)[0]?.detectedTags || [];
       if (root) {
         renderCveCoveragePanel(root, {
           coverageEndpoint: '/api/cves/coverage',
@@ -3323,4 +4141,3125 @@ async function runScaffoldCheck(dryRun) {
     feedback.textContent = `Error: ${err.message}`;
     feedback.classList.remove('hidden');
   }
+}
+
+
+// ── Runtime SCA Findings Table & Tech Detect Preview ─────────────────────────
+export function renderTechDetectScaPreview(runtimeSca) {
+  if (typeof document === 'undefined') return;
+  const rowEl = document.getElementById('tech-detect-sca-row');
+  if (!rowEl) return;
+
+  const findings = Array.isArray(runtimeSca?.findings)
+    ? runtimeSca.findings
+    : (Array.isArray(runtimeSca) ? runtimeSca : []);
+
+  if (findings.length === 0) {
+    rowEl.innerHTML = '';
+    rowEl.classList.add('hidden');
+    return;
+  }
+
+  const outOfDate = findings.filter(f => f?.status === 'Out of date' || f?.isOutOfDate);
+  const badgesHtml = findings.slice(0, 10).map(item => {
+    const isOld = item?.status === 'Out of date' || item?.isOutOfDate;
+    const cls = isOld ? 'sca-status-pill out-of-date' : 'sca-status-pill up-to-date';
+    const cvss = Number(item?.highestCvss || 0).toFixed(1);
+    const nameVer = `${item?.name || item?.id || 'Tech'} ${item?.identifiedVersion || ''}`.trim();
+    return `<span class="${cls}">${isOld ? '⚠️' : '✅'} ${escapeHtml(nameVer)}${Number(item?.highestCvss) > 0 ? ` (CVSS ${escapeHtml(cvss)})` : ''}</span>`;
+  }).join('');
+
+  rowEl.innerHTML = `
+    <div class="tech-detect-sca-header">
+      <span class="tech-detect-label">📦 Runtime SCA (${escapeHtml(findings.length)} detected${outOfDate.length > 0 ? ` · ${escapeHtml(outOfDate.length)} out of date` : ''}):</span>
+    </div>
+    <div class="tech-detect-sca-pills">${badgesHtml}</div>
+  `;
+  rowEl.classList.remove('hidden');
+}
+
+export function renderRuntimeScaTable(runtimeSca) {
+  if (typeof document === 'undefined') return;
+  const card = document.getElementById('results-runtime-sca-card');
+  const countEl = document.getElementById('results-sca-count');
+  const kpisEl = document.getElementById('results-sca-kpis');
+  const tbody = document.getElementById('results-runtime-sca-tbody');
+  if (!card || !tbody) return;
+
+  const findings = Array.isArray(runtimeSca?.findings)
+    ? runtimeSca.findings
+    : (Array.isArray(runtimeSca) ? runtimeSca : []);
+
+  if (findings.length === 0) {
+    tbody.innerHTML = '';
+    if (countEl) countEl.textContent = '0';
+    if (kpisEl) kpisEl.innerHTML = '';
+    card.classList.add('hidden');
+    return;
+  }
+
+  const outOfDateCount = findings.filter(f => f?.status === 'Out of date' || f?.isOutOfDate).length;
+  const upToDateCount = findings.length - outOfDateCount;
+  const highestCvss = Math.max(0, ...findings.map(f => Number(f?.highestCvss) || 0));
+
+  if (countEl) countEl.textContent = String(findings.length);
+  if (kpisEl) {
+    kpisEl.innerHTML = `
+      <span class="cve-kpi ${outOfDateCount > 0 ? 'warn' : 'ok'}">⚠️ Out of date: <strong>${escapeHtml(outOfDateCount)}</strong></span>
+      <span class="cve-kpi ok">✅ Up to date: <strong>${escapeHtml(upToDateCount)}</strong></span>
+      <span class="cve-kpi ${highestCvss >= 7 ? 'danger' : highestCvss > 0 ? 'warn' : 'ok'}">🎯 Highest CVSS: <strong>${escapeHtml(highestCvss.toFixed(1))}</strong></span>
+    `;
+  }
+
+  tbody.innerHTML = findings.map(item => {
+    const isOutOfDate = item?.status === 'Out of date' || Boolean(item?.isOutOfDate);
+    const icon = item?.icon || '📦';
+    const cveList = Array.isArray(item?.cveIds) ? item.cveIds.slice(0, 6) : [];
+    const cvePillsHtml = cveList.length > 0
+      ? `<div class="sca-cve-pills">${cveList.map(cve => `<span class="enrich-badge enrich-cve">${escapeHtml(cve)}</span>`).join('')}</div>`
+      : '';
+
+    const statusBadgeHtml = isOutOfDate
+      ? '<span class="sca-status-pill out-of-date">⚠️ Out of date</span>'
+      : '<span class="sca-status-pill up-to-date">✅ Up to date</span>';
+
+    const identifiedHtml = item?.identifiedVersion
+      ? `<strong>${escapeHtml(item.identifiedVersion)}</strong> <span class="sca-cvss-meta">(Highest CVSS: ${escapeHtml(Number(item.highestCvss || 0).toFixed(1))})</span>`
+      : 'N/A';
+
+    const branchHtml = (item?.latestBranchVersion && item.latestBranchVersion !== 'N/A')
+      ? `<strong>${escapeHtml(item.latestBranchVersion)}</strong> <span class="sca-cvss-meta">(Highest CVSS: ${escapeHtml(Number(item.latestBranchCvss || 0).toFixed(1))})</span>`
+      : 'N/A';
+
+    const overallHtml = (item?.overallLatestVersion && item.overallLatestVersion !== 'N/A')
+      ? `<strong>${escapeHtml(item.overallLatestVersion)}</strong> <span class="sca-cvss-meta">(Highest CVSS: ${escapeHtml(Number(item.overallLatestCvss || 0).toFixed(1))})</span>`
+      : 'N/A';
+
+    return `
+      <tr>
+        <td>
+          <div class="sca-name-cell">
+            <span class="sca-tech-icon">${escapeHtml(icon)}</span>
+            <div>
+              <strong>${escapeHtml(item?.name || item?.id || 'Unknown')}</strong>
+              ${cvePillsHtml}
+            </div>
+          </div>
+        </td>
+        <td>${statusBadgeHtml}</td>
+        <td>${identifiedHtml}</td>
+        <td>${branchHtml}</td>
+        <td>${overallHtml}</td>
+        <td class="sca-action-cell">${escapeHtml(item?.recommendedAction || '')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  card.classList.remove('hidden');
+}
+
+// ── Visual Login Sequence Recorder (.lsr), System Variables & Visual Play ────
+const LSR_FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const SYS_VARS_STORAGE_KEY = 'secscan_system_variables_v1';
+const LSR_SEQUENCES_STORAGE_KEY = 'secscan_saved_sequences_v1';
+const LSR_ACTIVE_SEQ_STORAGE_KEY = 'secscan_active_sequence_id_v1';
+
+const SYS_VAR_CATEGORIES = {
+  username: { icon: '👤', label: 'Username / Email', isSecret: false },
+  password: { icon: '🔒', label: 'Password / Secret', isSecret: true },
+  otp_seed: { icon: '🔑', label: 'TOTP / MFA Base32 Seed', isSecret: true },
+  url: { icon: '🌐', label: 'Login / Target URL', isSecret: false },
+  token: { icon: '🎟️', label: 'API Key / Token', isSecret: true },
+  custom: { icon: '⚙️', label: 'Custom Variable', isSecret: false }
+};
+
+function isSecretVarCategory(category) {
+  return Boolean(SYS_VAR_CATEGORIES[category]?.isSecret);
+}
+
+function normalizeSystemVariable(raw = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = String(raw.name || '').trim();
+  if (!name || LSR_FORBIDDEN_KEYS.has(name) || /[^a-zA-Z0-9_.-]/.test(name)) return null;
+  const category = Object.hasOwn(SYS_VAR_CATEGORIES, raw.category) ? raw.category : 'custom';
+  const isSecret = raw.isSecret !== undefined ? Boolean(raw.isSecret) : isSecretVarCategory(category);
+  const value = raw.value !== undefined && raw.value !== null ? String(raw.value) : '';
+  return {
+    name,
+    category,
+    value,
+    isSecret,
+    updatedAt: raw.updatedAt || new Date().toISOString()
+  };
+}
+
+function persistSystemVariablesToLocal() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SYS_VARS_STORAGE_KEY, JSON.stringify(state.systemVariables));
+    }
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
+
+function persistSequencesToLocal() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(LSR_SEQUENCES_STORAGE_KEY, JSON.stringify(state.savedSequences));
+      localStorage.setItem(LSR_ACTIVE_SEQ_STORAGE_KEY, state.loginSequence?.sequenceId || '');
+    }
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
+
+function showSysVarsStatus(message, isError = false) {
+  const el = document.getElementById('sys-vars-status');
+  if (!el) return;
+  el.textContent = message;
+  el.className = `form-hint lsr-sysvars-status ${isError ? 'error' : 'success'}`;
+  el.classList.remove('hidden');
+}
+
+function renderSystemVariablesPanel() {
+  if (typeof document === 'undefined') return;
+  const listEl = document.getElementById('sys-vars-list');
+  if (!listEl) return;
+
+  const vars = state.systemVariables || [];
+  if (vars.length === 0) {
+    listEl.innerHTML = '<span class="form-hint">No system variables saved yet. Add shared usernames, passwords, TOTP seeds, or login URLs above.</span>';
+    return;
+  }
+
+  listEl.innerHTML = vars.map(v => {
+    const meta = SYS_VAR_CATEGORIES[v.category] || SYS_VAR_CATEGORIES.custom;
+    const displayVal = v.isSecret ? '***' : (v.value || '(empty)');
+    const bindTag = v.isSecret ? `{{SECRET:${v.name}}}` : `{{VAR:${v.name}}}`;
+    return `
+      <div class="lsr-sysvar-card" data-sysvar-name="${escapeHtml(v.name)}">
+        <div class="lsr-sysvar-card-main">
+          <span class="lsr-sysvar-icon" title="${escapeHtml(meta.label)}">${meta.icon}</span>
+          <code class="lsr-sysvar-tag">{{VAR:${escapeHtml(v.name)}}}</code>
+          ${v.isSecret ? `<code class="lsr-sysvar-alias" title="Also resolvable via ${escapeHtml(bindTag)}">${escapeHtml(bindTag)}</code>` : ''}
+          <span class="badge badge-outline">${escapeHtml(meta.label)}</span>
+          <span class="lsr-sysvar-val">${escapeHtml(displayVal)}</span>
+        </div>
+        <div class="lsr-sysvar-card-actions">
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-sysvar-action="edit"
+            data-sysvar-name="${escapeHtml(v.name)}"
+            title="Edit or rotate this variable across all .lsr sequences"
+          >✏️ Edit / Rotate Value</button>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-sysvar-action="delete"
+            data-sysvar-name="${escapeHtml(v.name)}"
+            aria-label="Delete system variable ${escapeHtml(v.name)}"
+            title="Delete system variable"
+          >🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderModalSysVarsBar() {
+  if (typeof document === 'undefined') return;
+  const chipsEl = document.getElementById('lsr-modal-sysvars-chips');
+  if (!chipsEl) return;
+  const vars = state.systemVariables || [];
+  if (vars.length === 0) {
+    chipsEl.innerHTML = '<span class="form-hint">No system variables defined yet. Click "+ Add / Rotate Variable" to create shared credentials.</span>';
+    return;
+  }
+  chipsEl.innerHTML = vars.map(v => {
+    const meta = SYS_VAR_CATEGORIES[v.category] || SYS_VAR_CATEGORIES.custom;
+    return `
+      <button
+        type="button"
+        class="lsr-modal-sysvar-chip"
+        data-lsr-bind-var="${escapeHtml(v.name)}"
+        title="Click to bind {{VAR:${escapeHtml(v.name)}}} to the selected action"
+      >
+        <span>${meta.icon}</span>
+        <code>{{VAR:${escapeHtml(v.name)}}}</code>
+      </button>
+    `;
+  }).join('');
+}
+
+function buildVariableAndSecretOptionsHtml(selectedVal = '') {
+  const vars = state.systemVariables || [];
+  const secrets = state.loginSequence?.secrets || [];
+  const parts = ['<option value="">Literal value (no variable / secret)</option>'];
+
+  if (vars.length > 0) {
+    const varOpts = vars.map(v => {
+      const optVal = `VAR:${v.name}`;
+      const meta = SYS_VAR_CATEGORIES[v.category] || SYS_VAR_CATEGORIES.custom;
+      const isSelected = selectedVal === optVal || selectedVal === v.name;
+      return `<option value="${escapeHtml(optVal)}" ${isSelected ? 'selected' : ''}>${meta.icon} {{VAR:${escapeHtml(v.name)}}} (${escapeHtml(v.category)})</option>`;
+    }).join('');
+    parts.push(`<optgroup label="🌐 System Variables ({{VAR:name}})">${varOpts}</optgroup>`);
+  }
+
+  if (secrets.length > 0) {
+    const secOpts = secrets.map(s => {
+      const optVal = `SECRET:${s.name}`;
+      const isSelected = selectedVal === optVal || selectedVal === s.name;
+      return `<option value="${escapeHtml(optVal)}" ${isSelected ? 'selected' : ''}>🗝️ {{SECRET:${escapeHtml(s.name)}}}</option>`;
+    }).join('');
+    parts.push(`<optgroup label="🗝️ Sequence Secrets ({{SECRET:name}})">${secOpts}</optgroup>`);
+  }
+
+  return parts.join('');
+}
+
+async function loadSystemVariables() {
+  let localVars = [];
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(SYS_VARS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localVars = parsed.map(normalizeSystemVariable).filter(Boolean);
+        }
+      }
+    }
+  } catch {
+    localVars = [];
+  }
+  if (localVars.length > 0) {
+    state.systemVariables = localVars;
+    renderSystemVariablesPanel();
+    renderModalSysVarsBar();
+  }
+
+  if (typeof fetch !== 'function') return;
+  try {
+    const res = await fetch('/api/auth/variables', { headers: { Accept: 'application/json' } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const serverVars = Array.isArray(data?.variables) ? data.variables : (Array.isArray(data) ? data : null);
+    if (serverVars) {
+      const localMap = new Map(localVars.map(v => [v.name, v]));
+      const merged = [];
+      for (const rawSv of serverVars) {
+        const sv = normalizeSystemVariable(rawSv);
+        if (!sv) continue;
+        const lv = localMap.get(sv.name);
+        if (lv && (!sv.value || sv.value === '[SECRET]' || sv.value === '[REDACTED]' || sv.value === '***')) {
+          sv.value = lv.value;
+        }
+        localMap.delete(sv.name);
+        merged.push(sv);
+      }
+      for (const leftover of localMap.values()) {
+        merged.push(leftover);
+      }
+      state.systemVariables = merged;
+      persistSystemVariablesToLocal();
+      renderSystemVariablesPanel();
+      renderModalSysVarsBar();
+      renderLsrActionProperties();
+      if (state.lastInspectedPage) renderInspectedPageCanvas(state.lastInspectedPage);
+    }
+  } catch {
+    // Graceful fallback to localStorage when backend route is unavailable
+  }
+}
+
+async function saveSystemVariable({ name, category, value }) {
+  const cleanName = String(name || '').trim();
+  if (!cleanName || LSR_FORBIDDEN_KEYS.has(cleanName) || /[^a-zA-Z0-9_.-]/.test(cleanName)) {
+    showSysVarsStatus('Variable name must contain only letters, numbers, "_", "-", or ".".', true);
+    return { ok: false };
+  }
+  const cleanCat = Object.hasOwn(SYS_VAR_CATEGORIES, category) ? category : 'custom';
+  const entry = normalizeSystemVariable({
+    name: cleanName,
+    category: cleanCat,
+    value: value ?? '',
+    isSecret: isSecretVarCategory(cleanCat),
+    updatedAt: new Date().toISOString()
+  });
+
+  const existingIdx = state.systemVariables.findIndex(v => v.name === entry.name);
+  if (existingIdx >= 0) {
+    state.systemVariables[existingIdx] = entry;
+  } else {
+    state.systemVariables.push(entry);
+  }
+  persistSystemVariablesToLocal();
+
+  if (typeof fetch === 'function') {
+    try {
+      const res = await fetch('/api/auth/variables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(entry)
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.variables)) {
+          const localMap = new Map(state.systemVariables.map(v => [v.name, v]));
+          state.systemVariables = data.variables.map(raw => {
+            const sv = normalizeSystemVariable(raw);
+            if (!sv) return null;
+            const lv = localMap.get(sv.name);
+            if (lv && (!sv.value || sv.value === '[SECRET]' || sv.value === '[REDACTED]' || sv.value === '***')) {
+              sv.value = lv.value;
+            }
+            return sv;
+          }).filter(Boolean);
+          persistSystemVariablesToLocal();
+        }
+      } else if (res.status !== 404 && res.status !== 405) {
+        const errData = await res.json().catch(() => ({}));
+        showSysVarsStatus(errData.error || `Failed to save variable (HTTP ${res.status})`, true);
+      }
+    } catch {
+      // Keep local persistence if network is unavailable
+    }
+  }
+
+  renderSystemVariablesPanel();
+  renderModalSysVarsBar();
+  renderLsrActionProperties();
+  if (state.lastInspectedPage) renderInspectedPageCanvas(state.lastInspectedPage);
+  showSysVarsStatus(`✅ Saved {{VAR:${entry.name}}} — all .lsr sequences using this variable will resolve the updated value.`, false);
+  return { ok: true, variable: entry };
+}
+
+async function deleteSystemVariable(name) {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return;
+  state.systemVariables = state.systemVariables.filter(v => v.name !== cleanName);
+  persistSystemVariablesToLocal();
+
+  if (typeof fetch === 'function') {
+    try {
+      await fetch(`/api/auth/variables/${encodeURIComponent(cleanName)}`, { method: 'DELETE' });
+    } catch {
+      // Ignore network/404 errors
+    }
+  }
+
+  renderSystemVariablesPanel();
+  renderModalSysVarsBar();
+  renderLsrActionProperties();
+  if (state.lastInspectedPage) renderInspectedPageCanvas(state.lastInspectedPage);
+  showSysVarsStatus(`🗑️ Removed system variable {{VAR:${cleanName}}}.`, false);
+}
+
+function getLsrSecretDisplayMask(action) {
+  if (!action) return '';
+  const varMatch = typeof action.value === 'string' ? action.value.match(/^\{\{VAR:([^}]+)\}\}$/i) : null;
+  if (varMatch) {
+    const sysVar = (state.systemVariables || []).find(v => v.name === varMatch[1].trim());
+    if (sysVar?.isSecret || action.isSecret) {
+      return `*** (${action.value})`;
+    }
+    return action.value;
+  }
+  if (action.isSecret || action.secretName || /pass|pwd|secret/i.test(`${action.fieldName || ''} ${action.selector || ''}`)) {
+    return '***';
+  }
+  return action.value || '';
+}
+
+function formatLsrStepLabel(action) {
+  if (!action || typeof action !== 'object') return 'Step';
+  switch (action.type) {
+    case 'navigate':
+      return `Navigate to ${action.url || '(target URL)'}`;
+    case 'change_input': {
+      const target = action.selector || action.fieldName || 'field';
+      const valText = getLsrSecretDisplayMask(action) || '(empty)';
+      if (action.selectorType === 'id') {
+        return `Change INPUT with id ${target.replace(/^#/, '')} to ${valText}`;
+      }
+      if (action.selectorType === 'name') {
+        return `Change INPUT named ${action.fieldName || target} to ${valText}`;
+      }
+      return `Change INPUT matching ${target} to ${valText}`;
+    }
+    case 'fill_otp': {
+      const target = action.selector || action.fieldName || 'auto';
+      if (!target || target === 'auto') {
+        return 'Fill OTP code into auto-detected MFA INPUT';
+      }
+      if (action.selectorType === 'id') {
+        return `Fill OTP code into INPUT with id ${target.replace(/^#/, '')}`;
+      }
+      if (action.selectorType === 'name') {
+        return `Fill OTP code into INPUT named ${action.fieldName || target}`;
+      }
+      return `Fill OTP code into INPUT matching ${target}`;
+    }
+    case 'click_button': {
+      const target = action.selector || 'Submit';
+      if (action.selectorType === 'id') {
+        return `Click on BUTTON with id ${target.replace(/^#/, '')}`;
+      }
+      if (action.selectorType === 'name') {
+        return `Click on BUTTON named ${target}`;
+      }
+      if (action.selectorType === 'text') {
+        return `Click on BUTTON with text ${target}`;
+      }
+      return `Click on BUTTON matching ${target}`;
+    }
+    case 'extract_token':
+      return `Extract ${(action.source || 'json').toUpperCase()} token${action.key || action.tokenJsonPath ? ` (${action.tokenJsonPath || action.key})` : ''}`;
+    case 'custom_request':
+      return `${String(action.method || 'POST').toUpperCase()} ${action.url || '(custom request)'}`;
+    default:
+      return String(action.label || action.type || 'Step');
+  }
+}
+
+function getLsrStepIcon(type) {
+  switch (type) {
+    case 'navigate': return '🧭';
+    case 'change_input': return '⌨️';
+    case 'fill_otp': return '🔑';
+    case 'click_button': return '🖱️';
+    case 'extract_token': return '🪪';
+    case 'custom_request': return '📡';
+    default: return '🔹';
+  }
+}
+
+function normalizeClientLoginSequence(raw = {}) {
+  const base = createDefaultLoginSequence();
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const rawName = String(src.name || base.name).replace(/[\r\n]+/g, '').trim() || base.name;
+  const name = /\.[a-zA-Z0-9]+$/.test(rawName) ? rawName : `${rawName}.lsr`;
+
+  const secrets = Array.isArray(src.secrets)
+    ? src.secrets
+        .filter(s => s && typeof s === 'object' && s.name && !LSR_FORBIDDEN_KEYS.has(String(s.name).trim()))
+        .map(s => ({
+          name: String(s.name).trim(),
+          value: s.value !== undefined && s.value !== null ? String(s.value) : '',
+          description: typeof s.description === 'string' ? s.description.trim() : ''
+        }))
+    : [];
+
+  const rawOtp = src.otpConfig && typeof src.otpConfig === 'object' ? src.otpConfig : {};
+  const otpConfig = {
+    enabled: Boolean(rawOtp.enabled ?? (rawOtp.secret || false)),
+    secret: typeof rawOtp.secret === 'string' ? rawOtp.secret.trim() : '',
+    digits: Number(rawOtp.digits) === 8 ? 8 : 6,
+    period: Math.min(120, Math.max(15, parseInt(rawOtp.period, 10) || 30)),
+    algorithm: ['SHA1', 'SHA256', 'SHA512'].includes(String(rawOtp.algorithm || '').toUpperCase())
+      ? String(rawOtp.algorithm).toUpperCase()
+      : 'SHA1',
+    inputSelector: typeof rawOtp.inputSelector === 'string' && rawOtp.inputSelector.trim()
+      ? rawOtp.inputSelector.trim()
+      : 'auto'
+  };
+
+  const actions = Array.isArray(src.actions)
+    ? src.actions
+        .filter(a => a && typeof a === 'object' && a.type)
+        .map((a, idx) => ({
+          ...a,
+          step: idx + 1,
+          label: formatLsrStepLabel(a)
+        }))
+    : [];
+
+  const restrictions = Array.isArray(src.restrictions)
+    ? Array.from(new Set(src.restrictions.map(r => String(r || '').trim()).filter(Boolean)))
+    : [...base.restrictions];
+
+  const rawSd = src.sessionDetection && typeof src.sessionDetection === 'object' ? src.sessionDetection : {};
+  const statusCodes = Array.isArray(rawSd.statusCodes)
+    ? rawSd.statusCodes.map(Number).filter(n => Number.isInteger(n) && n >= 100 && n <= 599)
+    : [401, 403];
+
+  return {
+    sequenceId: typeof src.sequenceId === 'string' ? src.sequenceId.trim() : '',
+    name,
+    updatedAt: src.updatedAt || new Date().toISOString(),
+    targetUrl: typeof src.targetUrl === 'string' ? src.targetUrl.trim() : '',
+    secrets,
+    otpConfig,
+    actions,
+    restrictions,
+    sessionDetection: {
+      statusCodes: statusCodes.length > 0 ? statusCodes : [401, 403],
+      redirectPattern: rawSd.redirectPattern !== undefined ? String(rawSd.redirectPattern || '').trim() : '/login',
+      loggedOutPattern: String(rawSd.loggedOutPattern || '').trim(),
+      loggedInPattern: String(rawSd.loggedInPattern || '').trim()
+    }
+  };
+}
+
+function syncLsrConfigFromInputs() {
+  if (typeof document === 'undefined') return;
+  const seq = state.loginSequence;
+
+  const seqNameInput = document.getElementById('lsr-sequence-name');
+  if (seqNameInput && seqNameInput.value.trim()) {
+    const rawName = seqNameInput.value.trim();
+    seq.name = /\.[a-zA-Z0-9]+$/.test(rawName) ? rawName : `${rawName}.lsr`;
+  }
+
+  const otpSecretEl = document.getElementById('otp-secret-input');
+  const otpDigitsEl = document.getElementById('otp-digits-select');
+  const otpPeriodEl = document.getElementById('otp-period-input');
+  const otpAlgEl = document.getElementById('otp-algorithm-select');
+  const otpSelEl = document.getElementById('otp-selector-input');
+
+  const rawOtpSecret = otpSecretEl ? otpSecretEl.value.trim() : seq.otpConfig.secret;
+  seq.otpConfig = {
+    enabled: Boolean(seq.otpConfig.enabled || rawOtpSecret),
+    secret: rawOtpSecret || seq.otpConfig.secret || '',
+    digits: Number(otpDigitsEl?.value) === 8 ? 8 : 6,
+    period: Math.min(120, Math.max(15, parseInt(otpPeriodEl?.value, 10) || 30)),
+    algorithm: otpAlgEl?.value || 'SHA1',
+    inputSelector: otpSelEl?.value.trim() || 'auto'
+  };
+
+  const statusCodesEl = document.getElementById('lsr-session-status-codes');
+  const redirectEl = document.getElementById('lsr-session-redirect-pattern');
+  const loggedOutEl = document.getElementById('lsr-session-logged-out-pattern');
+  const loggedInEl = document.getElementById('lsr-session-logged-in-pattern');
+
+  if (statusCodesEl) {
+    const codes = statusCodesEl.value
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isInteger(n) && n >= 100 && n <= 599);
+    seq.sessionDetection.statusCodes = codes.length > 0 ? Array.from(new Set(codes)) : [401, 403];
+  }
+  if (redirectEl) seq.sessionDetection.redirectPattern = redirectEl.value.trim();
+  if (loggedOutEl) seq.sessionDetection.loggedOutPattern = loggedOutEl.value.trim();
+  if (loggedInEl) seq.sessionDetection.loggedInPattern = loggedInEl.value.trim();
+}
+
+function applyLsrStateToInputs() {
+  if (typeof document === 'undefined') return;
+  const seq = state.loginSequence;
+
+  const seqNameInput = document.getElementById('lsr-sequence-name');
+  if (seqNameInput) seqNameInput.value = seq.name || 'WrapperSequence.lsr';
+
+  const otpSecretEl = document.getElementById('otp-secret-input');
+  const otpDigitsEl = document.getElementById('otp-digits-select');
+  const otpPeriodEl = document.getElementById('otp-period-input');
+  const otpAlgEl = document.getElementById('otp-algorithm-select');
+  const otpSelEl = document.getElementById('otp-selector-input');
+  const otpStatusEl = document.getElementById('otp-preview-status');
+
+  if (otpSecretEl && seq.otpConfig.secret && seq.otpConfig.secret !== '[SECRET]') {
+    otpSecretEl.value = seq.otpConfig.secret;
+  } else if (otpSecretEl && !seq.otpConfig.secret) {
+    otpSecretEl.value = '';
+  }
+  if (otpDigitsEl) otpDigitsEl.value = String(seq.otpConfig.digits || 6);
+  if (otpPeriodEl) otpPeriodEl.value = String(seq.otpConfig.period || 30);
+  if (otpAlgEl) otpAlgEl.value = seq.otpConfig.algorithm || 'SHA1';
+  if (otpSelEl) otpSelEl.value = seq.otpConfig.inputSelector || 'auto';
+  if (otpStatusEl && !otpStatusEl.dataset.livePreview) {
+    otpStatusEl.textContent = seq.otpConfig.enabled || seq.otpConfig.secret ? 'Configured (TOTP ready)' : 'Not configured';
+    otpStatusEl.className = `lsr-otp-status-pill ${seq.otpConfig.enabled || seq.otpConfig.secret ? 'configured' : ''}`;
+  }
+
+  const statusCodesEl = document.getElementById('lsr-session-status-codes');
+  const redirectEl = document.getElementById('lsr-session-redirect-pattern');
+  const loggedOutEl = document.getElementById('lsr-session-logged-out-pattern');
+  const loggedInEl = document.getElementById('lsr-session-logged-in-pattern');
+
+  if (statusCodesEl) statusCodesEl.value = (seq.sessionDetection.statusCodes || [401, 403]).join(', ');
+  if (redirectEl) redirectEl.value = seq.sessionDetection.redirectPattern ?? '/login';
+  if (loggedOutEl) loggedOutEl.value = seq.sessionDetection.loggedOutPattern || '';
+  if (loggedInEl) loggedInEl.value = seq.sessionDetection.loggedInPattern || '';
+
+  renderSystemVariablesPanel();
+  renderModalSysVarsBar();
+  renderLsrSecretsChips();
+  renderLsrSequenceCards();
+  renderLsrRestrictionsList();
+  renderLsrActionsList();
+  renderLsrActionProperties();
+}
+
+function buildLoginSequencePayload({ includeSecrets = true, seqOverride = null } = {}) {
+  if (!seqOverride) syncLsrConfigFromInputs();
+  const seq = seqOverride || state.loginSequence;
+  const secrets = (seq.secrets || []).map(s => ({
+    name: s.name,
+    value: includeSecrets ? s.value : '[SECRET]',
+    description: s.description || ''
+  }));
+  const otpConfig = {
+    ...seq.otpConfig,
+    secret: seq.otpConfig.secret ? (includeSecrets ? seq.otpConfig.secret : '[SECRET]') : ''
+  };
+  const actions = (seq.actions || []).map((a, idx) => {
+    const copy = { ...a, step: idx + 1 };
+    if (!includeSecrets && copy.type === 'change_input' && copy.isSecret && !copy.secretName && !/^\{\{VAR:[^}]+\}\}$/i.test(String(copy.value || ''))) {
+      copy.value = '[SECRET]';
+    }
+    copy.label = formatLsrStepLabel(copy);
+    return copy;
+  });
+
+  return {
+    ...(seq.sequenceId ? { sequenceId: seq.sequenceId } : {}),
+    name: seq.name || 'WrapperSequence.lsr',
+    updatedAt: seq.updatedAt || new Date().toISOString(),
+    ...(seq.targetUrl ? { targetUrl: seq.targetUrl } : {}),
+    secrets,
+    otpConfig,
+    actions,
+    restrictions: [...(seq.restrictions || [])],
+    sessionDetection: { ...seq.sessionDetection }
+  };
+}
+
+function renderLsrSecretsChips() {
+  const container = document.getElementById('lsr-secrets-chips');
+  if (!container) return;
+  const secrets = state.loginSequence.secrets || [];
+  if (secrets.length === 0) {
+    container.innerHTML = '<span class="form-hint">No sequence-local secrets added yet.</span>';
+    return;
+  }
+  container.innerHTML = secrets.map((s, idx) => `
+    <span class="lsr-secret-chip" data-secret-name="${escapeHtml(s.name)}">
+      <span class="lsr-secret-icon">🗝️</span>
+      <strong>${escapeHtml(s.name)}</strong>: <span class="lsr-secret-mask">***</span>
+      <button type="button" class="lsr-chip-remove" data-remove-lsr-secret="${escapeHtml(idx)}" aria-label="Remove secret ${escapeHtml(s.name)}">✕</button>
+    </span>
+  `).join('');
+}
+
+function renderLsrReuseSelect() {
+  const sel = document.getElementById('lsr-reuse-select');
+  if (!sel) return;
+  const saved = state.savedSequences || [];
+  const activeId = state.loginSequence?.sequenceId || '';
+  const activeName = state.loginSequence?.name || '';
+
+  const opts = ['<option value="">Select a saved .lsr sequence to reuse...</option>'];
+  saved.forEach((seq, idx) => {
+    const val = seq.sequenceId || `__idx_${idx}`;
+    const stepCount = Array.isArray(seq.actions) ? seq.actions.length : 0;
+    const isMatch = (seq.sequenceId && seq.sequenceId === activeId) || (!activeId && seq.name === activeName && idx === 0);
+    const label = `${seq.name || 'Sequence.lsr'} (${stepCount} step${stepCount === 1 ? '' : 's'})${seq.targetUrl ? ` — ${seq.targetUrl}` : ''}`;
+    opts.push(`<option value="${escapeHtml(val)}" ${isMatch ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+  });
+  sel.innerHTML = opts.join('');
+}
+
+function getSelectedReuseSequence() {
+  const sel = document.getElementById('lsr-reuse-select');
+  const val = sel?.value || '';
+  if (!val) return null;
+  if (val.startsWith('__idx_')) {
+    const idx = parseInt(val.slice(6), 10);
+    return Number.isInteger(idx) ? (state.savedSequences[idx] || null) : null;
+  }
+  return (state.savedSequences || []).find(s => s.sequenceId === val) || null;
+}
+
+function renderLsrSequenceCards() {
+  renderLsrReuseSelect();
+  const listEl = document.getElementById('lsr-sequence-cards-list');
+  if (!listEl) return;
+
+  const cards = state.savedSequences.length > 0
+    ? state.savedSequences
+    : [state.loginSequence];
+
+  listEl.innerHTML = cards.map((seq, idx) => {
+    const isSaved = Boolean(seq.sequenceId && state.savedSequences.length > 0);
+    const stepCount = Array.isArray(seq.actions) ? seq.actions.length : 0;
+    const secretCount = Array.isArray(seq.secrets) ? seq.secrets.length : 0;
+    const hasOtp = Boolean(seq.otpConfig?.enabled || seq.otpConfig?.secret);
+    const updatedText = seq.updatedAt ? new Date(seq.updatedAt).toLocaleString() : 'Draft';
+    const isActive = Boolean(
+      (seq.sequenceId && seq.sequenceId === state.loginSequence.sequenceId) ||
+      (!seq.sequenceId && !state.loginSequence.sequenceId && idx === 0)
+    );
+
+    return `
+      <div class="lsr-sequence-card ${isActive ? 'active' : ''}" data-lsr-seq-idx="${escapeHtml(idx)}">
+        <div class="lsr-seq-card-info">
+          <div class="lsr-seq-card-title-row">
+            <span class="lsr-seq-icon">🎬</span>
+            <strong class="lsr-seq-name">${escapeHtml(seq.name || 'WrapperSequence.lsr')}</strong>
+            ${isActive ? '<span class="badge badge-primary">Active for Scan ✅</span>' : ''}
+            <span class="badge badge-outline">${escapeHtml(stepCount)} step${stepCount === 1 ? '' : 's'}</span>
+            ${secretCount > 0 ? `<span class="badge badge-outline">🗝️ ${escapeHtml(secretCount)}</span>` : ''}
+            ${hasOtp ? '<span class="badge badge-outline">🔑 OTP</span>' : ''}
+            ${!isSaved ? '<span class="badge">Draft</span>' : ''}
+          </div>
+          <div class="lsr-seq-card-meta">Last updated: ${escapeHtml(updatedText)}${seq.targetUrl ? ` · Target: ${escapeHtml(seq.targetUrl)}` : ''}</div>
+        </div>
+        <div class="lsr-seq-card-actions">
+          ${!isActive ? `
+            <button
+              type="button"
+              class="btn-secondary btn-small"
+              data-lsr-card-action="use"
+              data-lsr-seq-idx="${escapeHtml(idx)}"
+              title="Use this saved sequence for upcoming scans"
+            >✅ Use in Scan</button>
+          ` : ''}
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-lsr-card-action="play"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Play and verify this sequence now"
+          >▶️ Play</button>
+          <button
+            type="button"
+            ${idx === 0 ? 'id="btn-edit-lsr-sequence"' : ''}
+            class="btn-secondary btn-small"
+            data-lsr-card-action="edit"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Edit sequence in Visual Login Sequence Recorder"
+          >✏️ Edit</button>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-lsr-card-action="duplicate"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Duplicate sequence"
+          >📋 Duplicate</button>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-lsr-card-action="export"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Export .lsr JSON file"
+          >📥 Export</button>
+          <button
+            type="button"
+            ${idx === 0 ? 'id="btn-delete-lsr-sequence"' : ''}
+            class="btn-secondary btn-small"
+            data-lsr-card-action="delete"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Delete sequence"
+          >🗑️ Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderLsrRestrictionsList() {
+  const listEl = document.getElementById('lsr-restrictions-list');
+  if (!listEl) return;
+  const items = state.loginSequence.restrictions || [];
+  if (items.length === 0) {
+    listEl.innerHTML = '<div class="empty-muted">No restricted URLs configured. Add paths like /logout or /signout to protect session integrity.</div>';
+    return;
+  }
+  listEl.innerHTML = items.map((item, idx) => `
+    <div class="lsr-restriction-row">
+      <code>${escapeHtml(item)}</code>
+      <button type="button" class="btn-secondary btn-small" data-remove-lsr-restriction="${escapeHtml(idx)}">✕ Remove</button>
+    </div>
+  `).join('');
+}
+
+function findPlayStepForAction(playRes, actionIdx) {
+  if (!playRes || typeof playRes !== 'object') return null;
+  const steps = Array.isArray(playRes.steps) && playRes.steps.length > 0
+    ? playRes.steps
+    : (Array.isArray(playRes.sequenceSteps) ? playRes.sequenceSteps : []);
+  if (steps.length === 0) return null;
+  return steps.find(st => Number(st.sequenceStep) === actionIdx + 1)
+    || steps.find(st => Number(st.step) === actionIdx + 1)
+    || steps[actionIdx]
+    || null;
+}
+
+function getPlayStepStatus(st) {
+  if (!st || typeof st !== 'object') return 'ok';
+  if (st.stepStatus === 'error' || st.stepStatus === 'warning' || st.stepStatus === 'ok') {
+    return st.stepStatus;
+  }
+  if (st.error || Number(st.status) >= 400) return 'error';
+  if (Array.isArray(st.issues) && st.issues.length > 0) {
+    return st.issues.some(i => i?.severity === 'error') ? 'error' : 'warning';
+  }
+  return 'ok';
+}
+
+function getPlayStepShortReason(st) {
+  if (!st) return '';
+  if (Array.isArray(st.issues) && st.issues.length > 0) {
+    return st.issues[0].code || st.issues[0].title || 'Issue';
+  }
+  if (Number(st.status) >= 400) return `HTTP ${st.status}`;
+  if (st.error) return String(st.error).slice(0, 32);
+  return '';
+}
+
+function renderLsrActionsList() {
+  const listEl = document.getElementById('lsr-actions-list');
+  if (!listEl) return;
+  const actions = state.loginSequence.actions || [];
+  if (actions.length === 0) {
+    listEl.innerHTML = '<div class="empty-muted">No login steps recorded yet. Use <strong>→ Load Page Forms</strong> on the left or the <strong>Quick Add</strong> buttons to build your login sequence.</div>';
+    return;
+  }
+  if (state.selectedLsrStepIndex >= actions.length) {
+    state.selectedLsrStepIndex = actions.length - 1;
+  }
+
+  const playRes = state.lastLsrPlayResult;
+
+  listEl.innerHTML = actions.map((action, idx) => {
+    const isSelected = idx === state.selectedLsrStepIndex;
+    const icon = getLsrStepIcon(action.type);
+    const label = formatLsrStepLabel(action);
+
+    let statusBadgeHtml = '';
+    let statusRowClass = '';
+    const matchedStep = findPlayStepForAction(playRes, idx);
+    if (matchedStep) {
+      const stStatus = getPlayStepStatus(matchedStep);
+      statusRowClass = `lsr-step-state-${stStatus}`;
+      if (stStatus === 'ok') {
+        const okText = matchedStep.status ? `HTTP ${matchedStep.status}` : 'OK';
+        statusBadgeHtml = `<span class="lsr-step-status-badge ok">✅ ${escapeHtml(okText)}</span>`;
+      } else if (stStatus === 'warning') {
+        statusBadgeHtml = '<span class="lsr-step-status-badge warning">⚠️ Warning</span>';
+      } else {
+        const reason = getPlayStepShortReason(matchedStep);
+        statusBadgeHtml = `<span class="lsr-step-status-badge error">❌ Failed${reason ? ` · ${escapeHtml(reason)}` : ''}</span>`;
+      }
+    }
+
+    return `
+      <button type="button" class="lsr-action-item ${isSelected ? 'active' : ''} ${statusRowClass}" data-lsr-step-idx="${escapeHtml(idx)}">
+        <span class="lsr-step-num">${escapeHtml(idx + 1)}</span>
+        <span class="lsr-step-icon">${icon}</span>
+        <span class="lsr-step-label">${escapeHtml(label)}</span>
+        ${statusBadgeHtml}
+      </button>
+    `;
+  }).join('');
+}
+
+function renderLsrActionProperties() {
+  const propsEl = document.getElementById('lsr-action-properties');
+  if (!propsEl) return;
+  const idx = state.selectedLsrStepIndex;
+  const actions = state.loginSequence.actions || [];
+  if (idx < 0 || idx >= actions.length) {
+    propsEl.innerHTML = '<div class="empty-muted">Select an action above to inspect or edit its selector, secret binding, and request properties.</div>';
+    return;
+  }
+
+  const action = actions[idx];
+  const varMatch = typeof action.value === 'string' ? action.value.match(/^\{\{VAR:([^}]+)\}\}$/i) : null;
+  const selectedBindingVal = varMatch
+    ? `VAR:${varMatch[1].trim()}`
+    : (action.secretName ? `SECRET:${action.secretName}` : '');
+  const secretOptionsHtml = buildVariableAndSecretOptionsHtml(selectedBindingVal);
+
+  const quickVarChipsHtml = (state.systemVariables || []).length > 0
+    ? `
+      <div class="lsr-props-quick-vars">
+        <span class="form-hint">Quick bind <code>{{VAR:...}}</code>:</span>
+        ${state.systemVariables.map(v => `<button type="button" class="lsr-modal-sysvar-chip" data-lsr-insert-var="${escapeHtml(v.name)}">{{VAR:${escapeHtml(v.name)}}}</button>`).join('')}
+      </div>
+    `
+    : '';
+
+  let typeFieldsHtml = '';
+  if (action.type === 'navigate') {
+    typeFieldsHtml = `
+      <div class="form-group full-width">
+        <label for="lsr-prop-url" class="form-label">Target URL</label>
+        <input type="text" id="lsr-prop-url" class="form-input form-input-compact" value="${escapeHtml(action.url || '')}" placeholder="https://example.com/login or {{VAR:login_url}}">
+        ${quickVarChipsHtml}
+      </div>
+    `;
+  } else if (action.type === 'change_input') {
+    const isMasked = Boolean(action.isSecret || action.secretName);
+    const isServerRedactedToken = action.value === '[REDACTED]' || action.value === '[SECRET]';
+    const displayValue = isServerRedactedToken ? '' : (action.value || '');
+    const valPlaceholder = isServerRedactedToken
+      ? '•••••••• (Saved secret — leave blank to keep or type new value)'
+      : (action.secretName ? `{{SECRET:${escapeHtml(action.secretName)}}}` : 'Enter field value or {{VAR:name}}');
+    typeFieldsHtml = `
+      <div class="form-group">
+        <label for="lsr-prop-selector-type" class="form-label">Selector Type</label>
+        <select id="lsr-prop-selector-type" class="form-select form-select-compact">
+          <option value="id" ${action.selectorType === 'id' ? 'selected' : ''}>id</option>
+          <option value="name" ${action.selectorType === 'name' ? 'selected' : ''}>name</option>
+          <option value="css" ${action.selectorType === 'css' ? 'selected' : ''}>css</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-selector" class="form-label">Selector / Field Name</label>
+        <input type="text" id="lsr-prop-selector" class="form-input form-input-compact" value="${escapeHtml(action.selector || action.fieldName || '')}" placeholder="username or password">
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-secret-name" class="form-label">System Variable / Secret Reference</label>
+        <select id="lsr-prop-secret-name" class="form-select form-select-compact">${secretOptionsHtml}</select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-value" class="form-label">Value ${selectedBindingVal ? '(bound)' : ''}</label>
+        <input type="${isMasked ? 'password' : 'text'}" id="lsr-prop-value" class="form-input form-input-compact" ${isServerRedactedToken ? 'data-preserve-masked="1"' : ''} value="${escapeHtml(displayValue)}" placeholder="${valPlaceholder}">
+      </div>
+      <div class="form-group full-width">
+        <label class="checkbox-label">
+          <input type="checkbox" id="lsr-prop-is-secret" ${isMasked ? 'checked' : ''}>
+          <span>Mask value as secret (<code>***</code>)</span>
+        </label>
+      </div>
+    `;
+  } else if (action.type === 'fill_otp') {
+    typeFieldsHtml = `
+      <div class="form-group">
+        <label for="lsr-prop-selector-type" class="form-label">Selector Type</label>
+        <select id="lsr-prop-selector-type" class="form-select form-select-compact">
+          <option value="id" ${action.selectorType === 'id' ? 'selected' : ''}>id</option>
+          <option value="name" ${action.selectorType === 'name' ? 'selected' : ''}>name</option>
+          <option value="css" ${action.selectorType === 'css' ? 'selected' : ''}>css</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-selector" class="form-label">OTP Field Selector / Name</label>
+        <input type="text" id="lsr-prop-selector" class="form-input form-input-compact" value="${escapeHtml(action.selector || 'auto')}" placeholder="auto or totp">
+      </div>
+    `;
+  } else if (action.type === 'click_button') {
+    typeFieldsHtml = `
+      <div class="form-group">
+        <label for="lsr-prop-selector-type" class="form-label">Selector Type</label>
+        <select id="lsr-prop-selector-type" class="form-select form-select-compact">
+          <option value="text" ${action.selectorType === 'text' ? 'selected' : ''}>text</option>
+          <option value="id" ${action.selectorType === 'id' ? 'selected' : ''}>id</option>
+          <option value="name" ${action.selectorType === 'name' ? 'selected' : ''}>name</option>
+          <option value="css" ${action.selectorType === 'css' ? 'selected' : ''}>css</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-selector" class="form-label">Button Text / Selector</label>
+        <input type="text" id="lsr-prop-selector" class="form-input form-input-compact" value="${escapeHtml(action.selector || '')}" placeholder="Log In">
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-submit-url" class="form-label">Submit URL (Optional override)</label>
+        <input type="text" id="lsr-prop-submit-url" class="form-input form-input-compact" value="${escapeHtml(action.submitUrl || '')}" placeholder="Auto from form action">
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-content-type" class="form-label">Content-Type</label>
+        <select id="lsr-prop-content-type" class="form-select form-select-compact">
+          <option value="" ${!action.contentType ? 'selected' : ''}>Auto (from form)</option>
+          <option value="form" ${action.contentType === 'form' ? 'selected' : ''}>application/x-www-form-urlencoded</option>
+          <option value="json" ${action.contentType === 'json' ? 'selected' : ''}>application/json</option>
+        </select>
+      </div>
+    `;
+  } else if (action.type === 'extract_token') {
+    typeFieldsHtml = `
+      <div class="form-group">
+        <label for="lsr-prop-token-source" class="form-label">Token Source</label>
+        <select id="lsr-prop-token-source" class="form-select form-select-compact">
+          <option value="json" ${action.source === 'json' ? 'selected' : ''}>JSON body</option>
+          <option value="header" ${action.source === 'header' ? 'selected' : ''}>Response header</option>
+          <option value="cookie" ${action.source === 'cookie' ? 'selected' : ''}>Cookie</option>
+          <option value="csrf" ${action.source === 'csrf' ? 'selected' : ''}>CSRF DOM token</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-token-key" class="form-label">Key / JSON Path</label>
+        <input type="text" id="lsr-prop-token-key" class="form-input form-input-compact" value="${escapeHtml(action.tokenJsonPath || action.key || '')}" placeholder="token or data.accessToken">
+      </div>
+    `;
+  } else if (action.type === 'custom_request') {
+    const payloadStr = typeof action.payload === 'string'
+      ? action.payload
+      : (action.payload ? JSON.stringify(action.payload) : '');
+    typeFieldsHtml = `
+      <div class="form-group">
+        <label for="lsr-prop-method" class="form-label">HTTP Method</label>
+        <select id="lsr-prop-method" class="form-select form-select-compact">
+          <option value="POST" ${action.method === 'POST' ? 'selected' : ''}>POST</option>
+          <option value="GET" ${action.method === 'GET' ? 'selected' : ''}>GET</option>
+          <option value="PUT" ${action.method === 'PUT' ? 'selected' : ''}>PUT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="lsr-prop-content-type" class="form-label">Content-Type</label>
+        <select id="lsr-prop-content-type" class="form-select form-select-compact">
+          <option value="json" ${action.contentType === 'json' ? 'selected' : ''}>application/json</option>
+          <option value="form" ${action.contentType === 'form' ? 'selected' : ''}>application/x-www-form-urlencoded</option>
+        </select>
+      </div>
+      <div class="form-group full-width">
+        <label for="lsr-prop-url" class="form-label">Request URL</label>
+        <input type="text" id="lsr-prop-url" class="form-input form-input-compact" value="${escapeHtml(action.url || '')}" placeholder="https://example.com/api/login">
+      </div>
+      <div class="form-group full-width">
+        <label for="lsr-prop-payload" class="form-label">Payload (JSON or key=val)</label>
+        <input type="text" id="lsr-prop-payload" class="form-input form-input-compact" value="${escapeHtml(payloadStr)}" placeholder='{"username":"{{VAR:corp_user}}","password":"{{VAR:corp_pass}}"}'>
+        ${quickVarChipsHtml}
+      </div>
+    `;
+  }
+
+  propsEl.innerHTML = `
+    <div class="lsr-props-header">
+      <strong>Action Properties (Step ${escapeHtml(idx + 1)})</strong>
+    </div>
+    <div class="lsr-props-grid">
+      <div class="form-group full-width">
+        <label for="lsr-prop-type" class="form-label">Action Type</label>
+        <select id="lsr-prop-type" class="form-select form-select-compact">
+          <option value="navigate" ${action.type === 'navigate' ? 'selected' : ''}>Navigate (GET URL)</option>
+          <option value="change_input" ${action.type === 'change_input' ? 'selected' : ''}>Change Input Field</option>
+          <option value="fill_otp" ${action.type === 'fill_otp' ? 'selected' : ''}>Fill OTP / TOTP Code</option>
+          <option value="click_button" ${action.type === 'click_button' ? 'selected' : ''}>Click Submit Button</option>
+          <option value="extract_token" ${action.type === 'extract_token' ? 'selected' : ''}>Extract Token</option>
+          <option value="custom_request" ${action.type === 'custom_request' ? 'selected' : ''}>Custom HTTP Request</option>
+        </select>
+      </div>
+      ${typeFieldsHtml}
+    </div>
+  `;
+}
+
+function appendLsrStep(stepObj) {
+  const actions = state.loginSequence.actions;
+  const normalized = {
+    ...stepObj,
+    step: actions.length + 1
+  };
+  normalized.label = formatLsrStepLabel(normalized);
+  actions.push(normalized);
+  state.selectedLsrStepIndex = actions.length - 1;
+  state.loginSequence.updatedAt = new Date().toISOString();
+  renderLsrActionsList();
+  renderLsrActionProperties();
+  renderLsrSequenceCards();
+  if (!state.lastLsrPlayResult && !state.lastInspectedPage) {
+    renderSequenceBlueprintCanvas(state.loginSequence);
+  }
+}
+
+function createDefaultStepForType(type) {
+  const fallbackUrl = document.getElementById('lsr-inspect-url')?.value.trim()
+    || document.getElementById('adv-auth-login-url')?.value.trim()
+    || document.getElementById('target-url')?.value.trim()
+    || '';
+
+  switch (type) {
+    case 'navigate':
+      return { type: 'navigate', url: fallbackUrl };
+    case 'change_input':
+      return { type: 'change_input', selectorType: 'id', selector: 'username', fieldName: 'username', value: '', secretName: '', isSecret: false };
+    case 'fill_otp':
+      return {
+        type: 'fill_otp',
+        selectorType: 'id',
+        selector: state.loginSequence.otpConfig?.inputSelector || 'auto',
+        fieldName: state.loginSequence.otpConfig?.inputSelector || ''
+      };
+    case 'click_button':
+      return { type: 'click_button', selectorType: 'text', selector: 'Log In', submitUrl: '', method: 'POST', contentType: '' };
+    case 'extract_token':
+      return { type: 'extract_token', source: 'json', key: 'token', tokenJsonPath: 'token' };
+    case 'custom_request':
+      return { type: 'custom_request', method: 'POST', url: fallbackUrl, contentType: 'json', payload: '' };
+    default:
+      return { type: 'navigate', url: fallbackUrl };
+  }
+}
+
+function renderInspectedPageCanvas(data) {
+  const canvas = document.getElementById('lsr-visual-canvas');
+  if (!canvas) return;
+  state.lastInspectedPage = data;
+
+  const pageUrl = data?.pageUrl || data?.url || '';
+  const title = data?.title || 'Inspected Page';
+  const csrf = data?.csrf || {};
+  const forms = Array.isArray(data?.forms) ? data.forms : [];
+  const inputs = Array.isArray(data?.inputs) ? data.inputs : [];
+  const buttons = Array.isArray(data?.buttons) ? data.buttons : [];
+  const secrets = state.loginSequence.secrets || [];
+  const sysVars = state.systemVariables || [];
+
+  const csrfText = csrf.formField
+    ? `CSRF Field: ${csrf.formField}`
+    : (csrf.headerName ? `CSRF Header: ${csrf.headerName}` : 'No CSRF token detected');
+
+  const inputsHtml = inputs.length > 0
+    ? inputs.map((inp, idx) => {
+        let defaultBinding = '';
+        if (inp.isPassword) {
+          const matchingVar = sysVars.find(v => v.category === 'password' || /pass|pwd|secret/i.test(v.name));
+          const matchingSec = secrets.find(s => /pass|pwd|secret/i.test(s.name)) || secrets[0];
+          if (matchingVar) defaultBinding = `VAR:${matchingVar.name}`;
+          else if (matchingSec) defaultBinding = `SECRET:${matchingSec.name}`;
+        } else if (/user|email|login/i.test(`${inp.name || ''} ${inp.id || ''} ${inp.type || ''}`)) {
+          const matchingUserVar = sysVars.find(v => v.category === 'username' || /user|email/i.test(v.name));
+          if (matchingUserVar) defaultBinding = `VAR:${matchingUserVar.name}`;
+        }
+        const secretOptions = buildVariableAndSecretOptionsHtml(defaultBinding);
+
+        return `
+          <div class="lsr-inspect-field-card" data-lsr-input-card="${escapeHtml(idx)}">
+            <div class="lsr-inspect-field-head">
+              <div>
+                <strong>${escapeHtml(inp.displayLabel || inp.name || inp.id || inp.type || 'input')}</strong>
+                <span class="badge">${escapeHtml(inp.type || 'text')}</span>
+                ${inp.isPassword ? '<span class="badge badge-warning">password</span>' : ''}
+                ${inp.isOtpCandidate ? '<span class="badge badge-primary">🔑 MFA / OTP</span>' : ''}
+              </div>
+              <button type="button" class="btn-secondary btn-small" data-lsr-record-input="${escapeHtml(idx)}">
+                ${inp.isOtpCandidate ? '🔑 + Record OTP' : '+ Record Input'}
+              </button>
+            </div>
+            ${!inp.isOtpCandidate ? `
+              <div class="lsr-inspect-bind-row">
+                <select class="form-select form-select-compact" data-lsr-input-secret="${escapeHtml(idx)}" aria-label="Bind variable or secret for ${escapeHtml(inp.name || inp.id || idx)}">
+                  ${secretOptions}
+                </select>
+                <input
+                  type="${inp.isPassword ? 'password' : 'text'}"
+                  class="form-input form-input-compact"
+                  data-lsr-input-val="${escapeHtml(idx)}"
+                  value="${escapeHtml(inp.isPassword ? '' : (inp.value || ''))}"
+                  placeholder="${inp.isPassword ? 'Or type password value' : 'Value to enter'}"
+                >
+              </div>
+            ` : '<div class="form-hint">Appends a <code>Fill OTP code</code> step using your configured TOTP secret.</div>'}
+          </div>
+        `;
+      }).join('')
+    : '<div class="empty-muted">No form input elements discovered on this page.</div>';
+
+  const buttonsHtml = buttons.length > 0
+    ? buttons.map((btn, idx) => `
+        <button type="button" class="lsr-inspect-btn-card" data-lsr-record-button="${escapeHtml(idx)}">
+          <span class="lsr-inspect-btn-label">🖱️ ${escapeHtml(btn.displayLabel || btn.text || btn.id || btn.name || 'Submit')}</span>
+          <span class="badge badge-outline">+ Record Click</span>
+        </button>
+      `).join('')
+    : '<div class="empty-muted">No submit buttons discovered on this page.</div>';
+
+  const formsMetaHtml = forms.length > 0
+    ? forms.map(f => `
+        <div class="lsr-inspect-form-meta">
+          <span><strong>Form #${escapeHtml(Number(f.formIndex) + 1)}:</strong> <code>${escapeHtml(f.method || 'POST')}</code> <code>${escapeHtml(f.actionUrl || f.action || pageUrl)}</code></span>
+          <span class="form-hint">(${escapeHtml(f.inputCount || 0)} input(s))</span>
+        </div>
+      `).join('')
+    : '';
+
+  canvas.innerHTML = `
+    <div class="lsr-inspect-page-summary">
+      <div class="lsr-inspect-page-title-row">
+        <strong>🌐 ${escapeHtml(title)}</strong>
+        <button type="button" class="btn-secondary btn-small" id="btn-lsr-record-nav-here">+ Record Navigate</button>
+      </div>
+      <div class="lsr-inspect-page-url"><code>${escapeHtml(pageUrl)}</code></div>
+      <div class="lsr-inspect-badges">
+        <span class="badge ${csrf.formField || csrf.headerName ? 'badge-primary' : ''}">🛡️ ${escapeHtml(csrfText)}</span>
+        ${data?.hasPasswordInput ? '<span class="badge">🔒 Password Form</span>' : ''}
+        ${data?.hasMfaOrOtpField ? '<span class="badge badge-primary">🔑 OTP Field Detected</span>' : ''}
+      </div>
+      ${formsMetaHtml}
+    </div>
+    <div class="lsr-inspect-section">
+      <div class="lsr-inspect-section-title">Discovered Form Inputs (${escapeHtml(inputs.length)})</div>
+      <div class="lsr-inspect-fields-list">${inputsHtml}</div>
+    </div>
+    <div class="lsr-inspect-section">
+      <div class="lsr-inspect-section-title">Discovered Buttons (${escapeHtml(buttons.length)})</div>
+      <div class="lsr-inspect-buttons-list">${buttonsHtml}</div>
+    </div>
+  `;
+}
+
+function buildClientSideDiagnostics(res) {
+  if (!res || typeof res !== 'object') return [];
+  if (Array.isArray(res.diagnostics) && res.diagnostics.length > 0) {
+    return res.diagnostics;
+  }
+
+  const out = [];
+  const steps = Array.isArray(res.steps) ? res.steps : (Array.isArray(res.sequenceSteps) ? res.sequenceSteps : []);
+  for (let i = 0; i < steps.length; i++) {
+    const st = steps[i];
+    if (Array.isArray(st.issues) && st.issues.length > 0) {
+      for (const iss of st.issues) {
+        out.push({
+          step: st.step || i + 1,
+          sequenceStep: st.sequenceStep || st.step || i + 1,
+          severity: iss.severity || 'error',
+          code: iss.code || 'STEP_ISSUE',
+          title: iss.title || iss.message || `Step ${st.sequenceStep || st.step || i + 1} failed`,
+          detail: iss.detail || st.error || '',
+          fixSuggestion: iss.fixSuggestion || iss.remediation || 'Check the selector or System Variable for this step.'
+        });
+      }
+    } else if (st.error || Number(st.status) >= 400) {
+      const code = Number(st.status) >= 400 ? `HTTP_${st.status}` : 'STEP_ERROR';
+      out.push({
+        step: st.step || i + 1,
+        sequenceStep: st.sequenceStep || st.step || i + 1,
+        severity: 'error',
+        code,
+        title: Number(st.status) >= 400
+          ? `Target rejected step with HTTP ${st.status}`
+          : `Step ${st.sequenceStep || st.step || i + 1} encountered an error`,
+        detail: st.error || st.domSnapshot?.pageErrorBanner || `Step "${st.label || st.action || ''}" returned status ${st.status || 'error'}.`,
+        fixSuggestion: Number(st.status) === 401 || Number(st.status) === 403
+          ? 'Verify your {{VAR:username}} / {{VAR:password}} or {{SECRET:...}} credentials, CSRF token, or login URL.'
+          : 'Inspect this step selector and payload in the visual preview below.'
+      });
+    }
+  }
+
+  if (out.length === 0 && !res.authenticated) {
+    const rawErr = String(res.error || '');
+    const isNetworkAbortOrTimeout = /aborted|timed?\s*out|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|Fetch failed/i.test(rawErr);
+    if (isNetworkAbortOrTimeout) {
+      out.push({
+        step: 1,
+        sequenceStep: 1,
+        severity: 'error',
+        code: 'NETWORK_TIMEOUT_OR_ABORT',
+        title: 'Step 1 (Navigate): Target Login URL Could Not Be Reached (Timed Out or Aborted)',
+        detail: rawErr,
+        fixSuggestion: 'Verify the Login URL in Step 1 is reachable from this machine, enable "Allow Authorized Internal / Private Targets" for internal servers, or click "⚡ Load Working Example" in the toolbar to test with the built-in demo login portal.'
+      });
+    } else {
+      out.push({
+        step: steps.length || 1,
+        sequenceStep: steps.length || 1,
+        severity: 'error',
+        code: 'AUTH_INCOMPLETE',
+        title: 'Login sequence did not establish an authenticated session',
+        detail: rawErr || 'No session cookie or Bearer token was captured after executing all steps.',
+        fixSuggestion: 'Check that your Submit button click step posts to the login form action and that credentials/OTP variables are set.'
+      });
+    }
+  }
+
+  return out;
+}
+
+function renderLsrDiagnosticsBanner(res, { includeInline = true } = {}) {
+  if (typeof document === 'undefined') return;
+  const targets = [
+    document.getElementById('lsr-top-diagnostics-banner'),
+    includeInline ? document.getElementById('lsr-inline-diagnostics-summary') : null
+  ].filter(Boolean);
+
+  if (targets.length === 0) return;
+  if (!res) {
+    for (const el of targets) {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+    }
+    return;
+  }
+
+  const diagnostics = buildClientSideDiagnostics(res);
+  const isFailureOrWarn = !res.authenticated || diagnostics.length > 0;
+
+  if (isFailureOrWarn) {
+    const hasError = !res.authenticated || diagnostics.some(d => d.severity === 'error');
+    const headerText = hasError
+      ? '❌ Login Sequence Issue Detected — Review What Is Incorrect Below'
+      : `⚠️ Login Sequence Warnings (${escapeHtml(diagnostics.length)})`;
+
+    const itemsHtml = diagnostics.map(d => {
+      const stepNum = Number(d.sequenceStep || d.step || 1) || 1;
+      const jumpIdx = Math.max(0, stepNum - 1);
+      return `
+        <div class="lsr-diag-item lsr-diag-${escapeHtml(d.severity === 'warning' ? 'warning' : 'error')}">
+          <div class="lsr-diag-item-head">
+            <div class="lsr-diag-badges">
+              <span class="badge ${d.severity === 'warning' ? 'badge-warning' : 'badge-danger'}">Step ${escapeHtml(stepNum)}</span>
+              <code>${escapeHtml(d.code || 'ISSUE')}</code>
+              <strong>${escapeHtml(d.title || d.message || 'Step issue')}</strong>
+            </div>
+            <button type="button" class="btn-secondary btn-small" data-lsr-jump-step="${escapeHtml(jumpIdx)}">🔍 Inspect Step ${escapeHtml(stepNum)}</button>
+          </div>
+          ${d.detail ? `<div class="lsr-diag-detail">${escapeHtml(d.detail)}</div>` : ''}
+          <div class="lsr-diag-fix">💡 <strong>How to Fix:</strong> ${escapeHtml(d.fixSuggestion || d.remediation || 'Check the selector or System Variable for this step.')}</div>
+        </div>
+      `;
+    }).join('');
+
+    const html = `
+      <div class="lsr-diag-banner-header">${headerText}</div>
+      <div class="lsr-diag-items-list">${itemsHtml}</div>
+    `;
+
+    for (const el of targets) {
+      el.className = `lsr-top-diagnostics-banner ${hasError ? 'error' : 'warning'}`;
+      el.innerHTML = html;
+      el.classList.remove('hidden');
+    }
+    return;
+  }
+
+  const stepsCount = Array.isArray(res.steps) ? res.steps.length : (Array.isArray(res.sequenceSteps) ? res.sequenceSteps.length : 0);
+  const csrfLabel = res.csrfHeaderName || res.csrfFormField || 'None';
+  const successHtml = `
+    <div class="lsr-diag-banner-header">
+      ✅ Login Sequence Verified &amp; Authenticated — All ${escapeHtml(stepsCount)} step(s) passed (${escapeHtml(res.cookieCount || 0)} cookie(s) · JWT: ${res.hasBearerToken ? 'Captured' : 'None'} · CSRF: ${escapeHtml(csrfLabel)})
+    </div>
+  `;
+  for (const el of targets) {
+    el.className = 'lsr-top-diagnostics-banner success';
+    el.innerHTML = successHtml;
+    el.classList.remove('hidden');
+  }
+}
+
+function getInputMatchKey(inp = {}) {
+  return String(inp.id || inp.name || inp.selector || inp.selectorValue || '').replace(/^#/, '').trim().toLowerCase();
+}
+
+function getButtonMatchKey(btn = {}) {
+  return String(btn.id || btn.name || btn.text || btn.displayLabel || btn.selector || btn.selectorValue || '').replace(/^#/, '').trim().toLowerCase();
+}
+
+function stepTargetsInput(step, inp) {
+  if (!step || !inp) return false;
+  if (step.type !== 'change_input' && step.action !== 'change_input' && step.type !== 'fill_otp' && step.action !== 'fill_otp') {
+    return false;
+  }
+  const sel = String(step.selector || '').replace(/^#/, '').trim().toLowerCase();
+  const fname = String(step.fieldName || '').trim().toLowerCase();
+  const id = String(inp.id || '').trim().toLowerCase();
+  const name = String(inp.name || '').trim().toLowerCase();
+  const selVal = String(inp.selector || inp.selectorValue || '').replace(/^#/, '').trim().toLowerCase();
+  if (step.type === 'fill_otp' || step.action === 'fill_otp') {
+    if ((!sel || sel === 'auto') && inp.isOtpCandidate) return true;
+  }
+  return Boolean(
+    (id && (id === sel || id === fname)) ||
+    (name && (name === sel || name === fname)) ||
+    (selVal && (selVal === sel || selVal === fname))
+  );
+}
+
+function stepTargetsButton(step, btn) {
+  if (!step || !btn) return false;
+  if (step.type !== 'click_button' && step.action !== 'click_button') return false;
+  const sel = String(step.selector || '').replace(/^#/, '').trim().toLowerCase();
+  const id = String(btn.id || '').trim().toLowerCase();
+  const name = String(btn.name || '').trim().toLowerCase();
+  const text = String(btn.text || btn.displayLabel || '').trim().toLowerCase();
+  return Boolean(
+    (id && id === sel) ||
+    (name && name === sel) ||
+    (text && sel && (text === sel || text.includes(sel)))
+  );
+}
+
+function renderVisualPlaySnapshot(playRes, selectedStepIdx = -1) {
+  const canvas = document.getElementById('lsr-visual-canvas');
+  if (!canvas || !playRes) return;
+
+  const rawSteps = Array.isArray(playRes.steps) && playRes.steps.length > 0
+    ? playRes.steps
+    : (Array.isArray(playRes.sequenceSteps) ? playRes.sequenceSteps : []);
+
+  if (rawSteps.length === 0) {
+    const fallbackDiag = buildClientSideDiagnostics(playRes);
+    canvas.innerHTML = `
+      <div class="lsr-sim-header-row">
+        <strong>🎬 Visual Step-by-Step Replay Preview</strong>
+        ${state.lastInspectedPage ? '<button type="button" id="btn-lsr-back-to-inspector" class="btn-secondary btn-small">🔄 Back to Live Form Inspector</button>' : ''}
+      </div>
+      <div class="feedback-banner ${playRes.authenticated ? 'success' : 'error'}">
+        ${escapeHtml(fallbackDiag[0]?.detail || playRes.error || 'No step execution details returned.')}
+      </div>
+    `;
+    return;
+  }
+
+  let activeIdx = selectedStepIdx;
+  if (!Number.isInteger(activeIdx) || activeIdx < 0 || activeIdx >= rawSteps.length) {
+    const errIdx = rawSteps.findIndex(st => getPlayStepStatus(st) === 'error');
+    const warnIdx = rawSteps.findIndex(st => getPlayStepStatus(st) === 'warning');
+    activeIdx = errIdx >= 0 ? errIdx : (warnIdx >= 0 ? warnIdx : rawSteps.length - 1);
+  }
+
+  const activeStep = rawSteps[activeIdx];
+  // Find nearest DOM snapshot at or prior to activeIdx, or fall back to lastInspectedPage
+  let snap = activeStep?.domSnapshot || null;
+  if (!snap) {
+    for (let j = activeIdx - 1; j >= 0; j--) {
+      if (rawSteps[j]?.domSnapshot) {
+        snap = rawSteps[j].domSnapshot;
+        break;
+      }
+    }
+  }
+  if (!snap && state.lastInspectedPage) {
+    snap = state.lastInspectedPage;
+  }
+
+  // Timeline Switcher Bar
+  const timelineHtml = rawSteps.map((st, i) => {
+    const stStatus = getPlayStepStatus(st);
+    const badgeEmoji = stStatus === 'error' ? '❌' : (stStatus === 'warning' ? '⚠️' : '✅');
+    const stepNum = st.sequenceStep || st.step || i + 1;
+    const shortAction = st.type === 'navigate'
+      ? 'Navigate'
+      : st.type === 'change_input'
+      ? (st.fieldName || st.selector || 'Input')
+      : st.type === 'fill_otp'
+      ? 'OTP'
+      : st.type === 'click_button'
+      ? (st.selector || 'Submit')
+      : (st.type || st.action || 'Step');
+    return `
+      <button
+        type="button"
+        class="lsr-timeline-pill ${i === activeIdx ? 'active' : ''} lsr-tl-${stStatus}"
+        data-lsr-preview-step="${escapeHtml(i)}"
+      >
+        Step ${escapeHtml(stepNum)}: ${escapeHtml(shortAction)} ${badgeEmoji}
+      </button>
+    `;
+  }).join('<span class="lsr-timeline-arrow" aria-hidden="true">→</span>');
+
+  const httpStatus = Number(snap?.httpStatus || activeStep?.status || 0);
+  const httpClass = httpStatus >= 400 ? 'err' : (httpStatus >= 200 ? 'ok' : 'neutral');
+  const pageTitle = snap?.title || 'Target Login Page';
+  const pageUrl = snap?.pageUrl || activeStep?.finalUrl || activeStep?.url || playRes.loginUrl || '';
+
+  const stepIssues = Array.isArray(activeStep?.issues) && activeStep.issues.length > 0
+    ? activeStep.issues
+    : (Array.isArray(playRes.diagnostics)
+      ? playRes.diagnostics.filter(d => Number(d.sequenceStep || d.step) === Number(activeStep?.sequenceStep || activeStep?.step))
+      : []);
+
+  const selectorIssue = stepIssues.find(iss =>
+    iss?.code === 'SELECTOR_NOT_FOUND' || iss?.code === 'BUTTON_SELECTOR_NOT_FOUND'
+  );
+
+  // Build available selectors list from snapshot
+  const snapInputs = Array.isArray(snap?.inputs) ? snap.inputs : [];
+  const snapButtons = Array.isArray(snap?.buttons) ? snap.buttons : [];
+  const availableInputSelectors = snapInputs.map(inp =>
+    inp.selector || (inp.id ? `#${inp.id}` : (inp.name ? `[name="${inp.name}"]` : inp.type || 'input'))
+  );
+  const availableButtonSelectors = snapButtons.map(btn =>
+    btn.selector || (btn.id ? `#${btn.id}` : (btn.text || btn.displayLabel || 'button'))
+  );
+
+  let selectorCalloutHtml = '';
+  if (selectorIssue) {
+    const availableList = selectorIssue.code === 'BUTTON_SELECTOR_NOT_FOUND'
+      ? availableButtonSelectors
+      : availableInputSelectors;
+    selectorCalloutHtml = `
+      <div class="lsr-sim-selector-callout">
+        <div class="lsr-sim-callout-title">❌ Unmatched Selector in Step ${escapeHtml(activeStep?.sequenceStep || activeStep?.step || activeIdx + 1)}</div>
+        <div>Looking for: <code>${escapeHtml(activeStep?.selector || selectorIssue.selector || '(unspecified)')}</code> (${escapeHtml(activeStep?.selectorType || 'selector')})</div>
+        <div>Available on page: ${availableList.length > 0 ? availableList.map(s => `<code>${escapeHtml(s)}</code>`).join(' · ') : '<span class="form-hint">None detected on page</span>'}</div>
+        ${selectorIssue.fixSuggestion ? `<div class="lsr-diag-fix">💡 ${escapeHtml(selectorIssue.fixSuggestion)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  const otherIssuesHtml = stepIssues
+    .filter(iss => iss !== selectorIssue)
+    .map(iss => `
+      <div class="lsr-sim-issue-callout lsr-diag-${escapeHtml(iss.severity === 'warning' ? 'warning' : 'error')}">
+        <strong>${escapeHtml(iss.code || 'ISSUE')}: ${escapeHtml(iss.title || iss.message || 'Step Issue')}</strong>
+        ${iss.detail ? `<div>${escapeHtml(iss.detail)}</div>` : ''}
+        ${iss.fixSuggestion ? `<div class="lsr-diag-fix">💡 ${escapeHtml(iss.fixSuggestion)}</div>` : ''}
+      </div>
+    `).join('');
+
+  // Enrich filled inputs & clicked buttons up through activeIdx
+  const filledMap = new Map();
+  const clickedMap = new Map();
+  for (let i = 0; i <= activeIdx; i++) {
+    const st = rawSteps[i];
+    if (!st) continue;
+    if (st.type === 'change_input' || st.action === 'change_input' || st.type === 'fill_otp' || st.action === 'fill_otp') {
+      const key = String(st.fieldName || st.selector || '').replace(/^#/, '').trim().toLowerCase();
+      if (key) {
+        const seqAct = (state.loginSequence?.actions || [])[i];
+        const rawBinding = seqAct?.value && /^\{\{VAR:[^}]+\}\}$/i.test(seqAct.value)
+          ? (st.isSecret ? `•••••••• (${seqAct.value})` : (st.value && st.value !== '[REDACTED]' ? `${st.value} (${seqAct.value})` : seqAct.value))
+          : (st.type === 'fill_otp' ? '•••••• (TOTP)' : (st.isSecret ? '••••••••' : (st.value || seqAct?.value || '')));
+        filledMap.set(key, { stepNum: st.sequenceStep || st.step || i + 1, masked: rawBinding });
+      }
+    }
+    if (st.type === 'click_button' || st.action === 'click_button') {
+      const key = String(st.selector || '').replace(/^#/, '').trim().toLowerCase();
+      if (key) clickedMap.set(key, st.sequenceStep || st.step || i + 1);
+    }
+  }
+
+  const displayInputs = snapInputs.length > 0
+    ? snapInputs
+    : rawSteps
+        .slice(0, activeIdx + 1)
+        .filter(st => st.type === 'change_input' || st.type === 'fill_otp')
+        .map(st => ({
+          label: st.fieldName || st.selector || 'input',
+          selector: st.selector || st.fieldName || 'input',
+          id: st.selectorType === 'id' ? String(st.selector || '').replace(/^#/, '') : '',
+          name: st.fieldName || '',
+          type: st.isSecret ? 'password' : 'text',
+          isPassword: Boolean(st.isSecret),
+          isOtpCandidate: st.type === 'fill_otp'
+        }));
+
+  const inputsPreviewHtml = displayInputs.length > 0
+    ? displayInputs.map(inp => {
+        const label = inp.displayLabel || inp.label || inp.name || inp.id || inp.type || 'input';
+        const selectorDisp = inp.selector || (inp.id ? `#${inp.id}` : (inp.name ? `[name="${inp.name}"]` : inp.type || 'input'));
+        const isTarget = stepTargetsInput(activeStep, inp);
+        const matchKey = getInputMatchKey(inp);
+        const filledInfo = filledMap.get(String(inp.id || '').toLowerCase())
+          || filledMap.get(String(inp.name || '').toLowerCase())
+          || filledMap.get(matchKey);
+
+        const filledVal = inp.filledValueMasked !== undefined && inp.filledValueMasked !== ''
+          ? inp.filledValueMasked
+          : (filledInfo?.masked || '');
+        const isFilled = Boolean(inp.status === 'filled' || filledVal || filledInfo);
+
+        let statusPillHtml = '<span class="lsr-sim-status-pill untouched">⚪ Untouched</span>';
+        let cardCls = 'untouched';
+        if (isTarget) {
+          statusPillHtml = '<span class="lsr-sim-status-pill target">🎯 Active Step Target</span>';
+          cardCls = isFilled ? 'target filled' : 'target';
+        } else if (isFilled) {
+          statusPillHtml = '<span class="lsr-sim-status-pill filled">✅ Filled</span>';
+          cardCls = 'filled';
+        }
+
+        return `
+          <div class="lsr-sim-input-card ${cardCls}">
+            <div class="lsr-sim-input-head">
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <code class="lsr-sim-selector-tag">${escapeHtml(selectorDisp)}</code>
+              </div>
+              ${statusPillHtml}
+            </div>
+            <div class="lsr-sim-input-box ${isFilled ? 'has-value' : ''}">
+              ${filledVal ? `<code>${escapeHtml(filledVal)}</code>` : '<span class="form-hint">(empty)</span>'}
+            </div>
+          </div>
+        `;
+      }).join('')
+    : '<div class="empty-muted">No form inputs rendered on this step snapshot.</div>';
+
+  const displayButtons = snapButtons.length > 0
+    ? snapButtons
+    : rawSteps
+        .slice(0, activeIdx + 1)
+        .filter(st => st.type === 'click_button')
+        .map(st => ({
+          text: st.selector || 'Submit',
+          selector: st.selector || 'Submit'
+        }));
+
+  const buttonsPreviewHtml = displayButtons.length > 0
+    ? displayButtons.map(btn => {
+        const btnLabel = btn.displayLabel || btn.text || btn.id || btn.name || 'Submit';
+        const btnSel = btn.selector || (btn.id ? `#${btn.id}` : (btn.name ? `[name="${btn.name}"]` : btnLabel));
+        const isTarget = stepTargetsButton(activeStep, btn);
+        const matchKey = getButtonMatchKey(btn);
+        const clickedStepNum = btn.clickedInStep || (btn.clicked ? (activeStep?.sequenceStep || activeStep?.step || activeIdx + 1) : null)
+          || clickedMap.get(String(btn.id || '').toLowerCase())
+          || clickedMap.get(String(btn.name || '').toLowerCase())
+          || clickedMap.get(String(btn.text || btn.displayLabel || '').toLowerCase())
+          || clickedMap.get(matchKey);
+
+        const isClicked = Boolean(clickedStepNum || isTarget);
+        return `
+          <div class="lsr-sim-button-card ${isClicked ? 'clicked' : ''} ${isTarget ? 'target' : ''}">
+            <div class="lsr-sim-button-main">
+              <span class="lsr-sim-button-pill">${escapeHtml(btnLabel)}</span>
+              <code class="lsr-sim-selector-tag">${escapeHtml(btnSel)}</code>
+            </div>
+            ${clickedStepNum
+              ? `<span class="lsr-sim-status-pill clicked">🖱️ Clicked in Step ${escapeHtml(clickedStepNum)}</span>`
+              : (isTarget ? '<span class="lsr-sim-status-pill target">🎯 Active Step Target</span>' : '<span class="lsr-sim-status-pill untouched">⚪ Not clicked</span>')}
+          </div>
+        `;
+      }).join('')
+    : '<div class="empty-muted">No submit buttons rendered on this step snapshot.</div>';
+
+  canvas.innerHTML = `
+    <div class="lsr-sim-header-row">
+      <strong>🎬 Visual Step-by-Step Replay Preview</strong>
+      ${state.lastInspectedPage ? '<button type="button" id="btn-lsr-back-to-inspector" class="btn-secondary btn-small">🔄 Back to Live Form Inspector</button>' : ''}
+    </div>
+    <div class="lsr-timeline-bar" role="tablist" aria-label="Replay Step Timeline">
+      ${timelineHtml}
+    </div>
+    <div class="lsr-sim-browser-card">
+      <div class="lsr-sim-browser-chrome">
+        <span class="lsr-sim-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        ${httpStatus ? `<span class="lsr-sim-http-pill ${httpClass}">HTTP ${escapeHtml(httpStatus)}</span>` : ''}
+        <strong class="lsr-sim-page-title">${escapeHtml(pageTitle)}</strong>
+        <code class="lsr-sim-page-url">${escapeHtml(pageUrl || '(target URL)')}</code>
+      </div>
+      <div class="lsr-sim-browser-body">
+        ${snap?.pageErrorBanner ? `<div class="lsr-sim-page-error">🚨 <strong>Page Error Banner Detected:</strong> "${escapeHtml(snap.pageErrorBanner)}"</div>` : ''}
+        ${selectorCalloutHtml}
+        ${otherIssuesHtml}
+        <div class="lsr-inspect-section">
+          <div class="lsr-inspect-section-title">Visual Form Inputs Preview (${escapeHtml(displayInputs.length)})</div>
+          <div class="lsr-sim-inputs-list">${inputsPreviewHtml}</div>
+        </div>
+        <div class="lsr-inspect-section">
+          <div class="lsr-inspect-section-title">Visual Buttons Preview (${escapeHtml(displayButtons.length)})</div>
+          <div class="lsr-sim-buttons-list">${buttonsPreviewHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildSyntheticPlayResultFromSequence(seq, { errorText = '', markFirstStepFailed = false } = {}) {
+  const s = seq || state.loginSequence || createDefaultLoginSequence();
+  const actions = Array.isArray(s.actions) ? s.actions : [];
+  const firstNav = actions.find(a => a.type === 'navigate' && a.url);
+  const pageUrl = s.targetUrl || firstNav?.url || document.getElementById('lsr-inspect-url')?.value.trim() || '';
+
+  const synthInputs = actions
+    .filter(a => a.type === 'change_input' || a.type === 'fill_otp')
+    .map(a => {
+      const cleanSel = String(a.selector || a.fieldName || 'input').replace(/^#/, '').trim() || 'input';
+      const isPass = Boolean(a.isSecret || /pass|pwd|secret/i.test(cleanSel));
+      return {
+        id: a.selectorType === 'id' ? cleanSel : '',
+        name: a.fieldName || cleanSel,
+        type: a.type === 'fill_otp' ? 'text' : (isPass ? 'password' : 'text'),
+        label: cleanSel,
+        displayLabel: cleanSel,
+        selectorType: a.selectorType || 'id',
+        selectorValue: a.selector || cleanSel,
+        isPassword: isPass,
+        isOtpCandidate: a.type === 'fill_otp',
+        filledValueMasked: a.type === 'fill_otp' ? '•••••• (TOTP)' : getLsrSecretDisplayMask(a)
+      };
+    });
+
+  const synthButtons = actions
+    .filter(a => a.type === 'click_button')
+    .map(a => {
+      const cleanBtn = String(a.selector || 'Submit').replace(/^#/, '').trim() || 'Submit';
+      return {
+        id: a.selectorType === 'id' ? cleanBtn : '',
+        name: a.selectorType === 'name' ? cleanBtn : '',
+        type: 'submit',
+        text: cleanBtn,
+        displayLabel: cleanBtn,
+        selectorType: a.selectorType || 'text',
+        selectorValue: a.selector || cleanBtn,
+        wasClicked: true
+      };
+    });
+
+  const baseSnap = {
+    pageUrl,
+    title: `${s.name || 'WrapperSequence.lsr'} (Visual Sequence Preview)`,
+    httpStatus: markFirstStepFailed ? 0 : 200,
+    csrfDetected: true,
+    pageErrorBanner: errorText || null,
+    inputs: synthInputs,
+    buttons: synthButtons
+  };
+
+  const steps = actions.map((act, idx) => ({
+    step: idx + 1,
+    sequenceStep: idx + 1,
+    action: act.type,
+    type: act.type,
+    label: formatLsrStepLabel(act),
+    selectorType: act.selectorType,
+    selector: act.selector,
+    fieldName: act.fieldName || act.selector,
+    value: getLsrSecretDisplayMask(act),
+    isSecret: Boolean(act.isSecret),
+    url: act.url || act.submitUrl || pageUrl,
+    status: markFirstStepFailed && idx === 0 ? 0 : 200,
+    stepStatus: markFirstStepFailed && idx === 0 ? 'error' : 'ok',
+    ...(markFirstStepFailed && idx === 0 && errorText ? { error: errorText } : {}),
+    domSnapshot: baseSnap
+  }));
+
+  return {
+    authenticated: !markFirstStepFailed,
+    error: errorText || '',
+    loginUrl: pageUrl,
+    steps
+  };
+}
+
+function renderSequenceBlueprintCanvas(seq = null) {
+  const targetSeq = seq || state.loginSequence;
+  if (!targetSeq || !Array.isArray(targetSeq.actions) || targetSeq.actions.length === 0) return;
+  const blueprintRes = buildSyntheticPlayResultFromSequence(targetSeq, { markFirstStepFailed: false });
+  renderVisualPlaySnapshot(blueprintRes, state.selectedLsrStepIndex >= 0 ? state.selectedLsrStepIndex : 0);
+}
+
+function showLsrPlayOutput(html, variant = 'info') {
+  const out = document.getElementById('lsr-play-output');
+  if (!out) return;
+  out.className = `lsr-play-output lsr-play-${variant}`;
+  out.innerHTML = html;
+  out.classList.remove('hidden');
+}
+
+async function loadSavedLoginSequences() {
+  let localSequences = [];
+  let localActiveId = '';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const rawSeqs = localStorage.getItem(LSR_SEQUENCES_STORAGE_KEY);
+      if (rawSeqs) {
+        const parsed = JSON.parse(rawSeqs);
+        if (Array.isArray(parsed)) {
+          localSequences = parsed.map(s => normalizeClientLoginSequence(s));
+        }
+      }
+      localActiveId = localStorage.getItem(LSR_ACTIVE_SEQ_STORAGE_KEY) || '';
+    }
+  } catch {
+    localSequences = [];
+  }
+
+  if (localSequences.length > 0) {
+    state.savedSequences = localSequences;
+    const activeMatch = localActiveId
+      ? localSequences.find(s => s.sequenceId === localActiveId)
+      : null;
+    if (activeMatch || (state.loginSequence.actions.length === 0 && !state.loginSequence.sequenceId)) {
+      state.loginSequence = normalizeClientLoginSequence(activeMatch || localSequences[0]);
+      applyLsrStateToInputs();
+    } else {
+      renderLsrSequenceCards();
+    }
+  }
+
+  if (typeof fetch !== 'function') return;
+  try {
+    const res = await fetch('/api/auth/sequences', { headers: { Accept: 'application/json' } });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data?.sequences)) {
+      const localMap = new Map(localSequences.filter(s => s.sequenceId).map(s => [s.sequenceId, s]));
+      const merged = data.sequences.map(rawS => {
+        const s = normalizeClientLoginSequence(rawS);
+        const localMatch = s.sequenceId ? localMap.get(s.sequenceId) : null;
+        if (localMatch) {
+          // Preserve unmasked local secret values if server exported '[SECRET]'
+          if (localMatch.otpConfig?.secret && (!s.otpConfig?.secret || s.otpConfig.secret === '[SECRET]' || s.otpConfig.secret === '[REDACTED]')) {
+            s.otpConfig.secret = localMatch.otpConfig.secret;
+          }
+          const localSecretMap = new Map((localMatch.secrets || []).map(sec => [sec.name, sec.value]));
+          s.secrets = (s.secrets || []).map(sec => ({
+            ...sec,
+            value: (!sec.value || sec.value === '[SECRET]' || sec.value === '[REDACTED]')
+              ? (localSecretMap.get(sec.name) || sec.value)
+              : sec.value
+          }));
+        }
+        return s;
+      });
+      state.savedSequences = merged;
+      persistSequencesToLocal();
+
+      const preferredId = state.loginSequence.sequenceId || localActiveId;
+      const activeSeq = preferredId
+        ? state.savedSequences.find(s => s.sequenceId === preferredId)
+        : null;
+      if (activeSeq) {
+        state.loginSequence = normalizeClientLoginSequence(activeSeq);
+        applyLsrStateToInputs();
+      } else if (state.savedSequences.length > 0 && state.loginSequence.actions.length === 0 && !state.loginSequence.sequenceId) {
+        state.loginSequence = normalizeClientLoginSequence(state.savedSequences[0]);
+        applyLsrStateToInputs();
+      } else {
+        renderLsrSequenceCards();
+      }
+    }
+  } catch {
+    // Graceful no-op when backend sequence store is unavailable
+  }
+}
+
+function initLoginSequenceRecorder() {
+  if (typeof document === 'undefined') return;
+
+  const backdrop = document.getElementById('lsr-recorder-backdrop');
+  const btnOpenNew = document.getElementById('btn-new-lsr-sequence');
+  const btnImport = document.getElementById('btn-import-lsr-sequence');
+  const importFileInput = document.getElementById('lsr-import-file-input');
+  const btnClose = document.getElementById('btn-lsr-close');
+
+  const sysVarNameEl = document.getElementById('sys-var-name-input');
+  const sysVarCategoryEl = document.getElementById('sys-var-category-select');
+  const sysVarValueEl = document.getElementById('sys-var-value-input');
+  const btnSaveSysVar = document.getElementById('btn-save-sys-var');
+  const sysVarsListEl = document.getElementById('sys-vars-list');
+
+  const modalSysVarsBar = document.getElementById('lsr-modal-sysvars-bar');
+  const btnToggleModalSysVar = document.getElementById('btn-lsr-toggle-modal-sysvar');
+  const modalSysVarForm = document.getElementById('lsr-modal-sysvar-quick-form');
+  const modalSysVarNameEl = document.getElementById('lsr-modal-sysvar-name');
+  const modalSysVarCatEl = document.getElementById('lsr-modal-sysvar-cat');
+  const modalSysVarValEl = document.getElementById('lsr-modal-sysvar-val');
+  const btnModalSaveSysVar = document.getElementById('btn-lsr-modal-save-sysvar');
+
+  const reuseSelectEl = document.getElementById('lsr-reuse-select');
+  const btnUseSelectedLsr = document.getElementById('btn-use-selected-lsr');
+  const btnPlaySelectedLsr = document.getElementById('btn-play-selected-lsr');
+  const btnDuplicateSelectedLsr = document.getElementById('btn-duplicate-selected-lsr');
+  const btnRefreshLsrList = document.getElementById('btn-refresh-lsr-list');
+
+  const topDiagnosticsEl = document.getElementById('lsr-top-diagnostics-banner');
+  const inlineDiagnosticsEl = document.getElementById('lsr-inline-diagnostics-summary');
+
+  const secretNameEl = document.getElementById('lsr-secret-name-input');
+  const secretValueEl = document.getElementById('lsr-secret-value-input');
+  const btnAddSecret = document.getElementById('btn-add-lsr-secret');
+  const secretsChipsEl = document.getElementById('lsr-secrets-chips');
+
+  const btnOpenOtp = document.getElementById('btn-open-otp-config');
+  const otpPanel = document.getElementById('lsr-otp-config-panel');
+  const btnTestOtp = document.getElementById('btn-test-otp-preview');
+  const otpStatusEl = document.getElementById('otp-preview-status');
+
+  const seqCardsList = document.getElementById('lsr-sequence-cards-list');
+  const inspectUrlEl = document.getElementById('lsr-inspect-url');
+  const btnInspectGo = document.getElementById('btn-lsr-inspect-go');
+  const btnRecord = document.getElementById('btn-lsr-record');
+  const btnAddOtpStep = document.getElementById('btn-lsr-add-otp-step');
+  const btnSave = document.getElementById('btn-lsr-save');
+  const btnPlay = document.getElementById('btn-lsr-play');
+  const btnNewBlank = document.getElementById('btn-lsr-new-blank');
+  const btnLoadExampleModal = document.getElementById('btn-lsr-load-example');
+  const btnLoadExampleInline = document.getElementById('btn-load-example-lsr-inline');
+  const visualCanvas = document.getElementById('lsr-visual-canvas');
+
+  const actionsListEl = document.getElementById('lsr-actions-list');
+  const actionPropsEl = document.getElementById('lsr-action-properties');
+  const btnStepUp = document.getElementById('btn-lsr-step-up');
+  const btnStepDown = document.getElementById('btn-lsr-step-down');
+  const btnStepAdd = document.getElementById('btn-lsr-step-add');
+  const btnStepDelete = document.getElementById('btn-lsr-step-delete');
+
+  const restrictionInput = document.getElementById('lsr-restriction-input');
+  const btnAddRestriction = document.getElementById('btn-add-lsr-restriction');
+  const restrictionsListEl = document.getElementById('lsr-restrictions-list');
+
+  const tabActionsBtn = document.getElementById('btn-lsr-tab-actions');
+  const tabRestrictionsBtn = document.getElementById('btn-lsr-tab-restrictions');
+  const tabSessionBtn = document.getElementById('btn-lsr-tab-session');
+  const panelActions = document.getElementById('lsr-panel-actions');
+  const panelRestrictions = document.getElementById('lsr-panel-restrictions');
+  const panelSession = document.getElementById('lsr-panel-session');
+
+  function openLsrModal(seqToLoad = null, { isNewBlank = false } = {}) {
+    if (isNewBlank) {
+      state.loginSequence = createDefaultLoginSequence();
+      state.selectedLsrStepIndex = -1;
+      state.lastLsrPlayResult = null;
+      state.lastInspectedPage = null;
+      renderLsrDiagnosticsBanner(null, { includeInline: false });
+    } else if (seqToLoad) {
+      const prevId = state.loginSequence?.sequenceId || '';
+      const normalized = normalizeClientLoginSequence(seqToLoad);
+      // Preserve any unmasked secrets from existing state
+      const existingMatch = (state.savedSequences || []).find(s => s.sequenceId && s.sequenceId === normalized.sequenceId) || state.loginSequence;
+      if (existingMatch && existingMatch.sequenceId === normalized.sequenceId) {
+        if (existingMatch.otpConfig?.secret && (!normalized.otpConfig?.secret || normalized.otpConfig.secret === '[SECRET]' || normalized.otpConfig.secret === '[REDACTED]')) {
+          normalized.otpConfig.secret = existingMatch.otpConfig.secret;
+        }
+        const secMap = new Map((existingMatch.secrets || []).map(s => [s.name, s.value]));
+        normalized.secrets = (normalized.secrets || []).map(s => ({
+          ...s,
+          value: (!s.value || s.value === '[SECRET]' || s.value === '[REDACTED]') ? (secMap.get(s.name) || s.value) : s.value
+        }));
+      }
+      state.loginSequence = normalized;
+      state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
+      if (state.loginSequence.sequenceId !== prevId) {
+        state.lastLsrPlayResult = null;
+        renderLsrDiagnosticsBanner(null, { includeInline: false });
+      }
+    } else if (state.selectedLsrStepIndex < 0 && state.loginSequence.actions.length > 0) {
+      state.selectedLsrStepIndex = 0;
+    }
+
+    applyLsrStateToInputs();
+    const firstNav = (state.loginSequence.actions || []).find(a => a.type === 'navigate' && a.url);
+    const seqUrl = state.loginSequence.targetUrl || firstNav?.url || '';
+    if (inspectUrlEl) {
+      if (isNewBlank) {
+        inspectUrlEl.value = document.getElementById('adv-auth-login-url')?.value.trim()
+          || document.getElementById('target-url')?.value.trim()
+          || '';
+      } else if (seqUrl) {
+        inspectUrlEl.value = seqUrl;
+      } else if (!inspectUrlEl.value.trim()) {
+        const candidate = document.getElementById('adv-auth-login-url')?.value.trim()
+          || document.getElementById('target-url')?.value.trim()
+          || '';
+        if (candidate) inspectUrlEl.value = candidate;
+      }
+    }
+
+    if (state.lastLsrPlayResult) {
+      renderVisualPlaySnapshot(state.lastLsrPlayResult, state.selectedLsrStepIndex);
+    } else if (state.loginSequence.actions.length > 0) {
+      renderSequenceBlueprintCanvas(state.loginSequence);
+    }
+
+    switchLsrSubTab('actions');
+    if (backdrop) {
+      backdrop.classList.remove('hidden');
+      document.getElementById('lsr-sequence-name')?.focus();
+    }
+  }
+
+  function closeLsrModal() {
+    syncLsrConfigFromInputs();
+    renderLsrSequenceCards();
+    if (backdrop) backdrop.classList.add('hidden');
+  }
+
+  function switchLsrSubTab(tabKey) {
+    const map = [
+      { key: 'actions', btn: tabActionsBtn, panel: panelActions },
+      { key: 'restrictions', btn: tabRestrictionsBtn, panel: panelRestrictions },
+      { key: 'session', btn: tabSessionBtn, panel: panelSession }
+    ];
+    for (const item of map) {
+      const isMatch = item.key === tabKey;
+      if (item.btn) {
+        item.btn.classList.toggle('active', isMatch);
+        item.btn.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+      }
+      if (item.panel) {
+        item.panel.classList.toggle('hidden', !isMatch);
+      }
+    }
+  }
+
+  function activateSequenceForScan(seq) {
+    if (!seq) return;
+    state.loginSequence = normalizeClientLoginSequence(seq);
+    state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
+    state.lastLsrPlayResult = null;
+    persistSequencesToLocal();
+    const authMethodEl = document.getElementById('adv-auth-method');
+    if (authMethodEl) authMethodEl.value = 'login_sequence';
+    applyLsrStateToInputs();
+    if (inlineDiagnosticsEl) {
+      inlineDiagnosticsEl.className = 'lsr-top-diagnostics-banner success';
+      inlineDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">✅ Active sequence set to <strong>${escapeHtml(state.loginSequence.name)}</strong> (${escapeHtml(state.loginSequence.actions.length)} step(s)). Ready to scan or click Quick Play to verify.</div>`;
+      inlineDiagnosticsEl.classList.remove('hidden');
+    }
+  }
+
+  async function duplicateSequence(seq) {
+    if (!seq) return;
+    const baseName = String(seq.name || 'Sequence.lsr').replace(/\.lsr$/i, '');
+    const copyPayload = buildLoginSequencePayload({
+      includeSecrets: true,
+      seqOverride: normalizeClientLoginSequence({
+        ...seq,
+        sequenceId: '',
+        name: `${baseName}-copy.lsr`,
+        updatedAt: new Date().toISOString()
+      })
+    });
+    delete copyPayload.sequenceId;
+
+    let savedCopy = normalizeClientLoginSequence(copyPayload);
+    try {
+      const res = await apiPost('/api/auth/sequences', copyPayload);
+      savedCopy = normalizeClientLoginSequence({
+        ...(res?.sequence || copyPayload),
+        secrets: copyPayload.secrets,
+        otpConfig: copyPayload.otpConfig
+      });
+    } catch {
+      savedCopy.sequenceId = `local-${Date.now()}`;
+    }
+
+    state.savedSequences.unshift(savedCopy);
+    activateSequenceForScan(savedCopy);
+  }
+
+  async function executePlayLsrSequence({ seqOverride = null, openModalOnPlay = false } = {}) {
+    const activeSeq = seqOverride ? normalizeClientLoginSequence(seqOverride) : null;
+    if (activeSeq) {
+      state.loginSequence = activeSeq;
+      applyLsrStateToInputs();
+    }
+    const payload = buildLoginSequencePayload({ includeSecrets: true, seqOverride: activeSeq });
+    const firstNav = payload.actions.find(a => a.type === 'navigate' && a.url);
+    const rawTarget = (openModalOnPlay ? null : inspectUrlEl?.value.trim())
+      || payload.targetUrl
+      || firstNav?.url
+      || document.getElementById('adv-auth-login-url')?.value.trim()
+      || document.getElementById('target-url')?.value.trim()
+      || '';
+
+    if (!rawTarget) {
+      if (openModalOnPlay) openLsrModal(state.loginSequence);
+      const errRes = {
+        authenticated: false,
+        error: 'Enter a Target URL or Login URL before playing the login sequence.',
+        steps: []
+      };
+      renderLsrDiagnosticsBanner(errRes);
+      showLsrPlayOutput('Enter a Target URL or Login URL before playing the login sequence.', 'error');
+      return;
+    }
+    if (payload.actions.length === 0) {
+      if (openModalOnPlay) openLsrModal(state.loginSequence);
+      const errRes = {
+        authenticated: false,
+        error: 'Add at least one Login Action step before playing the sequence.',
+        steps: []
+      };
+      renderLsrDiagnosticsBanner(errRes);
+      showLsrPlayOutput('Add at least one Login Action step before playing the sequence.', 'error');
+      return;
+    }
+
+    const targetUrl = normalizeTargetScheme(rawTarget);
+    const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+    const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || '';
+    const reqTimeout = Number(document.getElementById('adv-timeout')?.value) || 10000;
+
+    if (openModalOnPlay && backdrop && backdrop.classList.contains('hidden')) {
+      openLsrModal(state.loginSequence);
+    }
+
+    if (btnPlay) {
+      btnPlay.disabled = true;
+      btnPlay.textContent = 'Playing...';
+    }
+    if (btnPlaySelectedLsr) btnPlaySelectedLsr.disabled = true;
+    showLsrPlayOutput('⏳ Executing login sequence steps against target...', 'info');
+    renderSequenceBlueprintCanvas(payload);
+
+    try {
+      const res = await apiPost('/api/auth/record-session', {
+        targetUrl,
+        allowPrivate,
+        timeout: reqTimeout,
+        ...(sourceIp ? { sourceIp } : {}),
+        sequenceId: payload.sequenceId || state.loginSequence.sequenceId || '',
+        loginSequence: payload,
+        systemVariables: state.systemVariables,
+        secrets: payload.secrets,
+        otpConfig: payload.otpConfig,
+        restrictions: payload.restrictions,
+        sessionDetection: payload.sessionDetection
+      });
+
+      state.lastLsrPlayResult = res;
+      if (res.sequenceId && !state.loginSequence.sequenceId) {
+        state.loginSequence.sequenceId = res.sequenceId;
+      }
+
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl && res.sessionId) {
+        recIdEl.value = res.sessionId;
+      }
+      renderRecordedSessionPreview(res);
+      renderLsrDiagnosticsBanner(res);
+      renderLsrActionsList();
+      renderVisualPlaySnapshot(res, -1);
+
+      const steps = Array.isArray(res.steps) ? res.steps : (Array.isArray(res.sequenceSteps) ? res.sequenceSteps : []);
+      const stepsHtml = steps.map(st => {
+        const extras = [];
+        if (st.status) extras.push(`HTTP ${st.status}`);
+        if (st.csrfDetected) extras.push('CSRF detected');
+        if (st.otpGenerated) extras.push('OTP filled');
+        if (st.tokenExtracted) extras.push('Token captured');
+        if (Array.isArray(st.cookiesHarvested) && st.cookiesHarvested.length > 0) {
+          extras.push(`Cookies: ${st.cookiesHarvested.join(', ')}`);
+        }
+        if (st.error) extras.push(`Error: ${st.error}`);
+        return `<div class="lsr-play-step-row"><span>Step ${escapeHtml(st.step)}: <strong>${escapeHtml(st.label || st.action)}</strong></span> <code>${escapeHtml(extras.join(' · ') || 'OK')}</code></div>`;
+      }).join('');
+
+      const verdictHtml = res.authenticated
+        ? `✅ <strong>Authenticated</strong> (Session ${escapeHtml(String(res.sessionId || '').slice(0, 8))} · ${escapeHtml(res.cookieCount || 0)} cookie(s) · CSRF: ${escapeHtml(res.csrfHeaderName || res.csrfFormField || 'None')})`
+        : `⚠️ <strong>Login Sequence Incomplete</strong> (${escapeHtml(res.error || 'See diagnostics banner at top')})`;
+
+      showLsrPlayOutput(`
+        <div class="lsr-play-verdict">${verdictHtml}</div>
+        <div class="lsr-play-steps-list">${stepsHtml}</div>
+      `, res.authenticated ? 'success' : 'error');
+    } catch (err) {
+      const failRes = buildSyntheticPlayResultFromSequence(payload, {
+        errorText: err.message,
+        markFirstStepFailed: true
+      });
+      state.lastLsrPlayResult = failRes;
+      renderLsrDiagnosticsBanner(failRes);
+      renderLsrActionsList();
+      renderVisualPlaySnapshot(failRes, 0);
+      showLsrPlayOutput(`✕ Replay failed: ${escapeHtml(err.message)}`, 'error');
+    } finally {
+      if (btnPlay) {
+        btnPlay.disabled = false;
+        btnPlay.textContent = '▶️ Play / Test Sequence';
+      }
+      if (btnPlaySelectedLsr) btnPlaySelectedLsr.disabled = false;
+    }
+  }
+
+  // System Variables Panel Handlers
+  function syncSysVarValueInputType(catSelect, valInput) {
+    if (!catSelect || !valInput) return;
+    valInput.type = isSecretVarCategory(catSelect.value) ? 'password' : 'text';
+  }
+
+  if (sysVarCategoryEl && sysVarValueEl) {
+    sysVarCategoryEl.addEventListener('change', () => syncSysVarValueInputType(sysVarCategoryEl, sysVarValueEl));
+    syncSysVarValueInputType(sysVarCategoryEl, sysVarValueEl);
+  }
+  if (modalSysVarCatEl && modalSysVarValEl) {
+    modalSysVarCatEl.addEventListener('change', () => syncSysVarValueInputType(modalSysVarCatEl, modalSysVarValEl));
+    syncSysVarValueInputType(modalSysVarCatEl, modalSysVarValEl);
+  }
+
+  async function handleSaveMainSysVar() {
+    const name = sysVarNameEl?.value.trim() || '';
+    const category = sysVarCategoryEl?.value || 'custom';
+    const value = sysVarValueEl?.value ?? '';
+    const res = await saveSystemVariable({ name, category, value });
+    if (res.ok) {
+      if (sysVarNameEl) sysVarNameEl.value = '';
+      if (sysVarValueEl) sysVarValueEl.value = '';
+      if (btnSaveSysVar) btnSaveSysVar.textContent = '+ Save System Variable';
+    } else if (sysVarNameEl) {
+      sysVarNameEl.focus();
+    }
+  }
+
+  if (btnSaveSysVar) btnSaveSysVar.addEventListener('click', handleSaveMainSysVar);
+  if (sysVarValueEl) {
+    sysVarValueEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSaveMainSysVar();
+      }
+    });
+  }
+
+  if (sysVarsListEl) {
+    sysVarsListEl.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-sysvar-action]');
+      if (!btn) return;
+      const action = btn.getAttribute('data-sysvar-action');
+      const name = btn.getAttribute('data-sysvar-name') || '';
+      if (!name) return;
+
+      if (action === 'edit') {
+        const entry = state.systemVariables.find(v => v.name === name);
+        if (!entry) return;
+        if (sysVarNameEl) sysVarNameEl.value = entry.name;
+        if (sysVarCategoryEl) sysVarCategoryEl.value = entry.category || 'custom';
+        syncSysVarValueInputType(sysVarCategoryEl, sysVarValueEl);
+        if (sysVarValueEl) {
+          sysVarValueEl.value = entry.isSecret ? '' : (entry.value || '');
+          sysVarValueEl.placeholder = entry.isSecret ? 'Enter new secret value to rotate' : 'Enter updated value';
+          sysVarValueEl.focus();
+        }
+        if (btnSaveSysVar) btnSaveSysVar.textContent = '💾 Update System Variable';
+        showSysVarsStatus(`Editing {{VAR:${entry.name}}} — enter new value and click Update System Variable.`, false);
+        return;
+      }
+
+      if (action === 'delete') {
+        await deleteSystemVariable(name);
+      }
+    });
+  }
+
+  if (btnToggleModalSysVar && modalSysVarForm) {
+    btnToggleModalSysVar.addEventListener('click', () => {
+      const willShow = modalSysVarForm.classList.contains('hidden');
+      modalSysVarForm.classList.toggle('hidden', !willShow);
+      if (willShow) modalSysVarNameEl?.focus();
+    });
+  }
+
+  if (btnModalSaveSysVar) {
+    btnModalSaveSysVar.addEventListener('click', async () => {
+      const name = modalSysVarNameEl?.value.trim() || '';
+      const category = modalSysVarCatEl?.value || 'custom';
+      const value = modalSysVarValEl?.value ?? '';
+      const res = await saveSystemVariable({ name, category, value });
+      if (res.ok) {
+        if (modalSysVarNameEl) modalSysVarNameEl.value = '';
+        if (modalSysVarValEl) modalSysVarValEl.value = '';
+        if (modalSysVarForm) modalSysVarForm.classList.add('hidden');
+        showLsrPlayOutput(`🌐 Saved system variable <code>{{VAR:${escapeHtml(res.variable.name)}}}</code> across all .lsr sequences.`, 'success');
+      } else {
+        modalSysVarNameEl?.focus();
+      }
+    });
+  }
+
+  function bindSystemVarToSelectedStep(varName) {
+    if (!varName) return;
+    const token = `{{VAR:${varName}}}`;
+    const sysVar = state.systemVariables.find(v => v.name === varName);
+    const idx = state.selectedLsrStepIndex;
+    const action = state.loginSequence.actions[idx];
+    if (!action) {
+      showLsrPlayOutput(`Select a step in Recorded Login Actions first to bind <code>${escapeHtml(token)}</code>.`, 'info');
+      return;
+    }
+
+    if (action.type === 'change_input') {
+      action.secretName = '';
+      action.value = token;
+      action.isSecret = Boolean(sysVar?.isSecret || action.isSecret);
+    } else if (action.type === 'navigate') {
+      action.url = token;
+    } else if (action.type === 'custom_request') {
+      const curPayload = typeof action.payload === 'string' ? action.payload : (action.payload ? JSON.stringify(action.payload) : '');
+      action.payload = curPayload ? `${curPayload}${token}` : token;
+    } else if (action.type === 'fill_otp') {
+      action.secretName = varName;
+    }
+    action.label = formatLsrStepLabel(action);
+    renderLsrActionsList();
+    renderLsrActionProperties();
+  }
+
+  if (modalSysVarsBar) {
+    modalSysVarsBar.addEventListener('click', e => {
+      const chip = e.target.closest('[data-lsr-bind-var]');
+      if (!chip) return;
+      bindSystemVarToSelectedStep(chip.getAttribute('data-lsr-bind-var') || '');
+    });
+  }
+
+  // Diagnostics Banner Jump-to-Step Handler (Modal + Inline)
+  function handleJumpToStepClick(e) {
+    const jumpBtn = e.target.closest('[data-lsr-jump-step]');
+    if (!jumpBtn) return;
+    const stepIdx = parseInt(jumpBtn.getAttribute('data-lsr-jump-step'), 10);
+    if (!Number.isInteger(stepIdx) || stepIdx < 0) return;
+    if (backdrop && backdrop.classList.contains('hidden')) {
+      openLsrModal(state.loginSequence);
+    }
+    switchLsrSubTab('actions');
+    const maxIdx = Math.max(0, (state.loginSequence.actions?.length || 1) - 1);
+    state.selectedLsrStepIndex = Math.min(stepIdx, maxIdx);
+    renderLsrActionsList();
+    renderLsrActionProperties();
+    if (state.lastLsrPlayResult) {
+      renderVisualPlaySnapshot(state.lastLsrPlayResult, stepIdx);
+    }
+  }
+  if (topDiagnosticsEl) topDiagnosticsEl.addEventListener('click', handleJumpToStepClick);
+  if (inlineDiagnosticsEl) inlineDiagnosticsEl.addEventListener('click', handleJumpToStepClick);
+
+  // Reuse Saved Sequence Bar Handlers
+  if (reuseSelectEl) {
+    reuseSelectEl.addEventListener('change', () => {
+      const seq = getSelectedReuseSequence();
+      if (seq) activateSequenceForScan(seq);
+    });
+  }
+  if (btnUseSelectedLsr) {
+    btnUseSelectedLsr.addEventListener('click', () => {
+      const seq = getSelectedReuseSequence() || state.savedSequences[0] || null;
+      if (seq) activateSequenceForScan(seq);
+    });
+  }
+  if (btnPlaySelectedLsr) {
+    btnPlaySelectedLsr.addEventListener('click', async () => {
+      const seq = getSelectedReuseSequence() || state.loginSequence;
+      await executePlayLsrSequence({ seqOverride: seq, openModalOnPlay: false });
+    });
+  }
+  if (btnDuplicateSelectedLsr) {
+    btnDuplicateSelectedLsr.addEventListener('click', async () => {
+      const seq = getSelectedReuseSequence() || state.loginSequence;
+      await duplicateSequence(seq);
+    });
+  }
+  if (btnRefreshLsrList) {
+    btnRefreshLsrList.addEventListener('click', async () => {
+      await Promise.all([loadSystemVariables(), loadSavedLoginSequences()]);
+    });
+  }
+
+  if (tabActionsBtn) tabActionsBtn.addEventListener('click', () => switchLsrSubTab('actions'));
+  if (tabRestrictionsBtn) tabRestrictionsBtn.addEventListener('click', () => switchLsrSubTab('restrictions'));
+  if (tabSessionBtn) tabSessionBtn.addEventListener('click', () => switchLsrSubTab('session'));
+
+  if (btnOpenNew) {
+    btnOpenNew.addEventListener('click', () => {
+      syncLsrConfigFromInputs();
+      openLsrModal();
+    });
+  }
+  if (btnNewBlank) {
+    btnNewBlank.addEventListener('click', () => {
+      openLsrModal(null, { isNewBlank: true });
+      if (visualCanvas) {
+        visualCanvas.innerHTML = '<div class="empty-muted">✨ Blank sequence ready. Enter a Login URL above and click <strong>→ Load Page Forms</strong>, or click <strong>⚡ Load Working Example</strong> to load a complete 5-step + 2FA demo sequence.</div>';
+      }
+      showLsrPlayOutput('✨ Created new blank login sequence.', 'info');
+    });
+  }
+
+  async function loadWorkingExampleSequence({ openModal = true, autoPlay = true } = {}) {
+    const demoOrigin = (typeof window !== 'undefined' && window.location?.origin && window.location.origin.startsWith('http'))
+      ? window.location.origin
+      : 'http://127.0.0.1:4321';
+    const demoLoginUrl = `${demoOrigin}/api/auth/demo-login`;
+
+    await saveSystemVariable({ name: 'demo_user', category: 'username', value: 'auditor@infsalesgroup.com' });
+    await saveSystemVariable({ name: 'demo_pass', category: 'password', value: 'DemoEnterprisePass2026!' });
+
+    const exampleSeq = normalizeClientLoginSequence({
+      sequenceId: '',
+      name: 'DemoEnterpriseMFA.lsr',
+      targetUrl: demoLoginUrl,
+      updatedAt: new Date().toISOString(),
+      secrets: [],
+      otpConfig: {
+        enabled: true,
+        secret: 'JBSWY3DPEHPK3PXP',
+        digits: 6,
+        period: 30,
+        algorithm: 'SHA1',
+        inputSelector: 'otp_code'
+      },
+      actions: [
+        { type: 'navigate', url: demoLoginUrl },
+        { type: 'change_input', selectorType: 'id', selector: 'email', fieldName: 'email', value: '{{VAR:demo_user}}', isSecret: false },
+        { type: 'change_input', selectorType: 'id', selector: 'password', fieldName: 'password', value: '{{VAR:demo_pass}}', isSecret: true },
+        { type: 'fill_otp', selectorType: 'id', selector: 'otp_code', fieldName: 'otp_code' },
+        { type: 'click_button', selectorType: 'text', selector: 'Log In', submitUrl: demoLoginUrl, method: 'POST', contentType: 'form' }
+      ],
+      restrictions: ['/logout', '/signout', '/logoff'],
+      sessionDetection: {
+        statusCodes: [401, 403],
+        redirectPattern: '/login',
+        loggedOutPattern: '',
+        loggedInPattern: ''
+      }
+    });
+
+    if (openModal) {
+      openLsrModal(exampleSeq);
+    } else {
+      state.loginSequence = exampleSeq;
+      state.selectedLsrStepIndex = 0;
+      applyLsrStateToInputs();
+    }
+    if (inspectUrlEl) inspectUrlEl.value = demoLoginUrl;
+    renderSequenceBlueprintCanvas(exampleSeq);
+
+    if (autoPlay) {
+      await executePlayLsrSequence({ seqOverride: exampleSeq, openModalOnPlay: openModal });
+    }
+  }
+
+  if (btnLoadExampleModal) {
+    btnLoadExampleModal.addEventListener('click', () => loadWorkingExampleSequence({ openModal: true, autoPlay: true }));
+  }
+  if (btnLoadExampleInline) {
+    btnLoadExampleInline.addEventListener('click', () => loadWorkingExampleSequence({ openModal: true, autoPlay: true }));
+  }
+  if (btnClose) btnClose.addEventListener('click', closeLsrModal);
+  if (backdrop) {
+    backdrop.addEventListener('click', e => {
+      if (e.target === backdrop) closeLsrModal();
+    });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && backdrop && !backdrop.classList.contains('hidden')) {
+      closeLsrModal();
+    }
+  });
+
+  // Secrets Vault handlers
+  function handleAddSecret() {
+    const name = secretNameEl?.value.trim() || '';
+    const value = secretValueEl?.value ?? '';
+    if (!name || LSR_FORBIDDEN_KEYS.has(name) || /[^a-zA-Z0-9_.-]/.test(name)) {
+      if (secretNameEl) secretNameEl.focus();
+      return;
+    }
+    const existingIdx = state.loginSequence.secrets.findIndex(s => s.name === name);
+    const entry = { name, value, description: '' };
+    if (existingIdx >= 0) {
+      state.loginSequence.secrets[existingIdx] = entry;
+    } else {
+      state.loginSequence.secrets.push(entry);
+    }
+    if (secretNameEl) secretNameEl.value = '';
+    if (secretValueEl) secretValueEl.value = '';
+    renderLsrSecretsChips();
+    renderLsrActionProperties();
+    renderLsrSequenceCards();
+    if (state.lastInspectedPage) renderInspectedPageCanvas(state.lastInspectedPage);
+  }
+
+  if (btnAddSecret) btnAddSecret.addEventListener('click', handleAddSecret);
+  if (secretValueEl) {
+    secretValueEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleAddSecret();
+      }
+    });
+  }
+  if (secretsChipsEl) {
+    secretsChipsEl.addEventListener('click', e => {
+      const removeBtn = e.target.closest('[data-remove-lsr-secret]');
+      if (!removeBtn) return;
+      const idx = parseInt(removeBtn.getAttribute('data-remove-lsr-secret'), 10);
+      if (Number.isInteger(idx) && idx >= 0 && idx < state.loginSequence.secrets.length) {
+        state.loginSequence.secrets.splice(idx, 1);
+        renderLsrSecretsChips();
+        renderLsrActionProperties();
+        renderLsrSequenceCards();
+        if (state.lastInspectedPage) renderInspectedPageCanvas(state.lastInspectedPage);
+      }
+    });
+  }
+
+  // OTP Configuration handlers
+  if (btnOpenOtp && otpPanel) {
+    btnOpenOtp.addEventListener('click', () => {
+      const willShow = otpPanel.classList.contains('hidden');
+      otpPanel.classList.toggle('hidden', !willShow);
+      btnOpenOtp.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+    });
+  }
+
+  if (btnTestOtp) {
+    btnTestOtp.addEventListener('click', async () => {
+      syncLsrConfigFromInputs();
+      const otp = state.loginSequence.otpConfig;
+      if (!otp.secret) {
+        if (otpStatusEl) {
+          otpStatusEl.textContent = 'Enter a Base32 TOTP secret key first';
+          otpStatusEl.className = 'lsr-otp-status-pill error';
+        }
+        return;
+      }
+      btnTestOtp.disabled = true;
+      btnTestOtp.textContent = 'Verifying...';
+      try {
+        const res = await apiPost('/api/auth/otp-preview', {
+          secret: otp.secret,
+          digits: otp.digits,
+          period: otp.period,
+          algorithm: otp.algorithm,
+          inputSelector: otp.inputSelector
+        });
+        state.loginSequence.otpConfig.enabled = true;
+        if (otpStatusEl) {
+          otpStatusEl.dataset.livePreview = '1';
+          otpStatusEl.textContent = `✓ Code: ${res.code} (${res.digits || otp.digits}d · ${res.remainingSeconds ?? otp.period}s left)`;
+          otpStatusEl.className = 'lsr-otp-status-pill valid';
+        }
+        renderLsrSequenceCards();
+      } catch (err) {
+        if (otpStatusEl) {
+          otpStatusEl.textContent = `✕ ${err.message}`;
+          otpStatusEl.className = 'lsr-otp-status-pill error';
+        }
+      } finally {
+        btnTestOtp.disabled = false;
+        btnTestOtp.textContent = 'Verify & Preview TOTP';
+      }
+    });
+  }
+
+  // Saved Sequences Card List (Use, Play, Edit, Duplicate, Export, Delete) + Import
+  if (seqCardsList) {
+    seqCardsList.addEventListener('click', async e => {
+      const actionBtn = e.target.closest('[data-lsr-card-action]');
+      if (!actionBtn) return;
+      const action = actionBtn.getAttribute('data-lsr-card-action');
+      const idx = parseInt(actionBtn.getAttribute('data-lsr-seq-idx'), 10);
+      const list = state.savedSequences.length > 0 ? state.savedSequences : [state.loginSequence];
+      const targetSeq = list[idx];
+      if (!targetSeq) return;
+
+      if (action === 'use') {
+        activateSequenceForScan(targetSeq);
+        return;
+      }
+
+      if (action === 'play') {
+        await executePlayLsrSequence({ seqOverride: targetSeq, openModalOnPlay: true });
+        return;
+      }
+
+      if (action === 'edit') {
+        openLsrModal(targetSeq);
+        return;
+      }
+
+      if (action === 'duplicate') {
+        await duplicateSequence(targetSeq);
+        return;
+      }
+
+      if (action === 'export') {
+        const exportObj = normalizeClientLoginSequence(targetSeq);
+        const maskedExport = {
+          ...exportObj,
+          secrets: exportObj.secrets.map(s => ({ ...s, value: '[SECRET]' })),
+          otpConfig: {
+            ...exportObj.otpConfig,
+            secret: exportObj.otpConfig.secret ? '[SECRET]' : ''
+          },
+          actions: exportObj.actions.map(a =>
+            a.type === 'change_input' && a.isSecret && !a.secretName && !/^\{\{VAR:[^}]+\}\}$/i.test(String(a.value || ''))
+              ? { ...a, value: '[SECRET]' }
+              : a
+          )
+        };
+        triggerFileDownload(JSON.stringify(maskedExport, null, 2), 'application/json', exportObj.name || 'WrapperSequence.lsr');
+        return;
+      }
+
+      if (action === 'delete') {
+        if (targetSeq.sequenceId) {
+          try {
+            await fetch(`/api/auth/sequences/${encodeURIComponent(targetSeq.sequenceId)}`, { method: 'DELETE' });
+          } catch {
+            // Ignore network/404 errors during delete
+          }
+        }
+        if (state.savedSequences.length > 0) {
+          state.savedSequences.splice(idx, 1);
+        }
+        if (!targetSeq.sequenceId || targetSeq.sequenceId === state.loginSequence.sequenceId) {
+          state.loginSequence = state.savedSequences.length > 0
+            ? normalizeClientLoginSequence(state.savedSequences[0])
+            : createDefaultLoginSequence();
+          state.selectedLsrStepIndex = -1;
+          state.lastLsrPlayResult = null;
+        }
+        persistSequencesToLocal();
+        applyLsrStateToInputs();
+      }
+    });
+  }
+
+  if (btnImport && importFileInput) {
+    btnImport.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('change', async () => {
+      const file = importFileInput.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('Invalid .lsr JSON file');
+        }
+        const imported = normalizeClientLoginSequence({
+          ...parsed,
+          name: parsed.name || file.name || 'ImportedSequence.lsr'
+        });
+        openLsrModal(imported);
+        showLsrPlayOutput(`📂 Imported <strong>${escapeHtml(imported.name)}</strong> (${escapeHtml(imported.actions.length)} step(s)).`, 'success');
+      } catch (err) {
+        showInlineBanner('url-validation-banner', `Failed to import .lsr sequence: ${err.message}`, true);
+      } finally {
+        importFileInput.value = '';
+      }
+    });
+  }
+
+  // Page Inspection (POST /api/auth/inspect-page)
+  async function handleInspectPage({ autoRecordNav = false } = {}) {
+    const rawUrl = inspectUrlEl?.value.trim()
+      || document.getElementById('adv-auth-login-url')?.value.trim()
+      || document.getElementById('target-url')?.value.trim()
+      || '';
+    if (!rawUrl) {
+      if (inspectUrlEl) inspectUrlEl.focus();
+      showLsrPlayOutput('Enter a login URL in the address bar above before inspecting.', 'error');
+      return;
+    }
+
+    const normalizedUrl = normalizeTargetScheme(rawUrl);
+    if (inspectUrlEl) inspectUrlEl.value = normalizedUrl;
+
+    const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+    const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || '';
+
+    if (btnInspectGo) btnInspectGo.disabled = true;
+    if (btnRecord) btnRecord.disabled = true;
+    if (visualCanvas) {
+      visualCanvas.innerHTML = '<div class="empty-muted">⏳ Inspecting target login page forms, inputs, and CSRF tokens...</div>';
+    }
+
+    try {
+      const data = await apiPost('/api/auth/inspect-page', {
+        url: normalizedUrl,
+        targetUrl: normalizedUrl,
+        allowPrivate,
+        ...(sourceIp ? { sourceIp } : {})
+      });
+      state.loginSequence.targetUrl = state.loginSequence.targetUrl || data.pageUrl || normalizedUrl;
+      renderInspectedPageCanvas(data);
+
+      if (autoRecordNav) {
+        const navUrl = data.pageUrl || normalizedUrl;
+        const alreadyHasNav = state.loginSequence.actions.some(a => a.type === 'navigate' && a.url === navUrl);
+        if (!alreadyHasNav) {
+          appendLsrStep({ type: 'navigate', url: navUrl });
+        }
+      }
+    } catch (err) {
+      if (visualCanvas) {
+        visualCanvas.innerHTML = `<div class="feedback-banner error">Failed to inspect page: ${escapeHtml(err.message)}</div>`;
+      }
+    } finally {
+      if (btnInspectGo) btnInspectGo.disabled = false;
+      if (btnRecord) btnRecord.disabled = false;
+    }
+  }
+
+  if (btnInspectGo) btnInspectGo.addEventListener('click', () => handleInspectPage({ autoRecordNav: false }));
+  if (btnRecord) btnRecord.addEventListener('click', () => handleInspectPage({ autoRecordNav: true }));
+  if (inspectUrlEl) {
+    inspectUrlEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleInspectPage({ autoRecordNav: false });
+      }
+    });
+  }
+
+  // Recording actions & Visual Replay Timeline interactions in #lsr-visual-canvas
+  if (visualCanvas) {
+    visualCanvas.addEventListener('click', e => {
+      const backBtn = e.target.closest('#btn-lsr-back-to-inspector');
+      if (backBtn && state.lastInspectedPage) {
+        renderInspectedPageCanvas(state.lastInspectedPage);
+        return;
+      }
+
+      const previewStepBtn = e.target.closest('[data-lsr-preview-step]');
+      if (previewStepBtn) {
+        const previewIdx = parseInt(previewStepBtn.getAttribute('data-lsr-preview-step'), 10);
+        if (Number.isInteger(previewIdx)) {
+          if (previewIdx < (state.loginSequence.actions?.length || 0)) {
+            state.selectedLsrStepIndex = previewIdx;
+            renderLsrActionsList();
+            renderLsrActionProperties();
+          }
+          if (state.lastLsrPlayResult) {
+            renderVisualPlaySnapshot(state.lastLsrPlayResult, previewIdx);
+          } else {
+            renderSequenceBlueprintCanvas(state.loginSequence);
+          }
+        }
+        return;
+      }
+
+      const navBtn = e.target.closest('#btn-lsr-record-nav-here');
+      if (navBtn && state.lastInspectedPage) {
+        appendLsrStep({ type: 'navigate', url: state.lastInspectedPage.pageUrl || inspectUrlEl?.value.trim() || '' });
+        return;
+      }
+
+      const recInputBtn = e.target.closest('[data-lsr-record-input]');
+      if (recInputBtn && state.lastInspectedPage) {
+        const idx = parseInt(recInputBtn.getAttribute('data-lsr-record-input'), 10);
+        const inp = state.lastInspectedPage.inputs?.[idx];
+        if (!inp) return;
+        if (inp.isOtpCandidate) {
+          appendLsrStep({
+            type: 'fill_otp',
+            selectorType: inp.selectorType || 'id',
+            selector: inp.selectorValue || inp.id || inp.name || 'auto',
+            fieldName: inp.name || inp.id || ''
+          });
+          return;
+        }
+        const secretSel = visualCanvas.querySelector(`[data-lsr-input-secret="${idx}"]`);
+        const valInput = visualCanvas.querySelector(`[data-lsr-input-val="${idx}"]`);
+        const selectedRef = secretSel?.value.trim() || '';
+        const literalVal = valInput?.value ?? '';
+
+        let secretName = '';
+        let value = literalVal;
+        let isSecret = Boolean(inp.isPassword);
+
+        if (selectedRef.startsWith('VAR:')) {
+          const varName = selectedRef.slice(4);
+          const sysVar = state.systemVariables.find(v => v.name === varName);
+          value = `{{VAR:${varName}}}`;
+          isSecret = Boolean(sysVar?.isSecret || inp.isPassword);
+        } else if (selectedRef) {
+          secretName = selectedRef.startsWith('SECRET:') ? selectedRef.slice(7) : selectedRef;
+          value = `{{SECRET:${secretName}}}`;
+          isSecret = true;
+        }
+
+        appendLsrStep({
+          type: 'change_input',
+          selectorType: inp.selectorType || 'id',
+          selector: inp.selectorValue || inp.id || inp.name || '',
+          fieldName: inp.name || inp.id || '',
+          value,
+          secretName,
+          isSecret
+        });
+        return;
+      }
+
+      const recBtnEl = e.target.closest('[data-lsr-record-button]');
+      if (recBtnEl && state.lastInspectedPage) {
+        const idx = parseInt(recBtnEl.getAttribute('data-lsr-record-button'), 10);
+        const btn = state.lastInspectedPage.buttons?.[idx];
+        if (!btn) return;
+        const form = (state.lastInspectedPage.forms || []).find(f => f.formIndex === btn.formIndex) || state.lastInspectedPage.forms?.[0] || null;
+        appendLsrStep({
+          type: 'click_button',
+          selectorType: btn.selectorType || 'text',
+          selector: btn.selectorValue || btn.text || btn.id || btn.name || 'Submit',
+          submitUrl: form?.actionUrl || '',
+          method: form?.method || 'POST',
+          contentType: form?.enctype?.includes('json') ? 'json' : (form ? 'form' : '')
+        });
+      }
+    });
+  }
+
+  // Quick add & OTP step buttons
+  document.querySelectorAll('[data-lsr-quick-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.getAttribute('data-lsr-quick-add');
+      appendLsrStep(createDefaultStepForType(type));
+    });
+  });
+
+  if (btnAddOtpStep) {
+    btnAddOtpStep.addEventListener('click', () => {
+      appendLsrStep(createDefaultStepForType('fill_otp'));
+    });
+  }
+
+  // Step selection & reordering
+  if (actionsListEl) {
+    actionsListEl.addEventListener('click', e => {
+      const item = e.target.closest('[data-lsr-step-idx]');
+      if (!item) return;
+      const idx = parseInt(item.getAttribute('data-lsr-step-idx'), 10);
+      if (Number.isInteger(idx)) {
+        state.selectedLsrStepIndex = idx;
+        renderLsrActionsList();
+        renderLsrActionProperties();
+        if (state.lastLsrPlayResult) {
+          renderVisualPlaySnapshot(state.lastLsrPlayResult, idx);
+        }
+      }
+    });
+  }
+
+  if (btnStepAdd) {
+    btnStepAdd.addEventListener('click', () => {
+      const nextType = state.loginSequence.actions.length === 0 ? 'navigate' : 'change_input';
+      appendLsrStep(createDefaultStepForType(nextType));
+    });
+  }
+
+  if (btnStepUp) {
+    btnStepUp.addEventListener('click', () => {
+      const idx = state.selectedLsrStepIndex;
+      const actions = state.loginSequence.actions;
+      if (idx <= 0 || idx >= actions.length) return;
+      const [moved] = actions.splice(idx, 1);
+      actions.splice(idx - 1, 0, moved);
+      state.selectedLsrStepIndex = idx - 1;
+      renderLsrActionsList();
+      renderLsrActionProperties();
+    });
+  }
+
+  if (btnStepDown) {
+    btnStepDown.addEventListener('click', () => {
+      const idx = state.selectedLsrStepIndex;
+      const actions = state.loginSequence.actions;
+      if (idx < 0 || idx >= actions.length - 1) return;
+      const [moved] = actions.splice(idx, 1);
+      actions.splice(idx + 1, 0, moved);
+      state.selectedLsrStepIndex = idx + 1;
+      renderLsrActionsList();
+      renderLsrActionProperties();
+    });
+  }
+
+  if (btnStepDelete) {
+    btnStepDelete.addEventListener('click', () => {
+      const idx = state.selectedLsrStepIndex;
+      const actions = state.loginSequence.actions;
+      if (idx < 0 || idx >= actions.length) return;
+      actions.splice(idx, 1);
+      state.selectedLsrStepIndex = actions.length > 0 ? Math.min(idx, actions.length - 1) : -1;
+      renderLsrActionsList();
+      renderLsrActionProperties();
+      renderLsrSequenceCards();
+    });
+  }
+
+  // Action Properties live editor
+  if (actionPropsEl) {
+    actionPropsEl.addEventListener('click', e => {
+      const insertVarBtn = e.target.closest('[data-lsr-insert-var]');
+      if (!insertVarBtn) return;
+      const varName = insertVarBtn.getAttribute('data-lsr-insert-var') || '';
+      if (varName) bindSystemVarToSelectedStep(varName);
+    });
+
+    const updateSelectedFromProps = e => {
+      const idx = state.selectedLsrStepIndex;
+      const action = state.loginSequence.actions[idx];
+      if (!action) return;
+
+      if (e.target.id === 'lsr-prop-type') {
+        const next = createDefaultStepForType(e.target.value);
+        state.loginSequence.actions[idx] = { ...next, step: idx + 1 };
+        renderLsrActionsList();
+        renderLsrActionProperties();
+        return;
+      }
+
+      if (action.type === 'navigate') {
+        const urlEl = document.getElementById('lsr-prop-url');
+        if (urlEl) action.url = urlEl.value.trim();
+      } else if (action.type === 'change_input') {
+        const selTypeEl = document.getElementById('lsr-prop-selector-type');
+        const selEl = document.getElementById('lsr-prop-selector');
+        const secEl = document.getElementById('lsr-prop-secret-name');
+        const valEl = document.getElementById('lsr-prop-value');
+        const maskEl = document.getElementById('lsr-prop-is-secret');
+        if (selTypeEl) action.selectorType = selTypeEl.value;
+        if (selEl) {
+          action.selector = selEl.value.trim();
+          action.fieldName = action.selector.replace(/^#/, '');
+        }
+        if (secEl && e.target === secEl) {
+          const refVal = secEl.value.trim();
+          if (refVal.startsWith('VAR:')) {
+            const varName = refVal.slice(4);
+            const sysVar = state.systemVariables.find(v => v.name === varName);
+            action.secretName = '';
+            action.value = `{{VAR:${varName}}}`;
+            action.isSecret = Boolean(sysVar?.isSecret);
+          } else if (refVal) {
+            const secName = refVal.startsWith('SECRET:') ? refVal.slice(7) : refVal;
+            action.secretName = secName;
+            action.value = `{{SECRET:${secName}}}`;
+            action.isSecret = true;
+          } else {
+            action.secretName = '';
+          }
+          if (valEl) {
+            valEl.value = action.value;
+            valEl.type = action.isSecret ? 'password' : 'text';
+          }
+          if (maskEl) maskEl.checked = Boolean(action.isSecret);
+        }
+        if (valEl && e.target === valEl) {
+          action.value = valEl.value;
+          delete valEl.dataset.preserveMasked;
+        }
+        if (maskEl && e.target === maskEl) {
+          action.isSecret = maskEl.checked;
+          if (valEl) valEl.type = action.isSecret ? 'password' : 'text';
+        }
+      } else if (action.type === 'fill_otp') {
+        const selTypeEl = document.getElementById('lsr-prop-selector-type');
+        const selEl = document.getElementById('lsr-prop-selector');
+        if (selTypeEl) action.selectorType = selTypeEl.value;
+        if (selEl) {
+          action.selector = selEl.value.trim() || 'auto';
+          action.fieldName = action.selector === 'auto' ? '' : action.selector.replace(/^#/, '');
+        }
+      } else if (action.type === 'click_button') {
+        const selTypeEl = document.getElementById('lsr-prop-selector-type');
+        const selEl = document.getElementById('lsr-prop-selector');
+        const subUrlEl = document.getElementById('lsr-prop-submit-url');
+        const ctEl = document.getElementById('lsr-prop-content-type');
+        if (selTypeEl) action.selectorType = selTypeEl.value;
+        if (selEl) action.selector = selEl.value.trim();
+        if (subUrlEl) action.submitUrl = subUrlEl.value.trim();
+        if (ctEl) action.contentType = ctEl.value;
+      } else if (action.type === 'extract_token') {
+        const srcEl = document.getElementById('lsr-prop-token-source');
+        const keyEl = document.getElementById('lsr-prop-token-key');
+        if (srcEl) action.source = srcEl.value;
+        if (keyEl) {
+          action.key = keyEl.value.trim();
+          action.tokenJsonPath = action.source === 'json' ? action.key : '';
+        }
+      } else if (action.type === 'custom_request') {
+        const mEl = document.getElementById('lsr-prop-method');
+        const ctEl = document.getElementById('lsr-prop-content-type');
+        const uEl = document.getElementById('lsr-prop-url');
+        const pEl = document.getElementById('lsr-prop-payload');
+        if (mEl) action.method = mEl.value;
+        if (ctEl) action.contentType = ctEl.value;
+        if (uEl) action.url = uEl.value.trim();
+        if (pEl) action.payload = pEl.value;
+      }
+
+      action.label = formatLsrStepLabel(action);
+      state.loginSequence.updatedAt = new Date().toISOString();
+      renderLsrActionsList();
+      if (!state.lastLsrPlayResult && !state.lastInspectedPage) {
+        renderSequenceBlueprintCanvas(state.loginSequence);
+      }
+    };
+
+    actionPropsEl.addEventListener('input', updateSelectedFromProps);
+    actionPropsEl.addEventListener('change', updateSelectedFromProps);
+  }
+
+  // Restrictions handlers
+  function handleAddRestriction() {
+    const val = restrictionInput?.value.trim() || '';
+    if (!val) return;
+    if (!state.loginSequence.restrictions.includes(val)) {
+      state.loginSequence.restrictions.push(val);
+    }
+    if (restrictionInput) restrictionInput.value = '';
+    renderLsrRestrictionsList();
+  }
+  if (btnAddRestriction) btnAddRestriction.addEventListener('click', handleAddRestriction);
+  if (restrictionsListEl) {
+    restrictionsListEl.addEventListener('click', e => {
+      const btn = e.target.closest('[data-remove-lsr-restriction]');
+      if (!btn) return;
+      const idx = parseInt(btn.getAttribute('data-remove-lsr-restriction'), 10);
+      if (Number.isInteger(idx) && idx >= 0 && idx < state.loginSequence.restrictions.length) {
+        state.loginSequence.restrictions.splice(idx, 1);
+        renderLsrRestrictionsList();
+      }
+    });
+  }
+
+  // Save Sequence (POST/PUT /api/auth/sequences + localStorage persistence)
+  if (btnSave) {
+    btnSave.addEventListener('click', async () => {
+      const payload = buildLoginSequencePayload({ includeSecrets: true });
+      const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+      const requestBody = {
+        ...payload,
+        allowPrivate,
+        systemVariables: state.systemVariables
+      };
+      btnSave.disabled = true;
+      btnSave.textContent = 'Saving...';
+      try {
+        let res = null;
+        if (payload.sequenceId && !payload.sequenceId.startsWith('local-')) {
+          try {
+            const putResp = await fetch(`/api/auth/sequences/${encodeURIComponent(payload.sequenceId)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(requestBody)
+            });
+            if (putResp.ok) {
+              res = await putResp.json();
+            }
+          } catch {
+            res = null;
+          }
+        }
+        if (!res) {
+          res = await apiPost('/api/auth/sequences', requestBody);
+        }
+        const saved = normalizeClientLoginSequence({
+          ...(res?.sequence || payload),
+          secrets: payload.secrets,
+          otpConfig: payload.otpConfig
+        });
+        state.loginSequence = saved;
+        const idx = state.savedSequences.findIndex(s =>
+          (s.sequenceId && s.sequenceId === saved.sequenceId) ||
+          (!s.sequenceId && s.name === saved.name)
+        );
+        if (idx >= 0) {
+          state.savedSequences[idx] = saved;
+        } else {
+          state.savedSequences.unshift(saved);
+        }
+        persistSequencesToLocal();
+        applyLsrStateToInputs();
+        if (!state.lastLsrPlayResult) {
+          renderSequenceBlueprintCanvas(saved);
+        }
+        if (topDiagnosticsEl) {
+          topDiagnosticsEl.className = 'lsr-top-diagnostics-banner success';
+          topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)) — Ready to Play or Reuse in Scan.</div>`;
+          topDiagnosticsEl.classList.remove('hidden');
+        }
+        showLsrPlayOutput(`💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)).`, 'success');
+      } catch (err) {
+        if (topDiagnosticsEl) {
+          topDiagnosticsEl.className = 'lsr-top-diagnostics-banner error';
+          topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">❌ Could not save sequence: ${escapeHtml(err.message)}</div>`;
+          topDiagnosticsEl.classList.remove('hidden');
+        }
+        showLsrPlayOutput(`✕ Save failed: ${escapeHtml(err.message)}`, 'error');
+      } finally {
+        btnSave.disabled = false;
+        btnSave.textContent = '💾 Save';
+      }
+    });
+  }
+
+  // Play / Test Sequence (POST /api/auth/record-session)
+  if (btnPlay) {
+    btnPlay.addEventListener('click', () => executePlayLsrSequence({ openModalOnPlay: false }));
+  }
+
+  applyLsrStateToInputs();
 }

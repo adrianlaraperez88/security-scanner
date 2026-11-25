@@ -94,6 +94,10 @@
                   <span class="btn-spinner hidden" id="detect-stack-spinner"></span>
                   <span class="btn-text" id="detect-stack-btn-text">🔎 Detect Tech Stack</span>
                 </button>
+                <button type="button" id="get-real-ip-btn" class="btn-secondary btn-large" title="Discover website Real / Origin IP (DNS, CDN, SPF, MX, Subdomains)">
+                  <span class="btn-spinner hidden" id="real-ip-spinner"></span>
+                  <span class="btn-text" id="real-ip-btn-text">🌐 Get Real IP</span>
+                </button>
                 <button type="submit" id="btn-start-scan" class="btn-primary btn-large">
                   <span class="btn-spinner hidden" id="scan-spinner"></span>
                   <span class="btn-text" id="btn-start-text">🚀 Start Security Scan</span>
@@ -138,6 +142,17 @@
                   <span>🏢 Allow Authorized Internal / Private Targets (<code>--allow-private</code>)</span>
                   <span class="form-hint">Permits RFC1918 &amp; internal hosts; cloud metadata stays blocked</span>
                 </label>
+                <div id="device-category-wrap" class="device-category-wrap hidden">
+                  <label for="opt-device-category" class="form-label-inline">
+                    📺 Device Category:
+                    <select id="opt-device-category" class="form-select form-select-compact" aria-label="Device Category">
+                      <option value="all" selected>All Devices (Auto-Detect)</option>
+                      <option value="smart_tv">Smart TV &amp; Streaming Media</option>
+                      <option value="ip_camera">IP Camera / NVR / Surveillance</option>
+                      <option value="pc_workstation">PC / Workstation / Local Server</option>
+                    </select>
+                  </label>
+                </div>
               </div>
 
               <!-- Detected Tech Stack & Audit Plan Preview Banner -->
@@ -163,6 +178,8 @@
                       <!-- Badges populated dynamically -->
                     </div>
                   </div>
+                  <div id="tech-detect-device-row" class="tech-detect-device-row hidden"></div>
+                  <div id="tech-detect-sca-row" class="tech-detect-sca-row hidden"></div>
                   <div class="tech-detect-api-row" id="tech-detect-api-row">
                     <div class="tech-detect-api-header-line">
                       <div class="tech-detect-api-title-group">
@@ -193,6 +210,34 @@
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <!-- Real / Origin IP Discovery Preview Banner -->
+              <div id="real-ip-banner" class="tech-detect-banner hidden" role="region" aria-label="Website Real and Origin IP Discovery">
+                <div class="tech-detect-header">
+                  <div class="tech-detect-title-wrap">
+                    <span class="tech-detect-icon">🌐</span>
+                    <span class="tech-detect-title">Real / Origin IP Discovery:</span>
+                    <span class="badge badge-primary" id="real-ip-primary-badge">Resolving...</span>
+                    <span class="badge badge-confidence" id="real-ip-cdn-badge"></span>
+                  </div>
+                  <button type="button" id="real-ip-close-btn" class="btn-icon-close" aria-label="Close Real IP preview">✕</button>
+                </div>
+                <div class="tech-detect-body" id="real-ip-body"></div>
+              </div>
+
+              <!-- Recorded Authenticated Login Session Preview Banner -->
+              <div id="recorded-session-banner" class="tech-detect-banner hidden" role="region" aria-label="Recorded Authenticated Login Session">
+                <div class="tech-detect-header">
+                  <div class="tech-detect-title-wrap">
+                    <span class="tech-detect-icon">🔐</span>
+                    <span class="tech-detect-title">Recorded Authenticated Session:</span>
+                    <span class="badge badge-primary" id="recorded-session-status-badge">Ready</span>
+                    <span class="badge badge-confidence" id="recorded-session-cookies-badge"></span>
+                  </div>
+                  <button type="button" id="recorded-session-close-btn" class="btn-icon-close" aria-label="Close Recorded Session preview">✕</button>
+                </div>
+                <div class="tech-detect-body" id="recorded-session-body"></div>
               </div>
 
               <!-- Inline Validation Warning Banner -->
@@ -261,12 +306,219 @@
                     <input type="text" id="adv-auth" class="form-input" placeholder="Bearer eyJhbGci... or Basic dXNlcjpwYXNz">
                   </div>
 
+                  <div class="form-group full-width lsr-auth-section-card">
+                    <label for="adv-auth-method" class="form-label">
+                      🔐 Website Authentication &amp; Login Sequence Recorder
+                      <span class="form-hint">(Optional — multi-step form/API login, Secrets Vault, TOTP/MFA, &amp; session tracking)</span>
+                    </label>
+
+                    <div class="lsr-auth-method-row">
+                      <select id="adv-auth-method" class="form-select" aria-label="Authentication Method">
+                        <option value="login_sequence" selected>Login Sequence Recorder (.lsr) — Multi-Step &amp; MFA/OTP</option>
+                        <option value="macro">Standard Login Macro (Username / Password &amp; Auto-CSRF)</option>
+                        <option value="header">Custom Authorization Header / Bearer Token</option>
+                      </select>
+                    </div>
+
+                    <!-- System Variables & Shared Credentials Vault -->
+                    <div id="sys-vars-panel" class="lsr-subcard lsr-sysvars-card">
+                      <div class="lsr-subcard-header">
+                        <span class="lsr-subcard-title">🌐 System Variables &amp; Shared Credentials Vault (<code>{{VAR:name}}</code> / <code>{{SECRET:name}}</code>)</span>
+                        <span class="form-hint">Shared across all saved <code>.lsr</code> login sequences</span>
+                      </div>
+                      <p class="form-hint lsr-sysvars-subtitle">Define shared usernames, passwords, TOTP seeds, and login URLs once. Updating a variable here automatically updates every Login Sequence (.lsr) that uses it.</p>
+                      <div class="lsr-sysvar-add-row">
+                        <input
+                          type="text"
+                          id="sys-var-name-input"
+                          class="form-input form-input-compact"
+                          autocomplete="off"
+                          placeholder="Variable name e.g. corp_user or corp_pass"
+                        >
+                        <select id="sys-var-category-select" class="form-select form-select-compact" aria-label="System Variable Category">
+                          <option value="username">👤 Username / Email</option>
+                          <option value="password" selected>🔒 Password / Secret</option>
+                          <option value="otp_seed">🔑 TOTP / MFA Base32 Seed</option>
+                          <option value="url">🌐 Login / Target URL</option>
+                          <option value="token">🎟️ API Key / Token</option>
+                          <option value="custom">⚙️ Custom Variable</option>
+                        </select>
+                        <input
+                          type="password"
+                          id="sys-var-value-input"
+                          class="form-input form-input-compact"
+                          autocomplete="new-password"
+                          placeholder="Variable value"
+                        >
+                        <button type="button" id="btn-save-sys-var" class="btn-primary btn-small">+ Save System Variable</button>
+                      </div>
+                      <div id="sys-vars-status" class="form-hint hidden" aria-live="polite"></div>
+                      <div id="sys-vars-list" class="lsr-sysvars-list">
+                        <span class="form-hint">No system variables saved yet.</span>
+                      </div>
+                    </div>
+
+                    <!-- Secrets Used in the Login Sequence -->
+                    <div class="lsr-subcard">
+                      <div class="lsr-subcard-header">
+                        <span class="lsr-subcard-title">🗝️ Secrets Used in the Login Sequence</span>
+                        <span class="form-hint">Stored masked as <code>{{SECRET:name}}</code> in <code>.lsr</code> steps</span>
+                      </div>
+                      <div class="lsr-secret-add-row">
+                        <input
+                          type="text"
+                          id="lsr-secret-name-input"
+                          class="form-input form-input-compact"
+                          autocomplete="off"
+                          placeholder="Start typing secret name e.g. wrapper_pass"
+                        >
+                        <input
+                          type="password"
+                          id="lsr-secret-value-input"
+                          class="form-input form-input-compact"
+                          autocomplete="new-password"
+                          placeholder="Secret value"
+                        >
+                        <button type="button" id="btn-add-lsr-secret" class="btn-secondary btn-small">+ Add secret</button>
+                      </div>
+                      <div id="lsr-secrets-chips" class="lsr-secrets-chips">
+                        <span class="form-hint">No secrets added yet.</span>
+                      </div>
+                    </div>
+
+                    <!-- Configure OTP (Multi-Factor Authentication / TOTP) -->
+                    <div class="lsr-subcard">
+                      <div class="lsr-otp-header-row">
+                        <div>
+                          <span class="lsr-subcard-title">🔑 Multi-Factor Authentication (TOTP / OTP)</span>
+                          <span id="otp-preview-status" class="lsr-otp-status-pill">Not configured</span>
+                        </div>
+                        <button type="button" id="btn-open-otp-config" class="btn-secondary btn-small" aria-expanded="false">🔑 Configure OTP</button>
+                      </div>
+                      <div id="lsr-otp-config-panel" class="lsr-otp-config-panel hidden">
+                        <div class="advanced-grid">
+                          <div class="form-group">
+                            <label for="otp-secret-input" class="form-label">Base32 TOTP Secret Key</label>
+                            <input type="password" id="otp-secret-input" class="form-input form-input-compact" autocomplete="off" placeholder="e.g. JBSWY3DPEHPK3PXP">
+                          </div>
+                          <div class="form-group">
+                            <label for="otp-digits-select" class="form-label">Digits</label>
+                            <select id="otp-digits-select" class="form-select form-select-compact">
+                              <option value="6" selected>6 digits</option>
+                              <option value="8">8 digits</option>
+                            </select>
+                          </div>
+                          <div class="form-group">
+                            <label for="otp-period-input" class="form-label">Period (Seconds)</label>
+                            <input type="number" id="otp-period-input" class="form-input form-input-compact" min="15" max="120" value="30">
+                          </div>
+                          <div class="form-group">
+                            <label for="otp-algorithm-select" class="form-label">Algorithm</label>
+                            <select id="otp-algorithm-select" class="form-select form-select-compact">
+                              <option value="SHA1" selected>SHA1</option>
+                              <option value="SHA256">SHA256</option>
+                              <option value="SHA512">SHA512</option>
+                            </select>
+                          </div>
+                          <div class="form-group">
+                            <label for="otp-selector-input" class="form-label">Target OTP Input ID / Name</label>
+                            <input type="text" id="otp-selector-input" class="form-input form-input-compact" value="auto" placeholder="auto or e.g. totp">
+                          </div>
+                          <div class="form-group lsr-otp-test-col">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="button" id="btn-test-otp-preview" class="btn-secondary btn-small">Verify &amp; Preview TOTP</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Login Sequence Recorder — Saved Sequences Card List -->
+                    <div class="lsr-subcard">
+                      <div class="lsr-subcard-header">
+                        <span class="lsr-subcard-title">🎬 Login Sequence Recorder (<code>.lsr</code>)</span>
+                        <div class="lsr-sequence-toolbar-inline">
+                          <button type="button" id="btn-load-example-lsr-inline" class="btn-secondary btn-small">⚡ Load Working Example</button>
+                          <button type="button" id="btn-import-lsr-sequence" class="btn-secondary btn-small">📂 Import .lsr</button>
+                          <button type="button" id="btn-new-lsr-sequence" class="btn-primary btn-small">🎬 New sequence / Open Visual Login Sequence Recorder</button>
+                          <input type="file" id="lsr-import-file-input" accept=".lsr,.json,application/json" class="hidden">
+                        </div>
+                      </div>
+                      <div class="lsr-reuse-bar">
+                        <select id="lsr-reuse-select" class="form-select form-select-compact" aria-label="Select a saved .lsr sequence to reuse">
+                          <option value="">Select a saved .lsr sequence to reuse...</option>
+                        </select>
+                        <button type="button" id="btn-use-selected-lsr" class="btn-secondary btn-small">✅ Use Selected Sequence</button>
+                        <button type="button" id="btn-play-selected-lsr" class="btn-secondary btn-small">▶️ Quick Play / Verify</button>
+                        <button type="button" id="btn-duplicate-selected-lsr" class="btn-secondary btn-small">📋 Duplicate</button>
+                        <button type="button" id="btn-refresh-lsr-list" class="btn-secondary btn-small" title="Refresh saved sequences &amp; system variables">🔄</button>
+                      </div>
+                      <div id="lsr-inline-diagnostics-summary" class="lsr-top-diagnostics-banner hidden" role="status"></div>
+                      <div id="lsr-sequence-cards-list" class="lsr-sequence-cards-list">
+                        <!-- Dynamically populated .lsr sequence cards -->
+                      </div>
+                    </div>
+
+                    <!-- Standard Login Macro Fallback / Quick Credentials -->
+                    <div id="adv-standard-macro-box" class="lsr-subcard">
+                      <div class="lsr-subcard-header">
+                        <span class="lsr-subcard-title">📝 Standard Login Macro &amp; Session Recorder</span>
+                        <span class="form-hint">Direct username/password macro with Auto-CSRF &amp; OpenAPI route discovery</span>
+                      </div>
+                      <div class="advanced-grid">
+                        <div class="form-group">
+                          <label for="adv-auth-username" class="form-label">Username or Email (<code>--username</code>)</label>
+                          <input type="text" id="adv-auth-username" class="form-input" autocomplete="off" placeholder="user@example.com or admin">
+                        </div>
+                        <div class="form-group">
+                          <label for="adv-auth-password" class="form-label">Password (<code>--password</code>)</label>
+                          <input type="password" id="adv-auth-password" class="form-input" autocomplete="new-password" placeholder="••••••••">
+                        </div>
+                        <div class="form-group">
+                          <label for="adv-auth-login-url" class="form-label">Login URL (<code>--login-url</code>)</label>
+                          <input type="text" id="adv-auth-login-url" class="form-input" placeholder="Leave empty to auto-discover (/login, /api/login...)">
+                        </div>
+                        <div class="form-group">
+                          <label for="adv-auth-type" class="form-label">Submission Format (<code>--login-type</code>)</label>
+                          <select id="adv-auth-type" class="form-select">
+                            <option value="auto" selected>Auto-Detect (HTML Form or JSON API)</option>
+                            <option value="form">HTML Form (application/x-www-form-urlencoded)</option>
+                            <option value="json">JSON API (application/json)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <input type="hidden" id="adv-recorded-session-id" value="">
+                      <div class="adv-source-ip-actions">
+                        <button type="button" id="btn-test-record-login" class="btn-secondary btn-small">🔐 Test &amp; Record Login Session</button>
+                        <button type="button" id="btn-discover-openapi" class="btn-secondary btn-small">📋 Discover OpenAPI / Swagger Routes</button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="form-group full-width">
                     <label for="adv-tech" class="form-label">
                       Tech Stack Override
                       <span class="form-hint">(Comma-separated tags e.g. laravel,php,nginx — leave empty for auto-detection)</span>
                     </label>
                     <input type="text" id="adv-tech" class="form-input" placeholder="Auto-detected during fingerprinting">
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="adv-source-ip" class="form-label">
+                      Direct Source / Origin IP Routing (<code>--source-ip</code>)
+                      <span class="form-hint">(Optional — connects HTTP/HTTPS directly to Source IP with Host &amp; TLS SNI, e.g. 203.0.113.50 or example.com=203.0.113.50)</span>
+                    </label>
+                    <input type="text" id="adv-source-ip" class="form-input" placeholder="Pinned DNS Source IP (automatic) or override e.g. 203.0.113.50">
+                    <div class="adv-source-ip-actions">
+                      <button type="button" id="adv-get-real-ip-btn" class="btn-secondary btn-small">🌐 Auto-Find Real IP from Target URL</button>
+                    </div>
+                  </div>
+
+                  <div class="form-group full-width">
+                    <label for="adv-checks" class="form-label">
+                      Specific Check ID or CVE Filter (<code>--check</code> / <code>--cve</code>)
+                      <span class="form-hint">(Optional — run only specific checks or CVEs, e.g. CVE-2026-123007, cve-php-ecosystem, php-session-upload-progress)</span>
+                    </label>
+                    <input type="text" id="adv-checks" class="form-input" placeholder="Leave empty for profile default, or enter e.g. CVE-2026-123007, cve-php-ecosystem">
                   </div>
 
                   <div class="form-group full-width">
@@ -340,6 +592,7 @@
                 </div>
               </div>
             </div>
+            <div id="live-device-summary" class="live-device-summary hidden"></div>
 
             <!-- Live Activity Log Feed -->
             <div class="activity-feed-section">
@@ -440,8 +693,40 @@
                     <!-- Badges populated dynamically -->
                   </div>
                 </div>
+                <div id="results-device-info" class="results-device-info hidden"></div>
                 <div class="stack-strategy-explanation" id="results-stack-explanation">
                   Smart stack filtering intelligently skipped irrelevant framework checks for this website, optimizing speed and eliminating false alarms.
+                </div>
+              </div>
+            </div>
+
+            <!-- Runtime SCA Findings Card -->
+            <div id="results-runtime-sca-card" class="stack-strategy-card runtime-sca-card hidden">
+              <div class="stack-card-header">
+                <div class="stack-card-title-group">
+                  <span class="stack-card-icon">📦</span>
+                  <div>
+                    <h3 class="stack-card-title">Runtime SCA Findings (<span id="results-sca-count">0</span>)</h3>
+                    <p class="stack-card-subtitle">The following technologies were identified in this scan. Update out of date technologies to the latest version to ensure your target is not at risk for known vulnerabilities.</p>
+                  </div>
+                </div>
+                <div class="cve-banner-kpis" id="results-sca-kpis"></div>
+              </div>
+              <div class="stack-card-body">
+                <div class="history-table-container">
+                  <table class="history-table runtime-sca-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Identified Version</th>
+                        <th>Latest Branch Version</th>
+                        <th>Overall Latest Version</th>
+                        <th>Recommended Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="results-runtime-sca-tbody"></tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -906,6 +1191,7 @@
                       <option value="Network &amp; Transport">Network &amp; Transport</option>
                       <option value="Supply Chain Security">Supply Chain Security</option>
                       <option value="AI &amp; Machine Learning">AI &amp; Machine Learning</option>
+                      <option value="Infrastructure &amp; Network">Infrastructure &amp; Network</option>
                     </select>
                   </div>
 
@@ -1067,6 +1353,156 @@
           </form>
           <div id="doctor-diagnose-result" class="doctor-diagnose-result hidden"></div>
         </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visual Login Sequence Recorder Modal -->
+  <div id="lsr-recorder-backdrop" class="drawer-backdrop modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="lsr-recorder-title">
+    <div class="modal-card lsr-modal-card">
+      <div class="lsr-modal-toolbar">
+        <div class="lsr-toolbar-left">
+          <h2 id="lsr-recorder-title" class="lsr-modal-title">🎬 Login Sequence Recorder</h2>
+          <input
+            type="text"
+            id="lsr-sequence-name"
+            class="form-input form-input-compact lsr-name-input"
+            value="WrapperSequence.lsr"
+            aria-label="Login Sequence File Name"
+            placeholder="WrapperSequence.lsr"
+          >
+        </div>
+        <div class="lsr-toolbar-actions">
+          <button type="button" id="btn-lsr-new-blank" class="btn-secondary btn-small" title="Start a fresh blank login sequence">✨ New Blank</button>
+          <button type="button" id="btn-lsr-load-example" class="btn-secondary btn-small" title="Load a working 5-step + 2FA demo login sequence">⚡ Load Working Example</button>
+          <button type="button" id="btn-lsr-save" class="btn-primary btn-small">💾 Save</button>
+          <button type="button" id="btn-lsr-play" class="btn-success btn-small">▶️ Play / Test Sequence</button>
+          <button type="button" id="btn-lsr-record" class="btn-secondary btn-small">⏺️ Inspect &amp; Record Page</button>
+          <button type="button" id="btn-lsr-add-otp-step" class="btn-secondary btn-small">🔑 + OTP Step</button>
+          <button type="button" id="btn-lsr-close" class="btn-secondary btn-small" aria-label="Close Visual Login Sequence Recorder">✕ Close</button>
+        </div>
+      </div>
+
+      <div id="lsr-top-diagnostics-banner" class="lsr-top-diagnostics-banner hidden" role="alert" aria-live="polite"></div>
+
+      <div class="lsr-subtabs-bar" role="tablist" aria-label="Login Sequence Recorder Sections">
+        <button type="button" id="btn-lsr-tab-actions" class="tab-pill active" role="tab" aria-selected="true" aria-controls="lsr-panel-actions">Login Actions</button>
+        <button type="button" id="btn-lsr-tab-restrictions" class="tab-pill" role="tab" aria-selected="false" aria-controls="lsr-panel-restrictions">Restrictions</button>
+        <button type="button" id="btn-lsr-tab-session" class="tab-pill" role="tab" aria-selected="false" aria-controls="lsr-panel-session">Session detection</button>
+      </div>
+
+      <div id="lsr-modal-sysvars-bar" class="lsr-modal-sysvars-bar">
+        <div class="lsr-modal-sysvars-top">
+          <span class="lsr-modal-sysvars-label">🌐 System Variables (<code>{{VAR:name}}</code>):</span>
+          <div id="lsr-modal-sysvars-chips" class="lsr-modal-sysvars-chips">
+            <span class="form-hint">No system variables yet.</span>
+          </div>
+          <button type="button" id="btn-lsr-toggle-modal-sysvar" class="btn-secondary btn-small">⚙️ + Add / Rotate Variable</button>
+        </div>
+        <div id="lsr-modal-sysvar-quick-form" class="lsr-modal-sysvar-quick-form hidden">
+          <input type="text" id="lsr-modal-sysvar-name" class="form-input form-input-compact" autocomplete="off" placeholder="Variable name e.g. corp_pass">
+          <select id="lsr-modal-sysvar-cat" class="form-select form-select-compact" aria-label="Quick System Variable Category">
+            <option value="username">👤 Username / Email</option>
+            <option value="password" selected>🔒 Password / Secret</option>
+            <option value="otp_seed">🔑 TOTP / MFA Base32 Seed</option>
+            <option value="url">🌐 Login / Target URL</option>
+            <option value="token">🎟️ API Key / Token</option>
+            <option value="custom">⚙️ Custom Variable</option>
+          </select>
+          <input type="password" id="lsr-modal-sysvar-val" class="form-input form-input-compact" autocomplete="new-password" placeholder="Variable value">
+          <button type="button" id="btn-lsr-modal-save-sysvar" class="btn-primary btn-small">💾 Save Variable</button>
+        </div>
+      </div>
+
+      <!-- Tab 1: Login Actions -->
+      <div id="lsr-panel-actions" class="lsr-tab-panel" role="tabpanel" aria-labelledby="btn-lsr-tab-actions">
+        <div class="lsr-split-workspace">
+          <!-- Left Pane: Address Bar & Visual Form/DOM Inspector -->
+          <div class="lsr-left-pane">
+            <div class="lsr-address-bar">
+              <input
+                type="text"
+                id="lsr-inspect-url"
+                class="form-input form-input-compact"
+                placeholder="https://example.com/login"
+                spellcheck="false"
+                autocomplete="off"
+              >
+              <button type="button" id="btn-lsr-inspect-go" class="btn-primary btn-small">→ Load Page Forms</button>
+            </div>
+            <div class="lsr-quick-actions-bar">
+              <span class="form-hint">Quick Add:</span>
+              <button type="button" class="btn-secondary btn-small" data-lsr-quick-add="navigate">+ Navigate</button>
+              <button type="button" class="btn-secondary btn-small" data-lsr-quick-add="change_input">+ Change Input</button>
+              <button type="button" class="btn-secondary btn-small" data-lsr-quick-add="fill_otp">+ Fill OTP</button>
+              <button type="button" class="btn-secondary btn-small" data-lsr-quick-add="click_button">+ Click Button</button>
+            </div>
+            <div id="lsr-visual-canvas" class="lsr-visual-canvas">
+              <div class="empty-muted">
+                Enter a login URL above and click <strong>→ Load Page Forms</strong> (or <strong>⏺️ Inspect &amp; Record Page</strong>) to inspect forms, inputs, CSRF tokens, and submit buttons safely without rendering untrusted scripts.
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Pane: Recorded Step List & Action Properties -->
+          <div class="lsr-right-pane">
+            <div class="lsr-actions-header">
+              <span class="lsr-pane-title">Recorded Login Actions</span>
+              <div class="lsr-step-controls">
+                <button type="button" id="btn-lsr-step-up" class="btn-secondary btn-small" title="Move step up">↑</button>
+                <button type="button" id="btn-lsr-step-down" class="btn-secondary btn-small" title="Move step down">↓</button>
+                <button type="button" id="btn-lsr-step-add" class="btn-secondary btn-small" title="Add step">+</button>
+                <button type="button" id="btn-lsr-step-delete" class="btn-secondary btn-small" title="Delete selected step">🗑️</button>
+              </div>
+            </div>
+            <div id="lsr-actions-list" class="lsr-actions-list">
+              <!-- Step items rendered dynamically -->
+            </div>
+            <div id="lsr-action-properties" class="lsr-action-properties">
+              <div class="empty-muted">Select an action above to inspect or edit its selector, secret binding, and request properties.</div>
+            </div>
+            <div id="lsr-play-output" class="lsr-play-output hidden" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Restrictions -->
+      <div id="lsr-panel-restrictions" class="lsr-tab-panel hidden" role="tabpanel" aria-labelledby="btn-lsr-tab-restrictions">
+        <div class="lsr-subtab-card">
+          <h3 class="lsr-subcard-title">🚫 Restricted URLs &amp; Logout Guards</h3>
+          <p class="form-hint">Paths or URL patterns that the scanner must never request while running authenticated checks.</p>
+          <div class="lsr-restriction-add-row">
+            <input type="text" id="lsr-restriction-input" class="form-input form-input-compact" placeholder="/logout or /api/auth/signout">
+            <button type="button" id="btn-add-lsr-restriction" class="btn-primary btn-small">+ Add Restriction</button>
+          </div>
+          <div id="lsr-restrictions-list" class="lsr-restrictions-list"></div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Session Detection -->
+      <div id="lsr-panel-session" class="lsr-tab-panel hidden" role="tabpanel" aria-labelledby="btn-lsr-tab-session">
+        <div class="lsr-subtab-card">
+          <h3 class="lsr-subcard-title">🔍 Session Expiry &amp; Authentication Detection Rules</h3>
+          <p class="form-hint">Configure how the scanner detects whether a session expired and triggers automatic re-authentication.</p>
+          <div class="advanced-grid">
+            <div class="form-group">
+              <label for="lsr-session-status-codes" class="form-label">Logged-Out HTTP Status Codes</label>
+              <input type="text" id="lsr-session-status-codes" class="form-input" value="401, 403" placeholder="401, 403">
+            </div>
+            <div class="form-group">
+              <label for="lsr-session-redirect-pattern" class="form-label">Login Redirect URL Pattern</label>
+              <input type="text" id="lsr-session-redirect-pattern" class="form-input" value="/login" placeholder="/login">
+            </div>
+            <div class="form-group">
+              <label for="lsr-session-logged-out-pattern" class="form-label">Logged-Out Response Body Pattern</label>
+              <input type="text" id="lsr-session-logged-out-pattern" class="form-input" placeholder="Sign In|Session Expired">
+            </div>
+            <div class="form-group">
+              <label for="lsr-session-logged-in-pattern" class="form-label">Logged-In Response Body Pattern</label>
+              <input type="text" id="lsr-session-logged-in-pattern" class="form-input" placeholder="Sign Out|Dashboard">
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

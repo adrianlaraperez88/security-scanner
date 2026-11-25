@@ -4,6 +4,180 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { validateTargetUrl, resolveAndValidateTarget } from './validator.js';
 import { TargetPinStore, evaluateAssetGate } from './guard.js';
+import { inspectJwtToken } from './decoder-comparer.js';
+
+/**
+ * SecScan URL Path Template Normalizer (`db.TemplatePath`).
+ * Normalizes dynamic path segments (UUIDs, Mongo ObjectIds, integers, and opaque tokens)
+ * into `{uuid}`, `{oid}`, `{id}`, and `{token}` so thousands of requests collapse into
+ * canonical route templates for the Target Site Map, Intruder, and Autorize.
+ *
+ * @param {string} rawPathOrUrl
+ * @returns {string}
+ */
+export function templateUrlPath(rawPathOrUrl) {
+  let pathname = String(rawPathOrUrl || '/').trim();
+  try {
+    if (/^https?:\/\//i.test(pathname)) {
+      pathname = new URL(pathname).pathname || '/';
+    } else {
+      const qIdx = pathname.indexOf('?');
+      if (qIdx !== -1) pathname = pathname.slice(0, qIdx);
+    }
+  } catch {
+    const qIdx = pathname.indexOf('?');
+    if (qIdx !== -1) pathname = pathname.slice(0, qIdx);
+  }
+
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 0) return '/';
+
+  const normalized = segments.map(seg => {
+    // 1. Standard UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)) {
+      return '{uuid}';
+    }
+    // 2. 24-hex Mongo ObjectId
+    if (/^[0-9a-f]{24}$/i.test(seg)) {
+      return '{oid}';
+    }
+    // 3. Pure numeric ID
+    if (/^\d+$/.test(seg)) {
+      return '{id}';
+    }
+    // 4. Long hex / base64url token (>= 20 chars with digits and letters)
+    if (seg.length >= 20 && /^[A-Za-z0-9_-]+$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg)) {
+      return '{token}';
+    }
+    return seg;
+  });
+
+  return `/${normalized.join('/')}`;
+}
+
+/**
+ * Passively analyzes a captured HTTP exchange (from browser extension, HAR, or proxy)
+ * for security issues without sending any active network requests.
+ *
+ * @param {object} exchange
+ * @returns {Array<{
+ *   ruleId: string,
+ *   title: string,
+ *   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+ *   cwe: string,
+ *   detail: string,
+ *   evidenceQuote: string
+ * }>}
+ */
+export function analyzePassiveExchange(exchange = {}) {
+  const findings = [];
+  const url = String(exchange.url || '');
+  const reqHeaders = normalizeHeaders(exchange.reqHeaders || exchange.requestHeaders || {});
+  const resHeaders = normalizeHeaders(exchange.resHeaders || exchange.responseHeaders || {});
+  const resBody = typeof exchange.resBody === 'string'
+    ? exchange.resBody
+    : Buffer.isBuffer(exchange.resBody)
+      ? exchange.resBody.toString('utf8')
+      : String(exchange.responseBody || '');
+
+  // 1. Secret / token in URL query string
+  const urlSecretMatch = url.match(/[?&](api[_-]?key|access[_-]?token|auth[_-]?token|jwt|secret|password|client_secret)=([^&#\s]{6,})/i);
+  if (urlSecretMatch) {
+    findings.push({
+      ruleId: 'passive-url-secret',
+      title: 'Sensitive Credential / Token Exposed in URL Query String',
+      severity: 'HIGH',
+      cwe: 'CWE-598',
+      detail: `URL query parameter "${urlSecretMatch[1]}" carries a credential or token in cleartext URL history/logs.`,
+      evidenceQuote: `${urlSecretMatch[1]}=${urlSecretMatch[2].slice(0, 8)}...`
+    });
+  }
+
+  // 2. Cookie security flags on Set-Cookie
+  const setCookie = getHeaderCaseInsensitive(resHeaders, 'set-cookie');
+  if (setCookie && /(?:session|sess|token|auth|jwt|sid)[a-z0-9_.-]*=/i.test(setCookie)) {
+    if (!/\bhttponly\b/i.test(setCookie)) {
+      findings.push({
+        ruleId: 'passive-cookie-httponly',
+        title: 'Session Cookie Missing HttpOnly Flag',
+        severity: 'MEDIUM',
+        cwe: 'CWE-1004',
+        detail: 'Session/authentication cookie is set without HttpOnly, exposing it to document.cookie access on XSS.',
+        evidenceQuote: `Set-Cookie: ${setCookie.slice(0, 120)}`
+      });
+    }
+    if (url.startsWith('https://') && !/\bsecure\b/i.test(setCookie)) {
+      findings.push({
+        ruleId: 'passive-cookie-secure',
+        title: 'HTTPS Session Cookie Missing Secure Flag',
+        severity: 'MEDIUM',
+        cwe: 'CWE-614',
+        detail: 'Session cookie on HTTPS response is missing the Secure attribute.',
+        evidenceQuote: `Set-Cookie: ${setCookie.slice(0, 120)}`
+      });
+    }
+  }
+
+  // 3. Permissive CORS with credentials
+  const acao = getHeaderCaseInsensitive(resHeaders, 'access-control-allow-origin').trim();
+  const acac = getHeaderCaseInsensitive(resHeaders, 'access-control-allow-credentials').trim().toLowerCase();
+  if (acao && acac === 'true') {
+    findings.push({
+      ruleId: 'passive-cors-credentials',
+      title: 'Cross-Origin Resource Sharing (CORS) Allows Credentials',
+      severity: acao === '*' || acao === 'null' ? 'CRITICAL' : 'MEDIUM',
+      cwe: 'CWE-942',
+      detail: `Response sets Access-Control-Allow-Origin: ${acao} with Access-Control-Allow-Credentials: true.`,
+      evidenceQuote: `Access-Control-Allow-Origin: ${acao}`
+    });
+  }
+
+  // 4. JWT token security inspection (Authorization header)
+  const authHeader = getHeaderCaseInsensitive(reqHeaders, 'authorization');
+  if (/^Bearer\s+[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/i.test(authHeader.trim())) {
+    const jwtRes = inspectJwtToken(authHeader);
+    if (jwtRes.valid && (jwtRes.riskLevel === 'CRITICAL' || jwtRes.riskLevel === 'HIGH')) {
+      findings.push({
+        ruleId: 'passive-jwt-weakness',
+        title: 'Vulnerable JWT Header / Algorithm Configuration',
+        severity: jwtRes.riskLevel,
+        cwe: 'CWE-347',
+        detail: jwtRes.securityNotes.join(' '),
+        evidenceQuote: authHeader.slice(0, 80)
+      });
+    }
+  }
+
+  // 5. Origin IP disclosure headers
+  for (const hName of ['x-origin-ip', 'x-backend-ip', 'x-real-server-ip', 'x-upstream-addr']) {
+    const val = getHeaderCaseInsensitive(resHeaders, hName);
+    if (val && /\d{1,3}(?:\.\d{1,3}){3}/.test(val)) {
+      findings.push({
+        ruleId: 'passive-origin-ip-leak',
+        title: 'Backend Origin IP Disclosed in Response Header',
+        severity: 'MEDIUM',
+        cwe: 'CWE-200',
+        detail: `Header "${hName}: ${val}" leaks internal or origin server IP address.`,
+        evidenceQuote: `${hName}: ${val}`
+      });
+    }
+  }
+
+  // 6. Verbose SQL / framework error disclosure in response body
+  const errMatch = resBody.match(/(SQLSTATE\[[0-9A-Z]+\]|You have an error in your SQL syntax|Traceback \(most recent call last\):|ReferenceError:\s+[^\r\n]{5,80}|Fatal error:\s+Uncaught\s+[^\r\n]{5,100})/i);
+  if (errMatch) {
+    findings.push({
+      ruleId: 'passive-error-disclosure',
+      title: 'Verbose Database / Application Stack Trace Disclosure',
+      severity: 'HIGH',
+      cwe: 'CWE-209',
+      detail: `Response body discloses raw exception/SQL error signature: "${errMatch[1].slice(0, 100)}".`,
+      evidenceQuote: errMatch[1].slice(0, 120)
+    });
+  }
+
+  return findings;
+}
 
 export const INLINE_BODY_LIMIT = 256 * 1024; // 256 KiB
 
@@ -1687,6 +1861,163 @@ export class TrafficStore {
         bodyBuffer: resBodyBuf
       }
     };
+  }
+
+  /**
+   * Clusters captured exchanges by `(host, method, templateUrlPath(path))`
+   * (SecScan `idx_ex_tmpl` route template aggregation).
+   *
+   * @param {{ host?: string, taskId?: string, limit?: number }} [options={}]
+   */
+  listUrlTemplates({ host = '', taskId = '', limit = 100 } = {}) {
+    const clauses = [];
+    const params = [];
+    if (host) {
+      clauses.push('host = ?');
+      params.push(String(host).toLowerCase());
+    }
+    if (taskId) {
+      clauses.push('task_id = ?');
+      params.push(String(taskId));
+    }
+    const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const rows = this.db
+      .prepare(`SELECT id, host, method, url, path, status_code, created_at FROM exchanges ${whereSql} ORDER BY created_at DESC LIMIT 2000`)
+      .all(...params);
+
+    const groups = new Map();
+    for (const r of rows) {
+      const urlTemplate = templateUrlPath(r.path || r.url);
+      const key = `${r.host}||${r.method}||${urlTemplate}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          host: r.host,
+          method: r.method,
+          urlTemplate,
+          intruderTemplateUrl: r.url.replace(/\/\d+(?=\/|$|\?)/g, '/§1§'),
+          count: 0,
+          sampleUrl: r.url,
+          sampleExchangeId: r.id,
+          statuses: {},
+          lastSeenAt: r.created_at
+        };
+        groups.set(key, g);
+      }
+      g.count += 1;
+      const sc = String(r.status_code ?? 0);
+      g.statuses[sc] = (g.statuses[sc] || 0) + 1;
+    }
+
+    const maxItems = Math.min(500, Math.max(1, Number(limit) || 100));
+    return Array.from(groups.values())
+      .sort((a, b) => b.count - a.count || a.urlTemplate.localeCompare(b.urlTemplate))
+      .slice(0, maxItems);
+  }
+
+  /**
+   * Exports captured HTTP exchanges in standard HAR 1.2 format for interoperability
+   * with Burp Suite, Caido, OWASP ZAP, and browser DevTools.
+   *
+   * @param {{ host?: string, taskId?: string, limit?: number }} [options={}]
+   */
+  exportHar({ host = '', taskId = '', limit = 200 } = {}) {
+    const cap = Math.min(500, Math.max(1, Number(limit) || 200));
+    const exchanges = this.queryExchanges({
+      host: host || undefined,
+      taskId: taskId || undefined,
+      limit: cap,
+      includeBodies: true
+    });
+
+    const entries = exchanges.map(ex => {
+      const reqHeadersArr = Object.entries(ex.reqHeaders || {}).map(([name, value]) => ({
+        name,
+        value: String(value ?? '')
+      }));
+      const resHeadersArr = Object.entries(ex.resHeaders || {}).map(([name, value]) => ({
+        name,
+        value: String(value ?? '')
+      }));
+      const reqBodyStr = typeof ex.reqBody === 'string' ? ex.reqBody : '';
+      const resBodyStr = typeof ex.resBody === 'string' ? ex.resBody : '';
+      const reqContentType = getHeaderCaseInsensitive(ex.reqHeaders, 'content-type') || 'text/plain';
+      const resContentType = ex.mimeType || getHeaderCaseInsensitive(ex.resHeaders, 'content-type') || 'text/plain';
+
+      let queryString = [];
+      try {
+        const u = new URL(ex.url);
+        queryString = Array.from(u.searchParams.entries()).map(([name, value]) => ({ name, value }));
+      } catch {
+        queryString = [];
+      }
+
+      return {
+        _exchangeId: ex.id,
+        _urlTemplate: templateUrlPath(ex.path || ex.url),
+        startedDateTime: ex.createdAt || new Date().toISOString(),
+        time: Number(ex.durationMs || 0),
+        request: {
+          method: ex.method || 'GET',
+          url: ex.url,
+          httpVersion: 'HTTP/1.1',
+          cookies: [],
+          headers: reqHeadersArr,
+          queryString,
+          headersSize: -1,
+          bodySize: Number(ex.reqSize || Buffer.byteLength(reqBodyStr, 'utf8')),
+          ...(reqBodyStr
+            ? {
+                postData: {
+                  mimeType: reqContentType,
+                  text: reqBodyStr
+                }
+              }
+            : {})
+        },
+        response: {
+          status: Number(ex.statusCode ?? 200),
+          statusText: '',
+          httpVersion: 'HTTP/1.1',
+          cookies: [],
+          headers: resHeadersArr,
+          content: {
+            size: Number(ex.resSize || Buffer.byteLength(resBodyStr, 'utf8')),
+            mimeType: resContentType,
+            text: resBodyStr
+          },
+          redirectURL: getHeaderCaseInsensitive(ex.resHeaders, 'location') || '',
+          headersSize: -1,
+          bodySize: Number(ex.resSize || Buffer.byteLength(resBodyStr, 'utf8'))
+        },
+        cache: {},
+        timings: {
+          send: 0,
+          wait: Number(ex.durationMs || 0),
+          receive: 0
+        }
+      };
+    });
+
+    return {
+      log: {
+        version: '1.2',
+        creator: {
+          name: 'Security Scanner',
+          version: '2.5.0'
+        },
+        entries
+      }
+    };
+  }
+
+  /**
+   * Runs passive vulnerability analysis against a stored exchange by ID.
+   */
+  analyzeExchangePassive(exchangeId) {
+    const ex = this.getExchange(exchangeId, { includeBodies: true });
+    if (!ex) return [];
+    return analyzePassiveExchange(ex);
   }
 
   close() {

@@ -5,6 +5,8 @@ import { validateTargetUrl, resolveAndValidateTarget } from './validator.js';
 import { getCheckMeta, CWE_OWASP_MAP } from './catalog.js';
 import { buildReproductionContext } from './reproduction.js';
 import { verifyFindingBeforeReport } from './check-verify.js';
+import { classifyFindingConfidence } from './fp-engine.js';
+import { mapCweToCompliance, buildProofBasedArtifact } from './compliance-proof.js';
 
 /**
  * Strips embedded credentials (user:pass@) from raw URL strings.
@@ -43,8 +45,8 @@ export function sanitizeExternalBanner(str, maxLen = 300) {
     .replace(/[\r\n\t]+/g, ' ')
     // Strip remaining C0/C1 control characters and DEL
     .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-    // Neutralize data envelope markers (ARTEX_DATA / SECSCAN_DATA) and ChatML tags
-    .replace(/\[\[\s*(?:END_)?(?:ARTEX|SECSCAN)_DATA[^\]]*\]\]/gi, '[data-marker-removed]')
+    // Neutralize data envelope markers (SECSCAN_DATA) and ChatML tags
+    .replace(/\[\[\s*(?:END_)?[A-Z0-9_]{3,16}_DATA[^\]]*\]\]/gi, '[data-marker-removed]')
     .replace(/<\|(?:im_start|im_end|system|user|assistant)\|>/gi, '[role-marker-removed]')
     // Collapse consecutive spaces
     .replace(/\s{2,}/g, ' ')
@@ -639,7 +641,7 @@ export function ingestScanOutput(format, rawInput) {
 }
 
 /**
- * Builds ARTEX's hierarchical asset-to-finding tree:
+ * Builds SecScan's hierarchical asset-to-finding tree:
  *   root_domain / ip -> subdomain -> service / app -> endpoint -> findings[]
  * with deduplicated severity rollup counts across ancestor chains.
  *
@@ -1304,7 +1306,27 @@ export class EnrichEngine {
       }
     }
 
-    return verifyFindingBeforeReport(baseEnriched, { capturedTraces });
+    const verified = verifyFindingBeforeReport(baseEnriched, { ...options, capturedTraces });
+    if (
+      typeof verified.confidenceTier !== 'string' ||
+      !verified.confidenceTier ||
+      !Number.isFinite(verified.confidenceScore)
+    ) {
+      const confidence = classifyFindingConfidence(verified, options);
+      if (typeof verified.confidenceTier !== 'string' || !verified.confidenceTier) {
+        verified.confidenceTier = confidence.confidenceTier;
+      }
+      if (!Number.isFinite(verified.confidenceScore)) {
+        verified.confidenceScore = confidence.confidenceScore;
+      }
+    }
+    verified.compliance = verified.compliance || mapCweToCompliance(verified.cwe, verified.checkId);
+    const proofArtifact = buildProofBasedArtifact(verified);
+    verified.certainty = Number.isFinite(verified.certainty) ? verified.certainty : proofArtifact.certainty;
+    if (verified.status === 'VULNERABLE' || verified.status === 'SUSPICIOUS') {
+      verified.proofArtifact = verified.proofArtifact || proofArtifact;
+    }
+    return verified;
   }
 
   /**

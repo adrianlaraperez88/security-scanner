@@ -32,7 +32,7 @@ const POE_LABELS = {
 };
 
 /**
- * Generates ARTEX's Quality proof-strength descriptors for a finding.
+ * Generates SecScan's Quality proof-strength descriptors for a finding.
  *
  * @param {object} finding
  * @returns {{
@@ -173,6 +173,16 @@ export function closeUnbalancedFences(markdown) {
   return result;
 }
 
+function sanitizeMdInline(val) {
+  return closeUnbalancedFences(
+    redactSecretsInText(String(val ?? ''))
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/`/g, "'")
+      .replace(/~{3,}/g, m => m.replace(/~/g, '\\~'))
+      .trim()
+  );
+}
+
 /**
  * Generates a Markdown verification section for a single finding.
  *
@@ -196,24 +206,24 @@ export function generateSingleFindingMarkdown(finding = {}) {
     ? f.pages.join(', ')
     : (f.target || f.url || 'N/A');
   const pathStr = f.path || '';
-  const detail = f.detail || f.reason || meta.plainExplanation || '';
+  const detail = f.detail || f.reason || (meta.plainExplanation ? sanitizeMdInline(meta.plainExplanation) : '');
   const remediation = f.remediation || f.fix || meta.remediation || meta.defaultFix || '';
   const references = Array.isArray(f.references) && f.references.length > 0
     ? f.references
     : (meta.references || []);
 
   const lines = [
-    `### [${severity}] ${title} (\`${checkId}\`)`,
+    `### [${sanitizeMdInline(severity)}] ${sanitizeMdInline(title)} (\`${sanitizeMdInline(checkId)}\`)`,
     '',
-    `- **Status**: ${status}`,
-    `- **Severity**: ${severity} (CVSS: ${cvssScore})`,
-    `- **CWE**: ${cwe}`,
-    `- **OWASP**: ${owasp}`,
-    ...(cveIds.length > 0 ? [`- **CVE IDs**: ${cveIds.join(', ')}`] : []),
-    `- **Target**: ${target}${pathStr ? ` (\`${pathStr}\`)` : ''}`,
+    `- **Status**: ${sanitizeMdInline(status)}`,
+    `- **Severity**: ${sanitizeMdInline(severity)} (CVSS: ${sanitizeMdInline(cvssScore)})`,
+    `- **CWE**: ${sanitizeMdInline(cwe)}`,
+    `- **OWASP**: ${sanitizeMdInline(owasp)}`,
+    ...(cveIds.length > 0 ? [`- **CVE IDs**: ${cveIds.map(id => sanitizeMdInline(id)).filter(Boolean).join(', ')}`] : []),
+    `- **Target**: ${sanitizeMdInline(target)}${pathStr ? ` (\`${sanitizeMdInline(pathStr)}\`)` : ''}`,
     '',
     '#### Proof-Strength Quality',
-    ...quality.bullets.map(b => `- ${b}`)
+    ...quality.bullets.map(b => `- ${sanitizeMdInline(b)}`)
   ];
 
   if (detail) {
@@ -227,27 +237,42 @@ export function generateSingleFindingMarkdown(finding = {}) {
     lines.push('', '#### Matched Files & Exposed Paths');
     for (const fileItem of exposedItems.slice(0, 15)) {
       if (!fileItem || typeof fileItem !== 'object') continue;
-      const fPath = closeUnbalancedFences(redactSecretsInText(String(fileItem.path || fileItem.url || fileItem.name || 'finding')));
+      const fPath = sanitizeMdInline(fileItem.path || fileItem.url || fileItem.name || 'finding') || 'finding';
+      const protoMethod = fileItem.method ? sanitizeMdInline(fileItem.method).toUpperCase() : '';
+      const isNonHttp = /^(TCP|UDP|RTSP|MDNS)$/.test(protoMethod);
+      const fStatus = fileItem.statusTag ? sanitizeMdInline(fileItem.statusTag).toUpperCase() : '';
+      const fPort = fileItem.port !== undefined && fileItem.port !== null && fileItem.port !== ''
+        ? sanitizeMdInline(fileItem.port)
+        : '';
+      const fScheme = fileItem.scheme ? sanitizeMdInline(fileItem.scheme).toUpperCase() : '';
+      const fMethod = fileItem.method ? sanitizeMdInline(fileItem.method) : '';
+      const fHttpStatus = !isNonHttp && fileItem.status ? `HTTP ${sanitizeMdInline(fileItem.status)}` : '';
+      const fContentType = fileItem.contentType ? `Content-Type: ${sanitizeMdInline(fileItem.contentType)}` : '';
+      const fSignal = fileItem.matchedSignal ? `Matched: ${sanitizeMdInline(fileItem.matchedSignal)}` : '';
+      const rawDetail = fileItem.detail || fileItem.issue || fileItem.reason;
+      const fDetail = rawDetail ? sanitizeMdInline(rawDetail) : '';
       const fMeta = [
-        fileItem.method ? String(fileItem.method) : '',
-        fileItem.status ? `HTTP ${fileItem.status}` : '',
-        fileItem.contentType ? `Content-Type: ${fileItem.contentType}` : '',
-        fileItem.matchedSignal ? `Matched: ${redactSecretsInText(String(fileItem.matchedSignal))}` : '',
-        fileItem.detail || fileItem.issue || fileItem.reason ? redactSecretsInText(String(fileItem.detail || fileItem.issue || fileItem.reason)) : '',
+        fStatus,
+        fPort ? `Port ${fPort}${fScheme ? `/${fScheme}` : ''}` : '',
+        fMethod,
+        fHttpStatus,
+        fContentType,
+        fSignal,
+        fDetail,
       ].filter(Boolean).join(', ');
-      lines.push(`- \`${fPath}\`${fMeta ? ` (${closeUnbalancedFences(fMeta)})` : ''}`);
+      lines.push(`- \`${fPath}\`${fMeta ? ` (${sanitizeMdInline(fMeta)})` : ''}`);
     }
   }
 
   if (Array.isArray(f.missing) && f.missing.length > 0) {
     lines.push('', '#### Missing Headers / Controls');
-    lines.push(`- ${closeUnbalancedFences(f.missing.join(', '))}`);
+    lines.push(`- ${f.missing.map(m => sanitizeMdInline(m)).filter(Boolean).join(', ')}`);
   }
 
   if (Array.isArray(f.evidenceQuotes) && f.evidenceQuotes.length > 0) {
     lines.push('', '#### Verbatim Evidence Proof');
     for (const q of f.evidenceQuotes.slice(0, 5)) {
-      lines.push(`- \`${closeUnbalancedFences(redactSecretsInText(String(q)))}\``);
+      lines.push(`- \`${sanitizeMdInline(q)}\``);
     }
   }
 
@@ -256,10 +281,10 @@ export function generateSingleFindingMarkdown(finding = {}) {
     lines.push('', '#### How to Reproduce & Verify Fix');
     lines.push(`- **Reproducible**: ${repro.reproducible || f.reproVerified ? 'Yes (Confirmed)' : 'Recorded trigger trace'}`);
     if (repro.observedSignal) {
-      lines.push(`- **Observed Signal**: ${closeUnbalancedFences(redactSecretsInText(repro.observedSignal))}`);
+      lines.push(`- **Observed Signal**: ${sanitizeMdInline(repro.observedSignal)}`);
     }
     if (Array.isArray(repro.steps) && repro.steps.length > 0) {
-      lines.push('', ...repro.steps.map((s, idx) => `${idx + 1}. ${closeUnbalancedFences(redactSecretsInText(s))}`));
+      lines.push('', ...repro.steps.map((s, idx) => `${idx + 1}. ${sanitizeMdInline(s)}`));
     }
     if (repro.curl) {
       lines.push('', '```bash', redactSecretsInText(repro.curl), '```');
@@ -296,15 +321,312 @@ export function generateSingleFindingMarkdown(finding = {}) {
       lines.push('', `\`\`\`${lang}`, safeSnippet, '```');
     }
     if (ai.verifyCommand) {
-      lines.push('', `- **Verify Command**: \`${String(ai.verifyCommand).replace(/`/g, "'")}\``);
+      lines.push('', `- **Verify Command**: \`${sanitizeMdInline(ai.verifyCommand)}\``);
     }
   }
 
   if (references.length > 0) {
-    lines.push('', '#### References', ...references.map(ref => `- ${ref}`));
+    lines.push('', '#### References', ...references.map(ref => `- ${sanitizeMdInline(ref)}`));
   }
 
   return closeUnbalancedFences(lines.join('\n'));
+}
+
+/**
+ * Builds a structured point-by-point executive audit resume summarizing:
+ *  1. Operating System & Device Posture per host
+ *  2. Market CVE & Advisory Coverage
+ *  3. Security Findings by Point (What Was Detected & How to Fix)
+ *  4. What Was Improved & Fixed
+ *
+ * @param {Array<object>} [allResults=[]]
+ * @param {object|Array} [stacks={}]
+ * @param {{
+ *   cveCoverage?: object|null,
+ *   diff?: object|null,
+ *   bareIpProbeSummary?: Map<string, object>|object|null
+ * }} [options={}]
+ * @returns {{
+ *   osPosture: Array<{
+ *     target: string,
+ *     osDetected: boolean,
+ *     osName: string,
+ *     familyLabel: string,
+ *     version: string|null,
+ *     isEol: boolean,
+ *     eolReason: string|null,
+ *     deviceSummary: string|null,
+ *     openPorts: Array<number|string>
+ *   }>,
+ *   cveCoverageSummary: object|null,
+ *   findingsByPoint: Array<{
+ *     pointNumber: number,
+ *     status: string,
+ *     severity: string,
+ *     checkId: string,
+ *     name: string,
+ *     target: string,
+ *     cveIds: string[],
+ *     detail: string,
+ *     fix: string
+ *   }>,
+ *   improvementsAndFixes: string[],
+ *   cliLines: string[]
+ * }}
+ */
+export function buildExecutiveResume(allResults = [], stacks = {}, options = {}) {
+  const resultsList = Array.isArray(allResults) ? allResults : [];
+  const opts = options && typeof options === 'object' ? options : {};
+
+  // 1. Extract OS & Device Posture per host from stacks (with fallback to os-security findings)
+  const stackEntries = [];
+  if (stacks && typeof stacks === 'object') {
+    const isSingleFp = !Array.isArray(stacks) && (
+      typeof stacks.primary === 'string' ||
+      Array.isArray(stacks.stack) ||
+      Array.isArray(stacks.detectedTags) ||
+      (stacks.deviceInfo && typeof stacks.deviceInfo === 'object') ||
+      (stacks.osInfo && typeof stacks.osInfo === 'object')
+    );
+    if (Array.isArray(stacks)) {
+      stacks.forEach((fp, i) => {
+        if (fp && typeof fp === 'object') {
+          stackEntries.push([fp.target || fp.url || `Target #${i + 1}`, fp]);
+        }
+      });
+    } else if (isSingleFp) {
+      stackEntries.push([stacks.target || stacks.url || 'Target #1', stacks]);
+    } else {
+      for (const [k, fp] of Object.entries(stacks)) {
+        if (fp && typeof fp === 'object') {
+          stackEntries.push([k, fp]);
+        }
+      }
+    }
+  }
+
+  const osPosture = stackEntries.map(([targetKey, fp]) => {
+    const targetStr = String(targetKey || 'N/A');
+    const matchingOsResult = resultsList.find(
+      r => r && (r.checkId === 'os-security' || r.name === 'os-security') && r.osInfo && String(r.target || '').startsWith(targetStr)
+    );
+    const osInfo = (fp?.osInfo && typeof fp.osInfo === 'object')
+      ? fp.osInfo
+      : (matchingOsResult?.osInfo && typeof matchingOsResult.osInfo === 'object' ? matchingOsResult.osInfo : null);
+    const deviceInfo = (fp?.deviceInfo && typeof fp.deviceInfo === 'object') ? fp.deviceInfo : null;
+
+    const osDetected = Boolean(osInfo?.detected || deviceInfo?.os || deviceInfo?.osFamily);
+    const osName = String(
+      osInfo?.osName ||
+      deviceInfo?.os ||
+      deviceInfo?.osFamily ||
+      'Unclassified / Generic Host OS'
+    );
+    const familyLabel = String(
+      osInfo?.familyLabel ||
+      (deviceInfo?.categoryLabel ? `${deviceInfo.categoryLabel} OS` : 'Unknown / Unclassified OS')
+    );
+    const version = osInfo?.version
+      ? String(osInfo.version)
+      : (deviceInfo?.firmwareVersion ? String(deviceInfo.firmwareVersion) : null);
+    const isEol = Boolean(osInfo?.isEol);
+    const eolReason = osInfo?.eolReason ? String(osInfo.eolReason) : null;
+    const deviceSummary = deviceInfo?.detected
+      ? String(deviceInfo.summary || deviceInfo.deviceName || deviceInfo.categoryLabel || deviceInfo.deviceType || 'Network Device')
+      : null;
+    const openPorts = Array.isArray(deviceInfo?.openPorts) && deviceInfo.openPorts.length > 0
+      ? [...deviceInfo.openPorts]
+      : (Array.isArray(osInfo?.exposedOsServices)
+          ? osInfo.exposedOsServices.map(s => s?.port).filter(Boolean)
+          : []);
+
+    return {
+      target: targetStr,
+      osDetected,
+      osName,
+      familyLabel,
+      version,
+      isEol,
+      eolReason,
+      deviceSummary,
+      openPorts
+    };
+  });
+
+  // 2. CVE Coverage Summary
+  const rawCov = opts.cveCoverage?.summary && typeof opts.cveCoverage.summary === 'object'
+    ? opts.cveCoverage.summary
+    : (opts.cveCoverage && typeof opts.cveCoverage === 'object' ? opts.cveCoverage : null);
+  const cveCoverageSummary = rawCov && Number.isFinite(Number(rawCov.totalAdvisories))
+    ? {
+        totalAdvisories: Number(rawCov.totalAdvisories),
+        coveredCount: Number(rawCov.coveredCount ?? 0),
+        partialCount: Number(rawCov.partialCount ?? 0),
+        missingCount: Number(rawCov.missingCount ?? 0),
+        coveragePercent: Number(rawCov.coveragePercent ?? 100),
+        kevTotal: Number(rawCov.kevTotal ?? 0),
+        kevCovered: Number(rawCov.kevCovered ?? 0),
+        ...(rawCov.kevMissing !== undefined ? { kevMissing: Number(rawCov.kevMissing) } : {})
+      }
+    : null;
+
+  // 3. Security Findings by Point (deduplicated by checkId + target + (cve || name), sorted CRITICAL -> LOW)
+  const SEV_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 };
+  const STATUS_ORDER = { VULNERABLE: 0, SUSPICIOUS: 1 };
+  const seenPointKeys = new Set();
+  const rawPoints = [];
+
+  for (const r of resultsList) {
+    if (!r || typeof r !== 'object') continue;
+    const status = String(r.status || '').toUpperCase();
+    if (status !== 'VULNERABLE' && status !== 'SUSPICIOUS') continue;
+
+    const meta = r.meta || getCheckMeta(r.checkId || r.name || r.id);
+    const checkId = String(r.checkId || r.name || meta?.id || 'unknown');
+    const name = redactSecretsInText(String(r.title || r.name || meta?.title || checkId));
+    const severity = String(r.severity || meta?.defaultSeverity || 'MEDIUM').toUpperCase();
+    const target = redactSecretsInText(
+      String(r.target || (Array.isArray(r.pages) && r.pages[0]) || 'N/A')
+    );
+    const cveIds = extractFindingCveIds(r, meta);
+    const cveOrNameKey = String(r.cve || cveIds[0] || r.name || name);
+    const dedupKey = `${checkId}::${target}::${cveOrNameKey}`;
+    if (seenPointKeys.has(dedupKey)) continue;
+    seenPointKeys.add(dedupKey);
+
+    const detail = redactSecretsInText(
+      String(r.detail || r.reason || meta?.plainExplanation || name)
+    );
+    const fix = redactSecretsInText(
+      String(
+        r.fix ||
+        r.remediation ||
+        meta?.defaultFix ||
+        meta?.remediation ||
+        'Review security configuration and apply vendor hardening guidelines.'
+      )
+    );
+
+    rawPoints.push({
+      status,
+      severity,
+      checkId,
+      name,
+      target,
+      cveIds,
+      detail,
+      fix
+    });
+  }
+
+  rawPoints.sort((a, b) => {
+    const sevDiff = (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4);
+    if (sevDiff !== 0) return sevDiff;
+    return (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2);
+  });
+
+  const findingsByPoint = rawPoints.map((pt, idx) => ({
+    pointNumber: idx + 1,
+    ...pt
+  }));
+
+  // 4. Improvements & Fixes
+  const improvementsAndFixes = [];
+  if (Array.isArray(opts.diff?.fixedFindings) && opts.diff.fixedFindings.length > 0) {
+    for (const item of opts.diff.fixedFindings) {
+      const prev = item?.prev || item;
+      if (prev && typeof prev === 'object') {
+        improvementsAndFixes.push(
+          `Fixed since previous scan: [${prev.severity || 'MEDIUM'}] ${prev.name || prev.checkId || 'Finding'} on ${prev.target || 'target'}`
+        );
+      }
+    }
+  }
+
+  const bareIpEntries = opts.bareIpProbeSummary instanceof Map
+    ? Array.from(opts.bareIpProbeSummary.entries())
+    : (opts.bareIpProbeSummary && typeof opts.bareIpProbeSummary === 'object'
+        ? Object.entries(opts.bareIpProbeSummary)
+        : []);
+  if (bareIpEntries.length > 0) {
+    const sniCount = bareIpEntries.filter(([, v]) => Boolean(v?.httpsSniRequired)).length;
+    improvementsAndFixes.push(
+      `Direct bare-IP dual-scheme audit active (${bareIpEntries.length} bare IP target(s) probed${sniCount > 0 ? `, ${sniCount} SNI-restricted HTTPS endpoint(s)` : ''}); SNI-required HTTPS endpoints automatically scoped to TLS/Origin/OS checks to eliminate false EPROTO noise.`
+    );
+  }
+
+  const evaluatedHosts = Math.max(osPosture.length, 1);
+  const detectedOsCount = osPosture.filter(o => o.osDetected).length;
+  improvementsAndFixes.push(
+    `Universal OS & Device security engine evaluated ${evaluatedHosts} host endpoint(s) (${detectedOsCount} explicit OS/device fingerprint(s) identified across Windows, Linux, macOS, BSD, Mobile/TV, Appliance, and Container/AI families).`
+  );
+
+  if (cveCoverageSummary) {
+    improvementsAndFixes.push(
+      `Market CVE & CISA KEV catalog verified at ${cveCoverageSummary.coveragePercent}% coverage (${cveCoverageSummary.coveredCount}/${cveCoverageSummary.totalAdvisories} advisories, ${cveCoverageSummary.kevCovered}/${cveCoverageSummary.kevTotal} CISA KEV).`
+    );
+  }
+
+  // 5. Build CLI lines
+  const bar = '═'.repeat(60);
+  const cliLines = [
+    '',
+    bar,
+    '📋  EXECUTIVE AUDIT RESUME (POINT-BY-POINT)',
+    bar,
+    '1. 🖥️  Operating System & Device Posture'
+  ];
+
+  if (osPosture.length === 0) {
+    cliLines.push('   • No host stack fingerprints recorded.');
+  } else {
+    for (const host of osPosture) {
+      const verStr = host.version ? ` ${host.version}` : '';
+      const eolStr = host.isEol ? ` [EOL ⚠️${host.eolReason ? `: ${host.eolReason}` : ''}]` : '';
+      const devStr = host.deviceSummary ? ` | Device: ${host.deviceSummary}` : '';
+      const portsStr = Array.isArray(host.openPorts) && host.openPorts.length > 0
+        ? ` | Open Ports: ${host.openPorts.join(', ')}`
+        : '';
+      cliLines.push(`   • ${host.target} → ${host.osName}${verStr}${eolStr} (${host.familyLabel})${devStr}${portsStr}`);
+    }
+  }
+
+  cliLines.push('', '2. 🛡️  Market CVE & Advisory Coverage');
+  if (cveCoverageSummary) {
+    cliLines.push(
+      `   • Advisories Covered : ${cveCoverageSummary.coveredCount}/${cveCoverageSummary.totalAdvisories} (${cveCoverageSummary.coveragePercent}%), Partial: ${cveCoverageSummary.partialCount}, Missing: ${cveCoverageSummary.missingCount}`
+    );
+    cliLines.push(
+      `   • CISA KEV Coverage  : ${cveCoverageSummary.kevCovered}/${cveCoverageSummary.kevTotal} known exploited vulnerabilities covered`
+    );
+  } else {
+    cliLines.push('   • Market CVE coverage audit not requested for this run.');
+  }
+
+  cliLines.push('', '3. 📌  Security Findings by Point (What Was Detected & How to Fix)');
+  if (findingsByPoint.length === 0) {
+    cliLines.push('   • No vulnerable or suspicious findings detected (0 actionable points).');
+  } else {
+    for (const pt of findingsByPoint) {
+      const cveStr = pt.cveIds.length > 0 ? ` [${pt.cveIds.join(', ')}]` : '';
+      cliLines.push(`   [${pt.pointNumber}] [${pt.severity}] (${pt.status}) ${pt.name} (${pt.checkId})${cveStr} → ${pt.target}`);
+      cliLines.push(`       🔎 Detected : ${pt.detail}`);
+      cliLines.push(`       💡 Fix      : ${pt.fix}`);
+    }
+  }
+
+  cliLines.push('', '4. ✅  What Was Improved & Fixed');
+  for (const item of improvementsAndFixes) {
+    cliLines.push(`   • ${item}`);
+  }
+
+  return {
+    osPosture,
+    cveCoverageSummary,
+    findingsByPoint,
+    improvementsAndFixes,
+    cliLines
+  };
 }
 
 /**
@@ -361,19 +683,19 @@ export function generateMarkdownReport(scanData, riskArg = null, stacksArg = nul
   const lines = [
     '# Security Verification Report',
     '',
-    `- **Generated At**: ${generatedAt}`,
-    ...(targets.length > 0 ? [`- **Targets**: ${targets.join(', ')}`] : []),
+    `- **Generated At**: ${sanitizeMdInline(generatedAt)}`,
+    ...(targets.length > 0 ? [`- **Targets**: ${targets.map(t => sanitizeMdInline(t)).filter(Boolean).join(', ')}`] : []),
     '',
     '## Executive Summary',
     '',
-    `- **Risk Grade**: **${grade}**`,
-    `- **Risk Level**: **${level}** (Score: ${score}/60)`,
+    `- **Risk Grade**: **${sanitizeMdInline(grade)}**`,
+    `- **Risk Level**: **${sanitizeMdInline(level)}** (Score: ${sanitizeMdInline(score)}/60)`,
     `- **Total Checks Grouped**: ${grouped.length} (${sanitizedResults.length} total executions)`,
     `- **Vulnerable**: ${vulns.length}`,
     `- **Suspicious**: ${suspicious.length}`,
     `- **Safe**: ${safe.length}`,
     `- **Errors**: ${errors.length}`,
-    ...(risk?.summary ? ['', `> ${risk.summary}`] : []),
+    ...(risk?.summary ? ['', `> ${sanitizeMdInline(risk.summary)}`] : []),
     '',
     '## Asset Tree & Finding Rollup',
     ''
@@ -383,43 +705,71 @@ export function generateMarkdownReport(scanData, riskArg = null, stacksArg = nul
     lines.push('- No host assets linked.');
   } else {
     for (const root of tree.roots) {
-      lines.push(`- **${root.kind}: \`${root.value}\`** (Findings: ${root.counts.total}, CRITICAL: ${root.counts.CRITICAL}, HIGH: ${root.counts.HIGH}, MEDIUM: ${root.counts.MEDIUM}, LOW: ${root.counts.LOW})`);
+      lines.push(`- **${sanitizeMdInline(root.kind)}: \`${sanitizeMdInline(root.value)}\`** (Findings: ${root.counts.total}, CRITICAL: ${root.counts.CRITICAL}, HIGH: ${root.counts.HIGH}, MEDIUM: ${root.counts.MEDIUM}, LOW: ${root.counts.LOW})`);
       for (const sub of root.children) {
-        lines.push(`  - Subdomain: \`${sub.value}\` (Findings: ${sub.counts.total})`);
+        lines.push(`  - Subdomain: \`${sanitizeMdInline(sub.value)}\` (Findings: ${sub.counts.total})`);
         for (const svc of sub.children) {
-          lines.push(`    - Service: \`${svc.value}\` (Findings: ${svc.counts.total})`);
+          lines.push(`    - Service: \`${sanitizeMdInline(svc.value)}\` (Findings: ${svc.counts.total})`);
           for (const ep of svc.children) {
-            lines.push(`      - Endpoint: \`${ep.value}\` (${ep.findings.length} finding(s))`);
+            lines.push(`      - Endpoint: \`${sanitizeMdInline(ep.value)}\` (${ep.findings.length} finding(s))`);
           }
         }
       }
     }
   }
 
-  if (stacks && typeof stacks === 'object') {
+  const stacksSource = sanitizedStacks || stacks;
+  if (stacksSource && typeof stacksSource === 'object') {
     lines.push('', '## Detected Technology Stack', '');
-    const stackEntries = Array.isArray(stacks)
-      ? stacks.map((fp, i) => [fp?.target || `Target #${i + 1}`, fp])
-      : Object.entries(stacks);
+    const isSingleFp = !Array.isArray(stacksSource) && (
+      typeof stacksSource.primary === 'string' ||
+      Array.isArray(stacksSource.stack) ||
+      Array.isArray(stacksSource.detectedTags) ||
+      (stacksSource.deviceInfo && typeof stacksSource.deviceInfo === 'object')
+    );
+    const stackEntries = Array.isArray(stacksSource)
+      ? stacksSource.map((fp, i) => [fp?.target || fp?.url || `Target #${i + 1}`, fp])
+      : (isSingleFp ? [[stacksSource.target || stacksSource.url || 'Target #1', stacksSource]] : Object.entries(stacksSource));
     for (const [tUrl, fp] of stackEntries) {
       if (!fp || typeof fp !== 'object') continue;
-      lines.push(`- **${tUrl}**: ${fp.summary || 'Unknown'} (Profile: \`${fp.recommendedProfile || 'smart'}\`)`);
+      lines.push(`- **${sanitizeMdInline(tUrl)}**: ${sanitizeMdInline(fp.summary || 'Unknown')} (Profile: \`${sanitizeMdInline(fp.recommendedProfile || 'smart')}\`)`);
+      const dp = fp.deviceInfo && typeof fp.deviceInfo === 'object' ? fp.deviceInfo : null;
+      const hasDevPorts = dp && Array.isArray(dp.openPorts) && dp.openPorts.length > 0;
+      const hasDevServices = dp && Array.isArray(dp.openServices) && dp.openServices.length > 0;
+      if (dp && (dp.detected || dp.category || hasDevPorts || hasDevServices)) {
+        lines.push(`  - **Device Category**: ${sanitizeMdInline(dp.categoryLabel || dp.category || 'Network Device')}`);
+        const devMeta = [
+          dp.deviceName || dp.deviceType || null,
+          dp.vendor && dp.vendor !== 'Unknown' ? `Vendor: ${dp.vendor}` : null,
+          dp.modelName ? `Model: ${dp.modelName}` : null,
+          (dp.os || dp.osFamily) ? `OS: ${dp.os || dp.osFamily}` : null,
+          dp.macAddress ? `MAC: ${dp.macAddress}` : null,
+          dp.firmwareVersion ? `Firmware: ${dp.firmwareVersion}` : null
+        ].filter(Boolean).map(v => sanitizeMdInline(v)).join(' · ');
+        if (devMeta) {
+          lines.push(`  - **Device**: ${devMeta}`);
+        }
+        if (hasDevServices) {
+          const portsText = dp.openServices.slice(0, 20).map(s => {
+            const scheme = String(s?.scheme || 'tcp').toUpperCase();
+            const svc = s?.label || s?.service || '';
+            return `\`${sanitizeMdInline(s?.port)}/${sanitizeMdInline(scheme)}${svc ? ` (${sanitizeMdInline(svc)})` : ''}\``;
+          }).join(', ');
+          lines.push(`  - **Open Ports**: ${portsText}`);
+        } else if (hasDevPorts) {
+          const portsText = dp.openPorts.slice(0, 20).map(p => `\`${sanitizeMdInline(p)}/TCP\``).join(', ');
+          lines.push(`  - **Open Ports**: ${portsText}`);
+        }
+      }
     }
   }
 
   if (apiCommunication) {
-    const sanitizeMdInline = (val) =>
-      closeUnbalancedFences(
-        redactSecretsInText(String(val ?? ''))
-          .replace(/[\r\n]+/g, ' ')
-          .replace(/`/g, "'")
-          .trim()
-      );
     lines.push('', '## API Communication & Discovered Endpoints', '');
     lines.push(`- **Uses Client-Side API**: ${apiCommunication.usesApi ? 'Yes' : 'No'}`);
     lines.push(`- **Architecture**: \`${sanitizeMdInline(apiCommunication.architecture || 'traditional_web')}\``);
     if (apiCommunication.summary) {
-      lines.push(`- **Summary**: ${closeUnbalancedFences(redactSecretsInText(apiCommunication.summary))}`);
+      lines.push(`- **Summary**: ${sanitizeMdInline(apiCommunication.summary)}`);
     }
     if (apiCommunication.clients.length > 0) {
       lines.push(`- **API Clients**: ${apiCommunication.clients.map(c => `\`${sanitizeMdInline(c)}\``).join(', ')}`);
@@ -444,7 +794,7 @@ export function generateMarkdownReport(scanData, riskArg = null, stacksArg = nul
       lines.push('- **Configuration & Exposure Issues**:');
       for (const iss of apiCommunication.issues) {
         lines.push(
-          `  - **[${sanitizeMdInline(iss.severity || 'MEDIUM')}] ${sanitizeMdInline(iss.type)}**: ${closeUnbalancedFences(redactSecretsInText(iss.detail || ''))}`
+          `  - **[${sanitizeMdInline(iss.severity || 'MEDIUM')}] ${sanitizeMdInline(iss.type)}**: ${sanitizeMdInline(iss.detail || '')}`
         );
       }
     }
@@ -470,7 +820,63 @@ export function generateMarkdownReport(scanData, riskArg = null, stacksArg = nul
         ? cveCoverage.techTags
         : (Array.isArray(cveCoverage.filter?.techTags) ? cveCoverage.filter.techTags : []);
       if (tags.length > 0) {
-        lines.push(`- **Tech Filter**: ${tags.join(', ')}`);
+        lines.push(`- **Tech Filter**: ${tags.map(t => sanitizeMdInline(t)).filter(Boolean).join(', ')}`);
+      }
+    }
+  }
+
+  const executiveResume = (!Array.isArray(scanData) && scanData?.executiveResume)
+    ? scanData.executiveResume
+    : (optionsArg?.executiveResume || buildExecutiveResume(sanitizedResults, sanitizedStacks || stacks, {
+        cveCoverage,
+        diff: (!Array.isArray(scanData) && scanData?.diff) || optionsArg?.diff || null,
+        bareIpProbeSummary: (!Array.isArray(scanData) && scanData?.bareIpProbeSummary) || optionsArg?.bareIpProbeSummary || null
+      }));
+
+  if (executiveResume && typeof executiveResume === 'object') {
+    lines.push('', '## Executive Audit Resume (Point-by-Point)', '');
+    lines.push('### 1. Operating System & Device Posture', '');
+    if (!Array.isArray(executiveResume.osPosture) || executiveResume.osPosture.length === 0) {
+      lines.push('- No host stack fingerprints recorded.');
+    } else {
+      for (const host of executiveResume.osPosture) {
+        const verStr = host.version ? ` ${sanitizeMdInline(host.version)}` : '';
+        const eolStr = host.isEol ? ` **[EOL${host.eolReason ? `: ${sanitizeMdInline(host.eolReason)}` : ''}]**` : '';
+        const devStr = host.deviceSummary ? ` · Device: ${sanitizeMdInline(host.deviceSummary)}` : '';
+        const portsStr = Array.isArray(host.openPorts) && host.openPorts.length > 0
+          ? ` · Open Ports: ${host.openPorts.map(p => `\`${sanitizeMdInline(p)}\``).join(', ')}`
+          : '';
+        lines.push(`- **${sanitizeMdInline(host.target)}**: ${sanitizeMdInline(host.osName)}${verStr}${eolStr} (${sanitizeMdInline(host.familyLabel)})${devStr}${portsStr}`);
+      }
+    }
+
+    lines.push('', '### 2. Market CVE & Advisory Coverage', '');
+    if (executiveResume.cveCoverageSummary) {
+      const cov = executiveResume.cveCoverageSummary;
+      lines.push(`- **Advisories Covered**: ${cov.coveredCount}/${cov.totalAdvisories} (${cov.coveragePercent}%), Partial: ${cov.partialCount ?? 0}, Missing: ${cov.missingCount ?? 0}`);
+      lines.push(`- **CISA KEV Coverage**: ${cov.kevCovered ?? 0}/${cov.kevTotal ?? 0}`);
+    } else {
+      lines.push('- Market CVE coverage audit not requested for this run.');
+    }
+
+    lines.push('', '### 3. Security Findings by Point (What Was Detected & How to Fix)', '');
+    if (!Array.isArray(executiveResume.findingsByPoint) || executiveResume.findingsByPoint.length === 0) {
+      lines.push('- No vulnerable or suspicious findings detected.');
+    } else {
+      for (const pt of executiveResume.findingsByPoint) {
+        const cveStr = Array.isArray(pt.cveIds) && pt.cveIds.length > 0
+          ? ` [${pt.cveIds.map(id => sanitizeMdInline(id)).join(', ')}]`
+          : '';
+        lines.push(`${pt.pointNumber}. **[${sanitizeMdInline(pt.severity)}] (${sanitizeMdInline(pt.status)}) ${sanitizeMdInline(pt.name)}** (\`${sanitizeMdInline(pt.checkId)}\`)${cveStr} — \`${sanitizeMdInline(pt.target)}\``);
+        lines.push(`   - **Detected**: ${sanitizeMdInline(pt.detail)}`);
+        lines.push(`   - **How to Fix**: ${sanitizeMdInline(pt.fix)}`);
+      }
+    }
+
+    lines.push('', '### 4. What Was Improved & Fixed', '');
+    if (Array.isArray(executiveResume.improvementsAndFixes) && executiveResume.improvementsAndFixes.length > 0) {
+      for (const item of executiveResume.improvementsAndFixes) {
+        lines.push(`- ${sanitizeMdInline(item)}`);
       }
     }
   }
@@ -650,6 +1056,13 @@ export function generateReport(results, risk = null, stacks = null, extra = null
     : null;
   const explicitApi = extra && typeof extra === 'object' ? (extra.apiCommunication || null) : null;
   const apiCommunication = mergeApiCommunication(sanitizedStacks, sanitizedResults, explicitApi);
+  const executiveResume = (extra && typeof extra === 'object' && extra.executiveResume)
+    ? extra.executiveResume
+    : buildExecutiveResume(sanitizedResults, sanitizedStacks, {
+        cveCoverage,
+        diff: extra && typeof extra === 'object' ? (extra.diff || null) : null,
+        bareIpProbeSummary: extra && typeof extra === 'object' ? (extra.bareIpProbeSummary || null) : null
+      });
 
   return {
     generatedAt     : new Date().toISOString(),
@@ -664,6 +1077,7 @@ export function generateReport(results, risk = null, stacks = null, extra = null
     stacks          : sanitizedStacks,
     ...(apiCommunication ? { apiCommunication } : {}),
     ...(cveCoverage ? { cveCoverage } : {}),
+    executiveResume,
     groupedFindings : grouped,
     findings        : sanitizedResults
   };
@@ -676,7 +1090,25 @@ export const generateJsonReport = generateReport;
 
 export function saveReport(report, stem = 'report') {
   const file = stem.endsWith('.json') ? stem : `${stem}.json`;
-  fs.writeFileSync(file, JSON.stringify(report, null, 2));
+  const payload = (report && typeof report === 'object' && !Array.isArray(report) && !report.executiveResume)
+    ? {
+        ...report,
+        executiveResume: buildExecutiveResume(
+          report.findings || report.results || [],
+          report.stacks || {},
+          { cveCoverage: report.cveCoverage || null }
+        )
+      }
+    : report;
+  fs.writeFileSync(file, JSON.stringify(payload, null, 2));
+  return file;
+}
+
+export const saveJson = saveReport;
+
+export function saveMarkdown(scanData, stem = 'report', risk = null, stacks = null, options = null) {
+  const file = stem.endsWith('.md') ? stem : `${stem}.md`;
+  fs.writeFileSync(file, generateMarkdownReport(scanData, risk, stacks, options), 'utf8');
   return file;
 }
 

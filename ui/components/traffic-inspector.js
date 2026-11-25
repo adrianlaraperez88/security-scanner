@@ -60,11 +60,15 @@ export async function renderTrafficInspector(container, options = {}) {
     <div class="traffic-shell">
       <div class="traffic-header">
         <div>
-          <h2 class="section-title">HTTP Traffic Store &amp; RFC-9110 Replay</h2>
-          <p class="section-subtitle">Full-text search captured exchanges, replay modified requests, and manage HMAC-tainted rewrite rules</p>
+          <h2 class="section-title">HTTP Traffic Store, Repeater, Intruder §, Autorize &amp; Decoder Workbench</h2>
+          <p class="section-subtitle">Full-text search captured exchanges, replay modified requests, run Burp Intruder § &amp; Autorize BOLA matrices, decode JWT/Base64 payloads, and export HAR 1.2</p>
         </div>
         <div class="traffic-header-actions">
+          <button type="button" class="btn-secondary" data-tr-action="toggle-intruder">🎯 Intruder §</button>
+          <button type="button" class="btn-secondary" data-tr-action="toggle-autorize">🔐 Autorize Matrix</button>
+          <button type="button" class="btn-secondary" data-tr-action="toggle-decoder">🧬 Decoder &amp; Comparer</button>
           <button type="button" class="btn-secondary" data-tr-action="toggle-rewrites">⚙️ Rewrite Rules (<span data-role="rewrite-count">0</span>)</button>
+          <a href="/api/traffic/export.har" class="btn-secondary" download="secscan-traffic.har">📦 Export HAR 1.2</a>
           <button type="button" class="btn-secondary" data-tr-action="refresh">🔄 Refresh</button>
         </div>
       </div>

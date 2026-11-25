@@ -1,6 +1,9 @@
 import { getCheckInfo } from './catalog.js';
 import { buildReproductionContext } from './reproduction.js';
 import { redactSecretsInText, redactEndpointQuery } from './ai-advisor.js';
+import { sanitizeRuntimeSca, mergeRuntimeSca } from './runtime-sca.js';
+
+export { sanitizeRuntimeSca, mergeRuntimeSca };
 
 // ── Sorting helpers ───────────────────────────────────────────────────────────
 const STATUS_ORDER   = { VULNERABLE: 0, SUSPICIOUS: 1, ERROR: 2, SAFE: 3 };
@@ -178,6 +181,8 @@ export function groupFindings(results = []) {
         existing.evidenceQuotes = Array.from(mergedQuotes).slice(0, 6);
       }
       if (!existing.apiCommunication && r.apiCommunication) existing.apiCommunication = r.apiCommunication;
+      if (!existing.runtimeSca && r.runtimeSca) existing.runtimeSca = r.runtimeSca;
+      if (!existing.scaFindings && Array.isArray(r.scaFindings)) existing.scaFindings = r.scaFindings;
     }
   }
 
@@ -289,6 +294,12 @@ export function sanitizeFindingRecord(item) {
   }
   if (copy.apiCommunication && typeof copy.apiCommunication === 'object') {
     copy.apiCommunication = sanitizeApiCommunication(copy.apiCommunication);
+  }
+  if (copy.runtimeSca && typeof copy.runtimeSca === 'object') {
+    copy.runtimeSca = sanitizeRuntimeSca(copy.runtimeSca);
+  }
+  if (Array.isArray(copy.scaFindings)) {
+    copy.scaFindings = sanitizeRuntimeSca({ findings: copy.scaFindings })?.findings || [];
   }
   if (Array.isArray(copy.findings)) {
     copy.findings = copy.findings.map(sub => sanitizeFindingRecord(sub));
@@ -444,7 +455,17 @@ function buildRows(groupedResults) {
       ? `<div class="meaning-box" style="margin-top:6px">
            <span class="meaning-lbl">${evidenceLabel} (${evidenceItems.length}):</span>
            <ul style="margin:4px 0 0 16px;padding:0">
-             ${evidenceItems.slice(0, 8).map(f => `<li><code>${esc(f.path || f.url || f.name || '')}</code>${f.status ? ` (HTTP ${esc(f.status)})` : ''}${f.matchedSignal ? ` — ${esc(f.matchedSignal)}` : (f.detail || f.issue || f.reason ? ` — ${esc(f.detail || f.issue || f.reason)}` : '')}${f.preview ? ` · <code>${esc(f.preview)}</code>` : ''}</li>`).join('')}
+             ${evidenceItems.slice(0, 8).map(f => {
+               const statusTag = f?.statusTag ? String(f.statusTag).trim().toUpperCase() : '';
+               const statusTagHtml = statusTag ? `<span class="cat-badge">${esc(statusTag)}</span> ` : '';
+               const hasPort = f?.port !== undefined && f?.port !== null && f?.port !== '';
+               const schemeSuffix = f?.scheme ? `/${esc(String(f.scheme).toUpperCase())}` : '';
+               const portHtml = hasPort ? `<span class="cat-badge">Port ${esc(f.port)}${schemeSuffix}</span> ` : '';
+               const protoMethod = f?.method ? String(f.method).trim().toUpperCase() : '';
+               const isNonHttp = /^(TCP|UDP|RTSP|MDNS)$/.test(protoMethod);
+               const statusText = isNonHttp ? ` (${esc(protoMethod)})` : (f?.status ? ` (HTTP ${esc(f.status)})` : '');
+               return `<li>${statusTagHtml}${portHtml}<code>${esc(f.path || f.url || f.name || '')}</code>${statusText}${f.matchedSignal ? ` — ${esc(f.matchedSignal)}` : (f.detail || f.issue || f.reason ? ` — ${esc(f.detail || f.issue || f.reason)}` : '')}${f.preview ? ` · <code>${esc(f.preview)}</code>` : ''}</li>`;
+             }).join('')}
            </ul>
          </div>`
       : '';
@@ -543,6 +564,13 @@ function buildStackSummary(stacks) {
       const url = fp?.target || fp?.url || `Target #${idx + 1}`;
       return [url, fp];
     });
+  } else if (
+    typeof stacks.primary === 'string' ||
+    Array.isArray(stacks.stack) ||
+    Array.isArray(stacks.detectedTags) ||
+    (stacks.deviceInfo && typeof stacks.deviceInfo === 'object')
+  ) {
+    entries = [[stacks.target || stacks.url || 'Target #1', stacks]];
   } else {
     entries = Object.keys(stacks).map(k => [k, stacks[k]]);
   }
@@ -571,6 +599,35 @@ function buildStackSummary(stacks) {
     const skippedCount = Number(fp.skippedChecksCount) || 0;
     const confidence = Number(fp.confidence) || 0;
 
+    const dp = fp.deviceInfo && typeof fp.deviceInfo === 'object' ? fp.deviceInfo : null;
+    const hasDevicePorts = dp && Array.isArray(dp.openPorts) && dp.openPorts.length > 0;
+    const hasDeviceServices = dp && Array.isArray(dp.openServices) && dp.openServices.length > 0;
+    let deviceHtml = '';
+    if (dp && (dp.detected || dp.category || hasDevicePorts || hasDeviceServices)) {
+      const catLabel = dp.categoryLabel || dp.category || 'Network Device';
+      const devTitle = dp.deviceName || dp.deviceType || '';
+      const metaPills = [
+        dp.vendor && dp.vendor !== 'Unknown' ? `<span><strong>Vendor:</strong> ${esc(dp.vendor)}</span>` : '',
+        dp.modelName ? `<span><strong>Model:</strong> ${esc(dp.modelName)}</span>` : '',
+        (dp.os || dp.osFamily) ? `<span><strong>OS:</strong> ${esc(dp.os || dp.osFamily)}</span>` : '',
+        dp.macAddress ? `<span><strong>MAC:</strong> <code>${esc(dp.macAddress)}</code></span>` : '',
+        dp.firmwareVersion ? `<span><strong>Firmware:</strong> <code>${esc(dp.firmwareVersion)}</code></span>` : ''
+      ].filter(Boolean).join(' · ');
+      const portChips = hasDeviceServices
+        ? dp.openServices.slice(0, 16).map(s => `<span class="cat-badge"><code>${esc(s?.port)}/${esc(String(s?.scheme || 'tcp').toUpperCase())}</code>${s?.label || s?.service ? ` ${esc(s.label || s.service)}` : ''}</span>`).join(' ')
+        : (hasDevicePorts ? dp.openPorts.slice(0, 16).map(p => `<span class="cat-badge"><code>${esc(p)}/TCP</code></span>`).join(' ') : '');
+      deviceHtml = `
+      <div style="margin:8px 0;padding:8px 10px;background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.22);border-radius:6px;font-size:11px">
+        <div style="margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="cat-badge" style="color:var(--blue);border-color:rgba(88,166,255,0.4)">📺 ${esc(catLabel)}</span>
+          ${devTitle ? `<strong>${esc(devTitle)}</strong>` : ''}
+        </div>
+        ${metaPills ? `<div style="color:var(--text2);margin-bottom:4px">${metaPills}</div>` : ''}
+        ${portChips ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${portChips}</div>` : ''}
+        ${dp.basePortClosed ? `<div class="muted" style="margin-top:4px">Standard HTTP(S) 80/443 closed — routed to active device ports.</div>` : ''}
+      </div>`;
+    }
+
     return `
     <div class="target-card" style="flex:1;min-width:280px">
       <div class="target-host">${esc(targetUrl)}</div>
@@ -578,6 +635,7 @@ function buildStackSummary(stacks) {
         <strong>Stack:</strong> ${esc(summary)}
         ${confidence > 0 ? `<span class="muted" style="font-size:11px">(${confidence}% confidence)</span>` : ''}
       </div>
+      ${deviceHtml}
       <div style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span class="muted">Ecosystem Tags:</span>
         ${tags}
@@ -667,6 +725,52 @@ function buildApiCommunicationSummary(apiComm) {
   </div>`;
 }
 
+function buildRuntimeScaSummary(runtimeSca) {
+  if (!runtimeSca || typeof runtimeSca !== 'object') return '';
+  const safe = sanitizeRuntimeSca(runtimeSca);
+  if (!safe || !Array.isArray(safe.findings) || safe.findings.length === 0) return '';
+
+  const rowsHtml = safe.findings.map(item => {
+    const isOutdated = item.isOutOfDate || item.status === 'Out of date';
+    const statusColor = isOutdated ? (item.highestCvss >= 7.0 ? '#ff4444' : '#e05f00') : '#3fb950';
+    const statusIcon = isOutdated ? '⚠️' : '✅';
+    const cveBadges = Array.isArray(item.cveIds) && item.cveIds.length > 0
+      ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${item.cveIds.map(id => `<span class="cat-badge cve-badge">${esc(id)}</span>`).join('')}</div>`
+      : '';
+    return `
+      <tr>
+        <td style="font-weight:600;color:var(--text2);white-space:nowrap">${esc(item.icon || '📦')} ${esc(item.name)}</td>
+        <td style="white-space:nowrap"><span style="color:${statusColor};font-weight:700">${statusIcon} ${esc(item.status)}</span></td>
+        <td><code>${esc(item.identifiedVersionDisplay)}</code></td>
+        <td><code>${esc(item.latestBranchDisplay)}</code></td>
+        <td><code>${esc(item.overallLatestDisplay)}</code></td>
+        <td style="font-size:11px;color:${isOutdated ? '#ff7b72' : 'var(--muted)'}">
+          ${item.recommendedAction ? esc(item.recommendedAction) : '<span class="muted">—</span>'}
+          ${cveBadges}
+        </td>
+      </tr>`;
+  }).join('');
+
+  return `
+  <!-- Runtime SCA & Technology Versions -->
+  <div class="section-title">📦 Technology Versions &amp; Runtime SCA (${safe.outOfDateCount} Out of Date / ${safe.totalIdentified} Identified)</div>
+  <div class="table-wrap" style="margin-bottom:1.8rem">
+    <table>
+      <thead>
+        <tr>
+          <th>Technology</th>
+          <th>Status</th>
+          <th>Identified Version</th>
+          <th>Latest Branch Version</th>
+          <th>Overall Latest Version</th>
+          <th>Recommended Action</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </div>`;
+}
+
 function buildCveCoverageSummary(cveCoverage) {
   if (!cveCoverage || typeof cveCoverage !== 'object') return '';
   const summary = cveCoverage.summary && typeof cveCoverage.summary === 'object'
@@ -719,6 +823,10 @@ export function generateHtmlReport(results, risk, stacks = null, options = null)
     ? (options.apiCommunication || null)
     : null;
   const apiCommunication = mergeApiCommunication(stacks, results, explicitApiComm);
+  const explicitRuntimeSca = options && typeof options === 'object'
+    ? (options.runtimeSca || null)
+    : null;
+  const runtimeSca = mergeRuntimeSca(stacks, results, explicitRuntimeSca);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -870,6 +978,8 @@ export function generateHtmlReport(results, risk, stacks = null, options = null)
   <div class="targets-grid">${buildTargetSummary(grouped)}</div>
 
   ${buildStackSummary(stacks)}
+
+  ${buildRuntimeScaSummary(runtimeSca)}
 
   ${buildApiCommunicationSummary(apiCommunication)}
 

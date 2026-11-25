@@ -3,26 +3,21 @@
 import fs                             from 'node:fs';
 import path                           from 'node:path';
 import { fileURLToPath }              from 'node:url';
-import { runScanner, normalizeScopeRules } from '../scan.js';
 import { loadConfig, mergeConfig }  from '../core/config.js';
-import { listProfiles }             from '../core/profiles.js';
-import { validateTargets, validateTargetUrl, resolveAndValidateTarget } from '../core/validator.js';
-import { scaffoldCheck }              from '../core/catalog.js';
-import { getScanners }               from '../core/registry.js';
-import { fingerprint }               from '../core/fingerprint.js';
-import { createGovernedFetch }       from '../core/fetch.js';
-import { TargetPinStore }            from '../core/guard.js';
-import { selectScannersForStack }    from '../core/profiles.js';
-import { LlmPool }                   from '../core/llmpool.js';
-import { analyzeApiCommunication }   from '../core/ai-advisor.js';
-import { runSystemDoctor, diagnoseTarget } from '../core/system-doctor.js';
-import { parseCustomHeaderLine, validateCustomHeaders } from '../core/headers.js';
 import {
-  auditCveCoverage,
-  formatCveAuditText,
-  formatCveAuditMarkdown,
-  formatCveAuditCsv
-}                                     from '../core/cve-audit.js';
+  normalizeTargetInput,
+  resolveBareIpTargets,
+  validateTargets,
+  validateTargetUrl,
+  resolveAndValidateTarget
+} from '../core/validator.js';
+import { DEVICE_CATEGORIES, DEVICE_CATEGORY_ALIASES, normalizeDeviceCategory } from '../core/device-scanner.js';
+import { parseCustomHeaderLine, validateCustomHeaders } from '../core/headers.js';
+
+async function loadNormalizeScopeRules() {
+  const { normalizeScopeRules } = await import('../scan.js');
+  return normalizeScopeRules;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION = (() => {
@@ -54,6 +49,8 @@ function printUsage() {
     '',
     'CVE Coverage Audit:',
     '  --cve-audit               Audit built-in scanner checks against CVE advisories',
+    '  --cve-lab [all|CVE-ID,..] Run Tri-State CVE Lab Benchmark (vulnerable, patched, fp_trap) and market comparison',
+    '  --cve-lab-mode <mode>     CVE lab execution mode: emulated (default) or docker',
     '  --cve-db <provider|url>   Confirm vs external CVE DB: osv|nvd|ghsa|cisa-kev or custom JSON URL',
     '  --cve-packages <list>     Filter/match package@version list (e.g. laravel/framework@11.30.0,next@14.2.1)',
     '  --cve-catalog <file>      Load custom CVE advisory catalog or NVD/OSV/GHSA/KEV JSON export file',
@@ -62,11 +59,15 @@ function printUsage() {
     '',
     'Maintenance & Scaffolding:',
     '  --new-check <name>        Scaffold a new check plugin and test suite',
+    '  --new-cve-lab <CVE-ID>    Scaffold a new Tri-State CVE Docker Lab under cve-labs/<CVE-ID>',
     '  --list-checks             List all security checks with metadata',
     '',
     'Scan Options:',
     '  --detect, --fingerprint   Detect tech stack and profile recommendation only (no scan)',
     '  --force-all               Run all security checks regardless of detected tech stack',
+    '  --pc-local                Run deep local host PC security audit (ports, firewall, AV/EDR, unquoted services)',
+    '  --oast                    Start local HMAC-tokenized OAST callback server for blind SSRF/XXE verification',
+    '  --templates <path>        Run declarative YAML/JSON CVE templates from file or directory',
     '  --json                    Save JSON report (or stdout JSON in --cve-audit / --doctor mode)',
     '  --html                    Save HTML report (dark-mode, self-contained)',
     '  --markdown [file]         Save Markdown report (optional output filename)',
@@ -75,8 +76,11 @@ function printUsage() {
     '  --ai-fix                  Generate AI / playbook fix solutions and audience summary',
     '  --audience <beginner|pro> Target audience for --ai-fix guidance (default: pro)',
     '  --output <stem>           Base name for reports            (default: report)',
-    '  --profile <name>          Scan profile (18+ profiles): smart (default)|quick|modern|cms|api|laravel|wordpress|apache|nginx|spring|full',
-    '  --profiles                List all 18+ available profiles',
+    '  --profile <name>          Scan profile (20+ profiles): smart (default)|device|quick|modern|cms|api|laravel|wordpress|apache|nginx|spring|full',
+    '  --device, --tv, --camera, --pc, --iot',
+    '                            Scan Smart TVs, IP Cameras/NVRs, PCs/Workstations/Servers, Routers, Printers, NAS or IoT devices (sets --profile device --allow-private; --tv/--camera/--pc set category)',
+    '  --device-category <cat>   Filter device discovery/checks: all|smart_tv|ip_camera|pc_workstation (aliases: tv, camera, pc)',
+    '  --profiles                List all 20+ available profiles',
     '  --depth <n>               Crawl depth for discovery (0..5, default: 3)',
     '  --tech <list>             Force tech tags, comma-separated (e.g. react,node,laravel)',
     '  --concurrency <n>         Parallel targets                 (default: 5)',
@@ -89,9 +93,23 @@ function printUsage() {
     '  --agent                   Run AgentEngine planner-worker verification loop',
     '  --goal <text>             Custom verification goal for --agent mode',
     '  --noise-profile <p>       NoiseGovernor profile: off|quiet|balanced|aggressive',
+    '  --source-ip <ip|host=ip>  Connect HTTP/HTTPS directly to Source/Origin IP with Host & TLS SNI',
+    '  --get-real-ip, --real-ip  Discover website real/origin IP (DNS, CDN, SPF, MX, subdomains, headers)',
+    '  --scan-real-ip            Discover real/origin IP first and automatically pin --source-ip for the scan',
+    '  --review-report <file>    Validate report/finding file against SecScan 7-Gate VDP eligibility rules',
+    '  --posture-check [model]   Run SecScan 9-Probe Fenceline LLM refusal-posture check',
     '  --scope <rule>            Scope allow/deny rule (repeatable or comma-separated)',
     '  --allow-private           Allow RFC1918 & internal hosts (cloud metadata stays blocked)',
     '  --verify                  Reserved for future use',
+    '',
+    'Authentication & Session Recording:',
+    '  --login-url <url>         Login form or API endpoint URL (auto-detected if omitted with --username)',
+    '  --username, --user <user> Username or email for authenticated website login',
+    '  --password, --pass <pass> Password for authenticated website login',
+    '  --login-type <type>       Login submission format: auto, form, or json (default: auto)',
+    '  --save-session <file>     Record and save the authenticated session (cookies/JWT/CSRF) to a JSON file',
+    '  --load-session <file>     Load a previously recorded session JSON file for authenticated scanning',
+    '  --record-session          Test login with --username & --password, print recorded session, and exit',
     '',
     'Examples:',
     '  secscan --ui',
@@ -129,13 +147,27 @@ const cli = {
   output           : null,
   timeout          : null,
   auth             : null,
+  loginUrl         : null,
+  username         : null,
+  password         : null,
+  loginType        : null,
+  saveSession      : null,
+  loadSession      : null,
+  recordSession    : false,
+  scan             : false,
   profile          : null,
+  device           : false,
+  deviceCategory   : null,
   webhook          : null,
   maxDepth         : null,
   ui               : false,
   port             : null,
   newCheck         : null,
+  newCveLab        : null,
   listChecks       : false,
+  pcLocal          : false,
+  oast             : false,
+  templates        : null,
   detect           : false,
   forceAll         : false,
   agent            : false,
@@ -143,12 +175,20 @@ const cli = {
   noiseProfile     : null,
   scopeRules       : [],
   allowPrivate     : false,
+  cveLab           : null,
+  cveLabMode       : 'emulated',
   cveAudit         : false,
   cveCatalog       : null,
   cveFeed          : false,
   cveDb            : null,
   cvePackages      : null,
   failOnMissingCves: false,
+  sourceIp         : null,
+  getRealIp        : false,
+  scanRealIp       : false,
+  checks           : null,
+  reviewReport     : null,
+  postureCheck     : null,
   help             : false,
   version          : false,
   profiles         : false,
@@ -221,8 +261,40 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--detect' || a === '--fingerprint') cli.detect = true;
   else if (a === '--force-all')   cli.forceAll   = true;
   else if (a === '--allow-private') cli.allowPrivate = true;
+  else if (a === '--device' || a === '--iot') {
+    cli.device = true;
+    cli.allowPrivate = true;
+    if (!cli.profile) cli.profile = 'device';
+  }
+  else if (a === '--tv') {
+    cli.device = true;
+    cli.allowPrivate = true;
+    if (!cli.profile) cli.profile = 'device';
+    if (!cli.deviceCategory) cli.deviceCategory = 'smart_tv';
+  }
+  else if (a === '--camera') {
+    cli.device = true;
+    cli.allowPrivate = true;
+    if (!cli.profile) cli.profile = 'device';
+    if (!cli.deviceCategory) cli.deviceCategory = 'ip_camera';
+  }
+  else if (a === '--pc') {
+    cli.device = true;
+    cli.allowPrivate = true;
+    if (!cli.profile) cli.profile = 'device';
+    if (!cli.deviceCategory) cli.deviceCategory = 'pc_workstation';
+  }
+  else if (a === '--device-category') {
+    cli.deviceCategory = requireArgValue('--device-category');
+  }
   else if (a === '--agent')       cli.agent      = true;
+  else if (a === '--pc-local')    cli.pcLocal    = true;
+  else if (a === '--oast')        cli.oast       = true;
+  else if (a === '--templates')   cli.templates  = requireArgValue('--templates');
+  else if (a === '--new-cve-lab') cli.newCveLab  = requireArgValue('--new-cve-lab');
   else if (a === '--list-checks') cli.listChecks = true;
+  else if (a === '--cve-lab')     cli.cveLab     = isOptionalFileArg(args[i + 1]) ? args[++i] : 'all';
+  else if (a === '--cve-lab-mode') cli.cveLabMode = requireArgValue('--cve-lab-mode');
   else if (a === '--cve-audit')   cli.cveAudit   = true;
   else if (a === '--cve-feed')    cli.cveFeed    = true;
   else if (a === '--cve-db')      cli.cveDb      = requireArgValue('--cve-db');
@@ -231,6 +303,26 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--cve-catalog') cli.cveCatalog = requireArgValue('--cve-catalog');
   else if (a === '--goal')        cli.goal       = requireArgValue('--goal');
   else if (a === '--noise-profile') cli.noiseProfile = requireArgValue('--noise-profile');
+  else if (a === '--source-ip')   cli.sourceIp   = requireArgValue('--source-ip');
+  else if (a === '--get-real-ip' || a === '--real-ip' || a === '--find-origin-ip') cli.getRealIp = true;
+  else if (a === '--scan-real-ip' || a === '--auto-source-ip') {
+    cli.scanRealIp = true;
+    cli.getRealIp = true;
+  }
+  else if (a === '--review-report') cli.reviewReport = requireArgValue('--review-report');
+  else if (a === '--posture-check') cli.postureCheck = isOptionalFileArg(args[i + 1]) ? args[++i] : 'default';
+  else if (a === '--intruder')    cli.intruderUrl = requireArgValue('--intruder');
+  else if (a === '--payloads')    cli.payloads   = requireArgValue('--payloads');
+  else if (a === '--attack-mode') cli.attackMode = requireArgValue('--attack-mode');
+  else if (a === '--autorize')    cli.autorizeUrl = requireArgValue('--autorize');
+  else if (a === '--auth-low')    cli.authLow    = requireArgValue('--auth-low');
+  else if (a === '--check' || a === '--checks' || a === '--cve') {
+    const rawChecks = requireArgValue(a);
+    cli.checks = [
+      ...(Array.isArray(cli.checks) ? cli.checks : []),
+      ...rawChecks.split(',').map(s => s.trim()).filter(Boolean)
+    ];
+  }
   else if (a === '--scope') {
     const rawScope = requireArgValue('--scope');
     for (const part of rawScope.split(',')) {
@@ -248,6 +340,21 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--output')      cli.output     = requireArgValue('--output');
   else if (a === '--timeout')     cli.timeout    = parseStrictInt(requireArgValue('--timeout'), '--timeout', { min: 100 });
   else if (a === '--auth')        cli.auth       = requireArgValue('--auth');
+  else if (a === '--login-url')   cli.loginUrl   = requireArgValue('--login-url');
+  else if (a === '--username' || a === '--user') cli.username = requireArgValue(a);
+  else if (a === '--password' || a === '--pass') {
+    if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
+      console.error(`❌  Missing value for ${a}`);
+      process.exit(1);
+    }
+    i += 1;
+    cli.password = args[i];
+  }
+  else if (a === '--login-type')  cli.loginType  = requireArgValue('--login-type');
+  else if (a === '--save-session') cli.saveSession = requireArgValue('--save-session');
+  else if (a === '--load-session') cli.loadSession = requireArgValue('--load-session');
+  else if (a === '--record-session') cli.recordSession = true;
+  else if (a === '--scan')        cli.scan       = true;
   else if (a === '--profile')     cli.profile    = requireArgValue('--profile');
   else if (a === '--webhook')     cli.webhook    = requireArgValue('--webhook');
   else if (a === '--depth')       cli.maxDepth   = parseStrictInt(requireArgValue('--depth'), '--depth', { min: 0 });
@@ -269,6 +376,7 @@ if (cli.version) {
 }
 
 if (cli.profiles) {
+  const { listProfiles } = await import('../core/profiles.js');
   console.log('Available profiles:\n' + listProfiles());
   process.exit(0);
 }
@@ -280,6 +388,7 @@ if (cli.newCheck !== null) {
     process.exit(1);
   }
   try {
+    const { scaffoldCheck } = await import('../core/catalog.js');
     const result = scaffoldCheck(cli.newCheck);
     console.log('\n✅  Check scaffolded successfully!');
     console.log('\nCreated files:');
@@ -296,9 +405,30 @@ if (cli.newCheck !== null) {
   }
 }
 
+// ── CVE Lab Scaffolding (--new-cve-lab <CVE-ID>) ───────────────────────────
+if (cli.newCveLab !== null) {
+  try {
+    const { scaffoldCveLab } = await import('../core/cve-lab-runner.js');
+    const result = scaffoldCveLab(cli.newCveLab, {
+      labsDir: path.resolve(process.cwd(), 'cve-labs')
+    });
+    if (cli.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`\n✅  Scaffolded Tri-State CVE Lab: ${result.cveId} → ${result.relativeDir}`);
+      console.log(`    Files created: ${result.filesCreated.join(', ')}\n`);
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error(`❌  Failed to scaffold CVE lab: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 // ── List Checks (--list-checks) ────────────────────────────────────────────
 if (cli.listChecks) {
   try {
+    const { getScanners } = await import('../core/registry.js');
     const scanners = await getScanners();
     const sorted = [...scanners].sort((a, b) => a.name.localeCompare(b.name));
     console.log(`\n🔍 Available Security Checks (${sorted.length} total):\n`);
@@ -336,12 +466,31 @@ const options = {
   audience: cli.audience ?? config.audience ?? 'pro',
   headers: Object.keys(cli.headers).length ? cli.headers : (config.headers ?? {}),
   allowPrivate: Boolean(cli.allowPrivate || config.allowPrivate),
+  pcLocal: Boolean(cli.pcLocal || config.pcLocal),
+  oast: Boolean(cli.oast || config.oast),
+  templates: cli.templates ?? config.templates ?? null,
+  cveLab: cli.cveLab ?? config.cveLab ?? null,
+  cveLabMode: cli.cveLabMode ?? config.cveLabMode ?? 'emulated',
   cveAudit: Boolean(cli.cveAudit || (cli.cveDb && cli.targets.length === 0)),
   cveCatalog: cli.cveCatalog ?? config.cveCatalog ?? null,
   cveFeed: Boolean(cli.cveFeed || config.cveFeed || cli.cveDb || config.cveDb),
   cveDb: cli.cveDb ?? config.cveDb ?? null,
   cvePackages: cli.cvePackages ?? config.cvePackages ?? null,
   failOnMissingCves: Boolean(cli.failOnMissingCves || config.failOnMissingCves),
+  sourceIp: cli.sourceIp ?? config.sourceIp ?? null,
+  getRealIp: Boolean(cli.getRealIp || config.getRealIp),
+  scanRealIp: Boolean(cli.scanRealIp || config.scanRealIp),
+  checks: cli.checks ?? config.checks ?? null,
+  loginUrl: cli.loginUrl ?? config.loginUrl ?? null,
+  username: cli.username ?? config.username ?? null,
+  password: cli.password ?? config.password ?? null,
+  loginType: cli.loginType ?? config.loginType ?? 'auto',
+  saveSession: cli.saveSession ?? config.saveSession ?? null,
+  loadSession: cli.loadSession ?? config.loadSession ?? null,
+  recordSession: Boolean(cli.recordSession),
+  scan: Boolean(cli.scan),
+  deviceMode: Boolean(cli.device || baseOptions.deviceMode),
+  deviceCategory: cli.deviceCategory ?? baseOptions.deviceCategory ?? null,
 };
 
 const VALID_AUDIENCES = new Set(['beginner', 'pro']);
@@ -360,6 +509,48 @@ if (options.noiseProfile && !VALID_NOISE_PROFILES.has(String(options.noiseProfil
   process.exit(1);
 }
 
+const VALID_LOGIN_TYPES = new Set(['auto', 'form', 'json']);
+if (options.loginType !== null && options.loginType !== undefined) {
+  const normLoginType = String(options.loginType).trim().toLowerCase();
+  if (!VALID_LOGIN_TYPES.has(normLoginType)) {
+    console.error(`❌  Invalid --login-type "${options.loginType}". Expected: auto, form, or json`);
+    process.exit(1);
+  }
+  options.loginType = normLoginType;
+}
+
+const PROFILE_DEVICE_CATEGORY_MAP = new Map([
+  ['tv', 'smart_tv'],
+  ['smart-tv', 'smart_tv'],
+  ['smart_tv', 'smart_tv'],
+  ['camera', 'ip_camera'],
+  ['cam', 'ip_camera'],
+  ['nvr', 'ip_camera'],
+  ['ip-camera', 'ip_camera'],
+  ['ip_camera', 'ip_camera'],
+  ['pc', 'pc_workstation'],
+  ['workstation', 'pc_workstation'],
+  ['server', 'pc_workstation'],
+  ['pc-workstation', 'pc_workstation'],
+  ['pc_workstation', 'pc_workstation']
+]);
+
+if (options.deviceCategory !== null && options.deviceCategory !== undefined && String(options.deviceCategory).trim() !== '') {
+  const rawCat = String(options.deviceCategory).trim().toLowerCase();
+  const underscoredCat = rawCat.replace(/-/g, '_');
+  const validCat =
+    Object.prototype.hasOwnProperty.call(DEVICE_CATEGORY_ALIASES, rawCat) ||
+    Object.prototype.hasOwnProperty.call(DEVICE_CATEGORIES, underscoredCat);
+  if (!validCat) {
+    console.error(`❌  Invalid --device-category "${options.deviceCategory}". Expected: all, smart_tv, ip_camera, or pc_workstation (aliases: tv, camera, pc)`);
+    process.exit(1);
+  }
+  options.deviceCategory = normalizeDeviceCategory(rawCat);
+} else {
+  const profileKey = String(options.profile || '').trim().toLowerCase();
+  options.deviceCategory = PROFILE_DEVICE_CATEGORY_MAP.get(profileKey) || 'all';
+}
+
 try {
   options.headers = validateCustomHeaders(options.headers);
 } catch (err) {
@@ -367,17 +558,96 @@ try {
   process.exit(1);
 }
 
+const DEVICE_PROFILE_SET = new Set([
+  'device', 'tv', 'smart-tv', 'smart_tv', 'iot',
+  'camera', 'cam', 'nvr', 'ip-camera', 'ip_camera',
+  'pc', 'workstation', 'server', 'pc-workstation', 'pc_workstation', 'lan'
+]);
+const isDeviceProfile = DEVICE_PROFILE_SET.has(String(options.profile || '').toLowerCase());
+const deviceMode = Boolean(options.deviceMode || cli.device || isDeviceProfile || options.deviceCategory !== 'all');
+const allowPrivate = Boolean(options.allowPrivate || cli.device || isDeviceProfile);
+options.deviceMode = deviceMode;
+options.allowPrivate = allowPrivate;
+
+// ── Pre-Submission VDP Report Review Mode (--review-report <file>) ─────────
+if (cli.reviewReport) {
+  try {
+    const { reviewReportSubmission } = await import('../core/submission-review.js');
+    const rawReport = fs.readFileSync(path.resolve(cli.reviewReport), 'utf8');
+    let parsedInput = rawReport;
+    if (cli.reviewReport.endsWith('.json')) {
+      try {
+        parsedInput = JSON.parse(rawReport);
+      } catch {}
+    }
+    const review = await reviewReportSubmission(parsedInput);
+    if (options.json) {
+      console.log(JSON.stringify(review, null, 2));
+    } else {
+      console.log(`\n${review.submitReady ? '✅ SUBMIT-READY' : '❌ GAPS FOUND'} (${review.passedCount}/${review.totalChecks} checks pass)`);
+      for (const v of review.failedChecks) {
+        console.log(`  FAIL ${v.check}: ${v.reason}`);
+        if (v.fix) console.log(`       fix: ${v.fix}`);
+      }
+      console.log('');
+    }
+    process.exit(review.exitCode);
+  } catch (err) {
+    console.error(`❌  Report review failed: ${err.message}`);
+    process.exit(err.exitCode || 1);
+  }
+}
+
+// ── LLM Refusal Posture Check Mode (--posture-check [model]) ───────────────
+if (cli.postureCheck) {
+  try {
+    const [{ LlmPool }, { runLlmPostureCheck }] = await Promise.all([
+      import('../core/llmpool.js'),
+      import('../core/posture-check.js'),
+    ]);
+    const llmPool = new LlmPool({ autoDiscoverEnv: true });
+    const summary = await runLlmPostureCheck({
+      model: cli.postureCheck === 'default' ? 'configured-pool' : cli.postureCheck,
+      llmPool
+    });
+    if (options.json) {
+      console.log(JSON.stringify(summary, null, 2));
+    } else {
+      console.log(`\n🛡️  LLM Refusal Posture Check (${summary.model})`);
+      console.log(`  Refused ${summary.refusedOf[0]}/${summary.refusedOf[1]} policy-boundary | Over-refused ${summary.overRefusedOf[0]}/${summary.overRefusedOf[1]} dual-use/benign | Invalid: ${summary.invalid}`);
+      console.log(`  Clean Posture: ${summary.cleanPosture ? '✅ YES' : '⚠️ NO'}\n`);
+    }
+    process.exit(summary.cleanPosture ? 0 : 1);
+  } catch (err) {
+    console.error(`❌  Posture check failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 // ── System Doctor Mode (--doctor) ──────────────────────────────────────────
 if (cli.doctor) {
   try {
-    const allowPrivate = Boolean(options.allowPrivate);
+    const [{ LlmPool }, { runSystemDoctor, diagnoseTarget }] = await Promise.all([
+      import('../core/llmpool.js'),
+      import('../core/system-doctor.js'),
+    ]);
     const llmPool = new LlmPool({ autoDiscoverEnv: true });
     const doctor = await runSystemDoctor({ allowPrivate, llmPool, probeWrites: true });
-    const normalizedScopeRules = normalizeScopeRules(options.scopeRules);
+    const normalizedScopeRules = options.scopeRules?.length
+      ? (await loadNormalizeScopeRules())(options.scopeRules)
+      : [];
+    const doctorResolved = await resolveBareIpTargets(cli.targets, {
+      allowPrivate,
+      ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
+      timeoutMs: options.timeout,
+      ...(options.sourceIp ? { sourceIp: options.sourceIp } : {}),
+      ...(options.sourceIpMap ? { sourceIpMap: options.sourceIpMap } : {}),
+    });
     const targetDiagnostics = [];
-    for (const rawTarget of cli.targets) {
-      const check = validateTargetUrl(rawTarget, { allowPrivate });
-      const targetToDiagnose = check.valid ? check.normalized : rawTarget;
+    for (const rawTarget of doctorResolved.targets) {
+      const normalizedRaw = normalizeTargetInput(rawTarget) || String(rawTarget ?? '').trim();
+      const check = validateTargetUrl(normalizedRaw, { allowPrivate });
+      const targetToDiagnose = check.valid ? check.normalized : normalizedRaw;
       const diag = await diagnoseTarget(targetToDiagnose, {
         allowPrivate,
         ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
@@ -426,10 +696,74 @@ if (cli.doctor) {
   }
 }
 
+// ── Local & Host PC Deep Security Audit Mode (--pc-local) ──────────────────
+if (options.pcLocal) {
+  try {
+    const { runLocalPcAudit, formatLocalPcAuditText } = await import('../core/pc-local-auditor.js');
+    const report = await runLocalPcAudit();
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(formatLocalPcAuditText(report));
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error(`❌  Local PC audit failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+// ── Tri-State CVE Lab Benchmark Mode (--cve-lab) ───────────────────────────
+if (options.cveLab) {
+  try {
+    const {
+      runCveLabBenchmark,
+      formatCveLabTextReport,
+      formatCveLabMarkdownReport
+    } = await import('../core/cve-lab-runner.js');
+
+    const report = await runCveLabBenchmark({
+      cveIds: options.cveLab === 'all' || options.cveLab === true ? null : options.cveLab,
+      mode: options.cveLabMode || 'emulated'
+    });
+
+    if (options.markdown) {
+      const mdContent = formatCveLabMarkdownReport(report);
+      if (typeof options.markdown === 'string' && options.markdown.trim()) {
+        const mdName = options.markdown.endsWith('.md') ? options.markdown : `${options.markdown}.md`;
+        fs.writeFileSync(mdName, mdContent, 'utf8');
+        if (!options.json) console.log(`📝  CVE lab Markdown → ${mdName}`);
+      } else if (!options.json) {
+        console.log(mdContent);
+      }
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else if (!options.markdown) {
+      console.log(formatCveLabTextReport(report));
+    }
+
+    const ok = report.summary.failedVariants === 0 && report.summary.falsePositives === 0;
+    process.exit(ok ? 0 : 1);
+  } catch (err) {
+    console.error(`❌  CVE lab benchmark failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 // ── CVE Coverage Audit Mode (--cve-audit) ──────────────────────────────────
 if (options.cveAudit) {
   try {
-    const normalizedScopeRules = normalizeScopeRules(options.scopeRules);
+    const {
+      auditCveCoverage,
+      formatCveAuditText,
+      formatCveAuditMarkdown,
+      formatCveAuditCsv
+    } = await import('../core/cve-audit.js');
+    const normalizedScopeRules = options.scopeRules?.length
+      ? (await loadNormalizeScopeRules())(options.scopeRules)
+      : [];
     const audit = await auditCveCoverage({
       customCatalogPath: options.cveCatalog || null,
       techTags: options.techOverride || [],
@@ -479,9 +813,76 @@ if (options.cveAudit) {
 }
 
 // ── Interactive Web UI Dashboard ───────────────────────────────────────────
+if (cli.intruderUrl) {
+  const { runIntruderCampaign } = await import('../core/intruder.js');
+  const rawPayloads = String(cli.payloads || '1,2,admin,test').split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    const res = await runIntruderCampaign(
+      {
+        url: cli.intruderUrl,
+        headers: options.auth ? { Authorization: options.auth } : {},
+        payloadSets: [rawPayloads],
+        attackMode: cli.attackMode || 'sniper'
+      },
+      {
+        allowPrivate: Boolean(options.allowPrivate),
+        sourceIp: options.sourceIp || null,
+        scopeRules: options.scopeRules?.length ? (await loadNormalizeScopeRules())(options.scopeRules) : [],
+        timeout: options.timeout || 10000
+      }
+    );
+    if (options.json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(`\n🎯 Burp Intruder (${res.attackMode}) — ${res.totalPayloads} payloads, ${res.interestingCount} interesting anomalies`);
+      for (const r of res.results) {
+        const flag = r.isInteresting ? '🔥' : '  ';
+        console.log(`${flag} [${r.step}] HTTP ${r.status} (${r.byteLength}B, Δ${r.byteDelta}B, ${r.durationMs}ms) payload=${JSON.stringify(r.payloads)} ${r.anomalyReasons.join('; ')}`);
+      }
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error(`❌  Intruder failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+if (cli.autorizeUrl) {
+  const { runAutorizeMatrix } = await import('../core/intruder.js');
+  try {
+    const res = await runAutorizeMatrix(
+      {
+        endpoints: [cli.autorizeUrl],
+        primaryHeaders: options.auth ? { Authorization: options.auth } : {},
+        secondaryHeaders: cli.authLow ? { Authorization: cli.authLow } : null
+      },
+      {
+        allowPrivate: Boolean(options.allowPrivate),
+        sourceIp: options.sourceIp || null,
+        scopeRules: options.scopeRules?.length ? (await loadNormalizeScopeRules())(options.scopeRules) : [],
+        timeout: options.timeout || 10000
+      }
+    );
+    if (options.json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(`\n🔐 Burp Autorize Matrix — ${res.totalEndpoints} endpoint(s), ${res.vulnerableCount} bypass(es)`);
+      for (const m of res.matrix) {
+        console.log(`  [${m.verdict}] ${m.method} ${m.url} -> ${m.status} (${m.detail})`);
+      }
+    }
+    process.exit(res.vulnerableCount > 0 ? 1 : 0);
+  } catch (err) {
+    console.error(`❌  Autorize failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 if (options.ui) {
   const { startServer } = await import('../core/server.js');
-  const normalizedScopeRules = normalizeScopeRules(options.scopeRules);
+  const normalizedScopeRules = options.scopeRules?.length
+    ? (await loadNormalizeScopeRules())(options.scopeRules)
+    : [];
   await startServer({
     port: options.port || 4321,
     ...(options.noiseProfile ? { noiseProfile: options.noiseProfile } : {}),
@@ -489,6 +890,114 @@ if (options.ui) {
     allowPrivate: Boolean(options.allowPrivate),
   });
 } else {
+  const loadRecordedSessionFile = (filePath) => {
+    const resolved = path.resolve(filePath);
+    if (!fs.existsSync(resolved)) {
+      console.error(`❌  Session file not found: ${resolved}`);
+      process.exit(1);
+    }
+    try {
+      const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Expected a JSON object');
+      }
+      return parsed;
+    } catch (err) {
+      console.error(`❌  Failed to load session file "${resolved}": ${err.message}`);
+      process.exit(1);
+    }
+  };
+
+  const saveRecordedSessionFile = (filePath, authMgr) => {
+    const resolved = path.resolve(filePath);
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, JSON.stringify(authMgr.exportRecordedSession(), null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    return resolved;
+  };
+
+  const buildCliAuthManager = async (targetUrl, opts, loadedSess) => {
+    const resolvedLoginUrl = (() => {
+      if (!opts.loginUrl) return null;
+      const trimmed = String(opts.loginUrl).trim();
+      if (trimmed.startsWith('/')) {
+        try {
+          return new URL(trimmed, targetUrl).toString();
+        } catch {
+          return trimmed;
+        }
+      }
+      return trimmed;
+    })();
+
+    const hasAuthOpts = Boolean(
+      loadedSess ||
+      resolvedLoginUrl ||
+      opts.username !== null ||
+      opts.password !== null
+    );
+    if (!hasAuthOpts) return null;
+
+    const { AuthSessionManager } = await import('../core/auth-session.js');
+    if (loadedSess) {
+      const mgr = AuthSessionManager.fromRecordedSession(loadedSess);
+      if (!mgr.targetUrl) mgr.targetUrl = targetUrl;
+      if (resolvedLoginUrl) mgr.loginUrl = resolvedLoginUrl;
+      if (opts.username !== null) mgr.username = String(opts.username);
+      if (opts.password !== null) mgr.password = String(opts.password);
+      if (cli.loginType) mgr.loginContentType = opts.loginType;
+      return mgr;
+    }
+
+    return new AuthSessionManager({
+      targetUrl,
+      ...(resolvedLoginUrl ? { loginUrl: resolvedLoginUrl } : {}),
+      ...(opts.username !== null ? { username: opts.username } : {}),
+      ...(opts.password !== null ? { password: opts.password } : {}),
+      loginContentType: opts.loginType || 'auto'
+    });
+  };
+
+  const printRecordedSessionDetails = (summary, savedPath = null) => {
+    const bar = '─'.repeat(60);
+    console.log('\n🔐 Recorded Auth Session');
+    console.log(bar);
+    console.log(`  Session ID     : ${summary.sessionId}`);
+    console.log(`  Target URL     : ${summary.targetUrl || 'N/A'}`);
+    console.log(`  Login URL      : ${summary.loginUrl || 'N/A'} (${summary.loginMethod}, ${summary.loginContentType})`);
+    console.log(`  Authenticated  : ${summary.authenticated ? '✅ YES' : '❌ NO'}${summary.authenticatedAt ? ` (at ${summary.authenticatedAt})` : ''}`);
+    console.log(`  Username       : ${summary.username || 'N/A'} | Password: ${summary.password}`);
+    console.log(`  Cookies (${summary.cookieCount})   : ${summary.cookieNames?.length ? summary.cookieNames.join(', ') : 'none'}`);
+    console.log(`  Bearer Token   : ${summary.hasBearerToken ? summary.bearerTokenPreview : 'none'}`);
+    console.log(`  CSRF Protection: ${summary.csrfHeaderName || 'none'}${summary.csrfFormField ? ` (form field: ${summary.csrfFormField})` : ''}`);
+    if (Array.isArray(summary.steps) && summary.steps.length > 0) {
+      console.log('  Recorded Steps :');
+      for (const s of summary.steps) {
+        console.log(`    ${s.step}. [${s.action}] ${s.method || 'GET'} ${s.url} -> HTTP ${s.status}${s.contentType ? ` (${s.contentType})` : ''}`);
+      }
+    }
+    if (savedPath) {
+      console.log(`  Saved Session  : ${savedPath}`);
+    }
+    console.log(bar + '\n');
+  };
+
+  const loadedSession = options.loadSession ? loadRecordedSessionFile(options.loadSession) : null;
+
+  if (!options.targets.length) {
+    if (options.recordSession && options.loginUrl) {
+      try {
+        options.targets = [new URL(options.loginUrl).origin];
+      } catch {
+        options.targets = [options.loginUrl];
+      }
+    } else if (loadedSession?.targetUrl) {
+      options.targets = [loadedSession.targetUrl];
+    }
+  }
+
   // ── Show help if no targets ────────────────────────────────────────────────
   if (!options.targets.length) {
     printUsage();
@@ -496,7 +1005,18 @@ if (options.ui) {
   }
 
   // ── Target validation & SSRF protection ────────────────────────────────────
-  const allowPrivate = Boolean(options.allowPrivate);
+  // Auto-normalize quoted/trailing-backslash inputs, bare IP literals (probing both HTTPS/HTTP), and bare domain names
+  const normalizedScopeRulesForResolve = options.scopeRules?.length
+    ? (await loadNormalizeScopeRules())(options.scopeRules)
+    : [];
+  const bareIpResolved = await resolveBareIpTargets(options.targets, {
+    allowPrivate,
+    ...(normalizedScopeRulesForResolve.length ? { scopeRules: normalizedScopeRulesForResolve } : {}),
+    timeoutMs: options.timeout,
+    ...(options.sourceIp ? { sourceIp: options.sourceIp } : {}),
+    ...(options.sourceIpMap ? { sourceIpMap: options.sourceIpMap } : {}),
+  });
+  options.targets = bareIpResolved.targets;
   const validation = validateTargets(options.targets, { allowPrivate });
   if (!validation.valid) {
     for (const err of validation.errors) {
@@ -505,26 +1025,252 @@ if (options.ui) {
     process.exit(1);
   }
 
-  // ── Tech stack detection mode (--detect / --fingerprint) ───────────────────
-  if (options.detect) {
-    const scanners = await getScanners();
+  // ── Real / Origin IP Discovery (--get-real-ip / --scan-real-ip) ───────────
+  if (options.getRealIp) {
+    const { discoverWebsiteRealIp } = await import('../core/real-ip-finder.js');
+    const hasExplicitChecks = Boolean(options.checks && options.checks.length > 0);
+    const shouldRunScan = Boolean(options.scanRealIp || hasExplicitChecks);
+    const normalizedScopeRules = options.scopeRules?.length
+      ? (await loadNormalizeScopeRules())(options.scopeRules)
+      : [];
+    const realIpHeaders = {
+      ...(options.headers && typeof options.headers === 'object' ? options.headers : {}),
+      ...(options.auth ? { Authorization: options.auth } : {}),
+    };
+    const results = [];
+    const bar = '─'.repeat(60);
+
+    for (const target of validation.targets) {
+      let report;
+      try {
+        report = await discoverWebsiteRealIp(target, {
+          allowPrivate,
+          rules: normalizedScopeRules,
+          ...(Object.keys(realIpHeaders).length ? { headers: realIpHeaders } : {}),
+          timeoutMs: options.timeout || 6000
+        });
+      } catch (err) {
+        if (options.json && !shouldRunScan) {
+          console.error(JSON.stringify({ ok: false, target, error: err.message, code: err.code || 'REAL_IP_ERROR' }, null, 2));
+        } else {
+          console.error(`❌  Real IP discovery failed for ${target}: ${err.message}`);
+        }
+        process.exit(1);
+      }
+      results.push(report);
+
+      if (!options.json) {
+        console.log(`\n🌐 Real / Origin IP Discovery`);
+        console.log(bar);
+        console.log(`  Target           : ${report.target} (${report.hostname})`);
+        console.log(`  Primary DNS IPs  : ${report.primaryIps?.length ? report.primaryIps.join(', ') : 'none'}`);
+        console.log(`  CDN / Edge Status: ${report.isBehindCdn ? `Behind CDN/WAF (${report.cdnProvider || 'Detected'})` : 'Direct Origin Server (Not behind CDN)'}`);
+        console.log(`  Real / Origin IP : ${report.realIp || 'N/A'} (confidence: ${report.realIpConfidence ?? 0}%, source: ${report.realIpSource || 'N/A'})`);
+        if (Array.isArray(report.candidates) && report.candidates.length > 0) {
+          console.log('\n  Candidates:');
+          console.log(`  ${'IP'.padEnd(20)} ${'Sources'.padEnd(26)} ${'Role'.padEnd(22)} ${'Match'.padEnd(9)} ${'Conf'.padEnd(5)} Reason`);
+          console.log(`  ${'─'.repeat(98)}`);
+          for (const c of report.candidates) {
+            const role = c.isCdnEdge ? `CDN (${c.cdnProvider || 'Edge'})` : 'Origin Candidate';
+            const match = c.verifiedOriginMatch ? 'VERIFIED' : (c.blockedByPolicy ? 'BLOCKED' : '');
+            const sources = Array.isArray(c.sources) ? c.sources.join(',') : '';
+            console.log(
+              `  ${String(c.ip).padEnd(20)} ${sources.slice(0, 25).padEnd(26)} ${role.slice(0, 21).padEnd(22)} ${match.padEnd(9)} ${`${c.confidence ?? 0}%`.padEnd(5)} ${c.reason || ''}`
+            );
+          }
+        }
+        if (report.commands && typeof report.commands === 'object') {
+          console.log('\n  Ready-to-Run Commands:');
+          for (const [label, cmd] of Object.entries(report.commands)) {
+            if (cmd) console.log(`    ${label}: ${cmd}`);
+          }
+        }
+        console.log(bar);
+      }
+    }
+
+    if (options.json && !shouldRunScan) {
+      console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
+      process.exit(0);
+    }
+
+    if (!shouldRunScan) {
+      process.exit(0);
+    }
+
+    if (!options.sourceIp) {
+      const resolvedReports = results.filter(r => Boolean(r?.realIp));
+      if (resolvedReports.length === 1 && results.length === 1) {
+        options.sourceIp = resolvedReports[0].realIp;
+        if (!options.json) {
+          console.log(`📌 Auto-pinned --source-ip ${resolvedReports[0].realIp} for scan.`);
+        }
+      } else if (resolvedReports.length > 0) {
+        const map = {};
+        for (const r of resolvedReports) {
+          if (r.hostname && r.realIp) map[r.hostname] = r.realIp;
+        }
+        if (Object.keys(map).length > 0) {
+          options.sourceIpMap = map;
+          if (!options.json) {
+            console.log(`📌 Auto-pinned origin IP map for scan: ${JSON.stringify(map)}`);
+          }
+        }
+      }
+    }
+  }
+
+  // ── Session Recording Mode (--record-session) ──────────────────────────────
+  const shouldRunScanAfterRecord = Boolean(options.scan || (options.checks && options.checks.length > 0));
+  if (options.recordSession && !shouldRunScanAfterRecord) {
+    const targetUrl = validation.targets[0];
+    const authMgr = await buildCliAuthManager(targetUrl, options, loadedSession);
+    if (!authMgr || (authMgr.username === null && authMgr.password === null && authMgr.loginPayload === null && !loadedSession)) {
+      console.error('❌  --record-session requires --username and --password (or --load-session).');
+      process.exit(1);
+    }
+
+    const [{ TargetPinStore }, { createGovernedFetch }] = await Promise.all([
+      import('../core/guard.js'),
+      import('../core/fetch.js'),
+    ]);
     const customHeaders = options.headers && typeof options.headers === 'object' ? options.headers : {};
     const authHeaders = options.auth ? { Authorization: options.auth } : {};
-    const normalizedScopeRules = normalizeScopeRules(options.scopeRules);
+    const normalizedScopeRules = options.scopeRules?.length
+      ? (await loadNormalizeScopeRules())(options.scopeRules)
+      : [];
     const targetPinStore = new TargetPinStore({ allowPrivate });
     const governedFetch = createGovernedFetch({
       ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
+      ...(options.sourceIp ? { sourceIp: options.sourceIp } : {}),
+      ...(options.sourceIpMap ? { sourceIpMap: options.sourceIpMap } : {}),
       enforceDnsValidation: true,
       allowPrivate,
       targetPinStore,
       retries: 2,
       timeout: options.timeout || 10000
     });
-    const fetchWithRetry = (url, opts = {}) => governedFetch(url, {
-      ...opts,
-      headers: { ...customHeaders, ...authHeaders, ...(opts.headers || {}) }
+    const fetchWithRetry = (url, opts = {}, ...rest) => {
+      const safeOpts = opts && typeof opts === 'object' ? opts : {};
+      return governedFetch(url, {
+        ...safeOpts,
+        headers: { ...customHeaders, ...authHeaders, ...(safeOpts.headers || {}) }
+      }, ...rest);
+    };
+    fetchWithRetry.governance = governedFetch.governance;
+    fetchWithRetry.tlsAlpnProbe = governedFetch.tlsAlpnProbe;
+    fetchWithRetry.sourceIp = governedFetch.sourceIp;
+    fetchWithRetry.sourceIpMap = governedFetch.sourceIpMap;
+    fetchWithRetry.resolveCache = governedFetch.resolveCache;
+    fetchWithRetry.targetPinStore = governedFetch.targetPinStore;
+    fetchWithRetry.hasCustomFetcher = governedFetch.hasCustomFetcher;
+    if (governedFetch.isDefaultFetch !== undefined) {
+      fetchWithRetry.isDefaultFetch = governedFetch.isDefaultFetch;
+    }
+
+    try {
+      const alreadyAuth = Boolean(authMgr.bearerToken || authMgr.cookies.size > 0);
+      if (!alreadyAuth || options.username !== null || options.password !== null) {
+        await authMgr.executeLoginMacro(fetchWithRetry);
+      }
+      const summary = authMgr.getRecordedSession({ includeSecrets: false });
+      const savedPath = options.saveSession ? saveRecordedSessionFile(options.saveSession, authMgr) : null;
+      if (options.json) {
+        console.log(JSON.stringify({
+          ...summary,
+          ...(savedPath ? { savedTo: savedPath } : {})
+        }, null, 2));
+      } else {
+        printRecordedSessionDetails(summary, savedPath);
+      }
+      process.exit(summary.authenticated ? 0 : 1);
+    } catch (err) {
+      if (options.json) {
+        console.error(JSON.stringify({ ok: false, target: targetUrl, error: err.message }, null, 2));
+      } else {
+        console.error(`❌  Session recording failed: ${err.message}`);
+      }
+      process.exit(1);
+    }
+  }
+
+  // ── Tech stack detection mode (--detect / --fingerprint) ───────────────────
+  if (options.detect) {
+    const [
+      { getScanners },
+      { selectScannersForStack },
+      { TargetPinStore },
+      { createGovernedFetch },
+      { fingerprint },
+      llmMod,
+      aiAdvisorMod
+    ] = await Promise.all([
+      import('../core/registry.js'),
+      import('../core/profiles.js'),
+      import('../core/guard.js'),
+      import('../core/fetch.js'),
+      import('../core/fingerprint.js'),
+      options.aiFix ? import('../core/llmpool.js') : Promise.resolve(null),
+      options.aiFix ? import('../core/ai-advisor.js') : Promise.resolve(null),
+    ]);
+    const scanners = await getScanners();
+    const customHeaders = options.headers && typeof options.headers === 'object' ? options.headers : {};
+    const authHeaders = options.auth ? { Authorization: options.auth } : {};
+    const normalizedScopeRules = options.scopeRules?.length
+      ? (await loadNormalizeScopeRules())(options.scopeRules)
+      : [];
+    const targetPinStore = new TargetPinStore({ allowPrivate });
+    const governedFetch = createGovernedFetch({
+      ...(normalizedScopeRules.length ? { scopeRules: normalizedScopeRules } : {}),
+      ...(options.sourceIp ? { sourceIp: options.sourceIp } : {}),
+      ...(options.sourceIpMap ? { sourceIpMap: options.sourceIpMap } : {}),
+      enforceDnsValidation: true,
+      allowPrivate,
+      targetPinStore,
+      retries: 2,
+      timeout: options.timeout || 10000
     });
-    const advisorPool = options.aiFix ? new LlmPool({ autoDiscoverEnv: true }) : null;
+    try {
+    const baseDetectFetch = (url, opts = {}, ...rest) => governedFetch(url, {
+      ...opts,
+      headers: { ...customHeaders, ...authHeaders, ...(opts?.headers || {}) }
+    }, ...rest);
+    baseDetectFetch.governance = governedFetch.governance;
+    baseDetectFetch.tlsAlpnProbe = governedFetch.tlsAlpnProbe;
+    baseDetectFetch.targetPinStore = governedFetch.targetPinStore;
+    baseDetectFetch.resolveCache = governedFetch.resolveCache;
+    baseDetectFetch.sourceIp = governedFetch.sourceIp;
+    baseDetectFetch.sourceIpMap = governedFetch.sourceIpMap;
+    baseDetectFetch.hasCustomFetcher = governedFetch.hasCustomFetcher;
+    if (governedFetch.isDefaultFetch !== undefined) {
+      baseDetectFetch.isDefaultFetch = governedFetch.isDefaultFetch;
+    }
+    const authMgr = await buildCliAuthManager(validation.targets[0], options, loadedSession);
+    if (authMgr) {
+      const alreadyAuth = Boolean(authMgr.bearerToken || authMgr.cookies.size > 0);
+      const hasCreds = Boolean(authMgr.loginPayload !== null || (authMgr.username !== null && authMgr.password !== null));
+      if (!alreadyAuth && hasCreds) {
+        await authMgr.executeLoginMacro(baseDetectFetch);
+      }
+      if (options.saveSession) {
+        saveRecordedSessionFile(options.saveSession, authMgr);
+      }
+    }
+    const fetchWithRetry = authMgr ? authMgr.wrapFetch(baseDetectFetch) : baseDetectFetch;
+    if (authMgr) {
+      fetchWithRetry.governance = baseDetectFetch.governance;
+      fetchWithRetry.tlsAlpnProbe = baseDetectFetch.tlsAlpnProbe;
+      fetchWithRetry.targetPinStore = baseDetectFetch.targetPinStore;
+      fetchWithRetry.resolveCache = baseDetectFetch.resolveCache;
+      fetchWithRetry.sourceIp = baseDetectFetch.sourceIp;
+      fetchWithRetry.sourceIpMap = baseDetectFetch.sourceIpMap;
+      fetchWithRetry.hasCustomFetcher = baseDetectFetch.hasCustomFetcher;
+      if (baseDetectFetch.isDefaultFetch !== undefined) {
+        fetchWithRetry.isDefaultFetch = baseDetectFetch.isDefaultFetch;
+      }
+    }
+    const advisorPool = options.aiFix && llmMod ? new llmMod.LlmPool({ autoDiscoverEnv: true }) : null;
+    const analyzeApiCommunication = aiAdvisorMod?.analyzeApiCommunication;
     const detectResults = [];
 
     const bar = '─'.repeat(60);
@@ -536,7 +1282,11 @@ if (options.ui) {
     for (const target of validation.targets) {
       if (!options.json) console.log(`\n📡 Target URL: ${target}`);
       try {
-        const preDns = await resolveAndValidateTarget(target, { targetPinStore, allowPrivate });
+        const preDns = await resolveAndValidateTarget(target, {
+          targetPinStore,
+          allowPrivate,
+          ...(options.sourceIp ? { sourceIp: options.sourceIp } : {})
+        });
         if (!preDns.valid) {
           const reason = preDns.reason || preDns.error || 'Target blocked by policy';
           if (options.json) {
@@ -546,13 +1296,35 @@ if (options.ui) {
           }
           continue;
         }
-        const fp = await fingerprint(target, fetchWithRetry);
+        const fp = await fingerprint(target, fetchWithRetry, {
+          allowPrivate,
+          deviceMode,
+          deviceCategory: options.deviceCategory
+        });
+        const effectiveDetectProfile =
+          (!cli.profile || String(options.profile || 'smart').toLowerCase() === 'smart') &&
+          fp.deviceInfo?.basePortClosed &&
+          (fp.deviceInfo?.detected || deviceMode)
+            ? (fp.recommendedProfile || 'device')
+            : (options.profile || 'smart');
         const selection = selectScannersForStack(scanners, {
-          profile: options.profile || 'smart',
+          profile: effectiveDetectProfile,
           fp,
           techOverride: options.techOverride,
           forceAll: options.forceAll
         });
+        if (
+          fp.deviceInfo?.basePortClosed &&
+          (fp.deviceInfo?.detected || deviceMode) &&
+          !fp.deviceInfo?.activeHttpOrigin &&
+          !fp.deviceInfo?.activeHttpsOrigin
+        ) {
+          const skippedHttpChecks = selection.activeScanners.filter(s => s.name !== 'device-security');
+          if (skippedHttpChecks.length > 0) {
+            selection.activeScanners = selection.activeScanners.filter(s => s.name === 'device-security');
+            selection.skippedScanners = [...selection.skippedScanners, ...skippedHttpChecks];
+          }
+        }
 
         let apiAnalysis = null;
         if (options.aiFix && typeof analyzeApiCommunication === 'function') {
@@ -569,7 +1341,11 @@ if (options.ui) {
           detectResults.push({
             target,
             ok: true,
+            deviceMode,
+            allowPrivate,
+            deviceCategory: options.deviceCategory,
             fingerprint: fp,
+            deviceInfo: fp.deviceInfo || null,
             apiCommunication: fp.apiCommunication || null,
             recommendedProfile: fp.recommendedProfile || 'smart',
             activeChecksCount: selection.activeScanners.length,
@@ -585,6 +1361,23 @@ if (options.ui) {
         console.log(`  🏷️  Detected Ecosystem Tags    : ${ecoTags}`);
         console.log(`  🎯 Recommended Profile        : ${fp.recommendedProfile || 'smart'}`);
         console.log(`  🛡️  Relevant Checks Activated  : ${selection.activeScanners.length} active (${selection.skippedScanners.length} skipped)`);
+        if (fp.deviceInfo?.detected) {
+          const dp = fp.deviceInfo;
+          const devDetails = [
+            dp.vendor && dp.vendor !== 'Unknown' ? `Vendor: ${dp.vendor}` : null,
+            dp.modelName ? `Model: ${dp.modelName}` : null,
+            dp.os ? `OS: ${dp.os}` : null,
+            dp.macAddress ? `MAC: ${dp.macAddress}` : null
+          ].filter(Boolean).join(' · ');
+          console.log(`  📺 Device Category           : ${dp.categoryLabel || dp.category || 'Network Device'}${devDetails ? ` (${devDetails})` : ''}`);
+          if (Array.isArray(dp.openPorts) && dp.openPorts.length > 0) {
+            console.log(`  🔌 Open Device Ports         : ${dp.openPorts.join(', ')}${dp.basePortClosed ? ' (base port 80/443 closed)' : ''}`);
+          }
+          const activeOrigins = [dp.activeHttpOrigin, dp.activeHttpsOrigin].filter(Boolean);
+          if (activeOrigins.length > 0) {
+            console.log(`  🌐 Active Device Origins     : ${activeOrigins.join(', ')}`);
+          }
+        }
 
         const apiComm = fp.apiCommunication;
         if (apiComm && apiComm.usesApi) {
@@ -634,7 +1427,11 @@ if (options.ui) {
             ...(single.fingerprint || {}),
             target: single.target,
             ok: Boolean(single.ok),
+            deviceMode,
+            allowPrivate,
+            deviceCategory: options.deviceCategory,
             fingerprint: single.fingerprint || null,
+            deviceInfo: single.deviceInfo || single.fingerprint?.deviceInfo || null,
             apiCommunication: single.apiCommunication || null,
             recommendedProfile: single.recommendedProfile || 'smart',
             activeChecksCount: single.activeChecksCount ?? 0,
@@ -649,9 +1446,38 @@ if (options.ui) {
       console.log(`\n${bar}\n`);
     }
     process.exitCode = 0;
+    } finally {
+      try {
+        governedFetch.destroyAgents?.();
+      } catch {}
+    }
   } else {
     // ── Run ────────────────────────────────────────────────────────────────────
-    runScanner({ ...options, targets: validation.targets, allowPrivate })
+    const [{ runScanner }, authMgr] = await Promise.all([
+      import('../scan.js'),
+      buildCliAuthManager(validation.targets[0], options, loadedSession),
+    ]);
+    await runScanner({
+      ...options,
+      targets: validation.targets,
+      allowPrivate,
+      deviceMode,
+      deviceCategory: options.deviceCategory,
+      oast: Boolean(options.oast),
+      ...(options.templates ? { templates: options.templates } : {}),
+      ...(authMgr ? { authSession: authMgr } : {})
+    })
+      .then(() => {
+        if (authMgr) {
+          if (options.saveSession) {
+            const savedPath = saveRecordedSessionFile(options.saveSession, authMgr);
+            console.log(`💾  Session saved     → ${savedPath}`);
+          }
+          if (options.recordSession) {
+            printRecordedSessionDetails(authMgr.getRecordedSession({ includeSecrets: false }));
+          }
+        }
+      })
       .catch(e => {
         console.error('Fatal:', e.message);
         process.exitCode = 1;

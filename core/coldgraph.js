@@ -1,5 +1,5 @@
 /**
- * Cold-graph compaction (ARTEX hot-set R rounds / K hops).
+ * Cold-graph compaction (SecScan hot-set R rounds / K hops).
  *
  * Hot seeds: `begin`, unresolved `goal`s, active (pending/running) `intent`s, any node
  * touched in the last R rounds, and every `finding`. Every node within K undirected edge

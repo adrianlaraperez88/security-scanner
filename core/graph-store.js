@@ -1,7 +1,7 @@
 /**
  * Embedded Dual-Graph Store (Global Asset Graph + Per-Task Exploration Graph)
  * Backed by Node 24 built-in `node:sqlite` (DatabaseSync) with parameterized prepared statements.
- * Ported from ARTEX db/ subsystem (`assets.go`, `task_scope.go`, `exploration.go`, `coverage_ledger.go`, `lessons.go`).
+ * Ported from SecScan db/ subsystem (`assets.go`, `task_scope.go`, `exploration.go`, `coverage_ledger.go`, `lessons.go`).
  */
 
 import { DatabaseSync } from 'node:sqlite';
@@ -1260,7 +1260,7 @@ export class GraphStore {
   }
 
   /**
-   * Port of ARTEX `declaredScopeFilter` in `db/task_scope.go`:
+   * Port of SecScan `declaredScopeFilter` in `db/task_scope.go`:
    * Filters `task_scope` rules so that `source === 'auto'` rows only count if they
    * fall under a declared (`source !== 'auto'`) domain or IP/CIDR root rule, and
    * evaluates block-first deny rules + allow-whitelist rules against assets.
@@ -2096,7 +2096,7 @@ export class GraphStore {
   }
 
   /**
-   * Exclusive Cascade Delete (port of ARTEX `CancelIntent` in `db/exploration.go`).
+   * Exclusive Cascade Delete (port of SecScan `CancelIntent` in `db/exploration.go`).
    * Cancels/removes `intentNodeId` and cascades deletion ONLY to descendant nodes
    * exclusively reachable from `intentNodeId` (preserving shared facts/findings
    * reachable from other intents or protected begin/goal nodes).

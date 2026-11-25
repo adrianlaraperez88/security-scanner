@@ -54,11 +54,11 @@ describe('F1: CLI Flags, Profiles, Checks & .secscanrc Config', () => {
       assert.match(res.stdout, /\bnextjs-checks\b/);
     });
 
-    test('T1.3 --help exits 0 and prints usage with 18+ profiles', async () => {
+    test('T1.3 --help exits 0 and prints usage with 20+ profiles', async () => {
       const res = await runCli(['--help']);
       assert.equal(res.code, 0, `Expected --help to exit 0, got ${res.code}.\nstdout: ${res.stdout}\nstderr: ${res.stderr}`);
       assert.match(res.stdout, /Usage:\s*secscan/i);
-      assert.match(res.stdout, /18\+?\s+profiles/i);
+      assert.match(res.stdout, /20\+?\s+profiles/i);
     });
 
     test('T1.4 --version exits 0 and reports 2.2.0', async () => {

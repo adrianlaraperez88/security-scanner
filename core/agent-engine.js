@@ -1,5 +1,5 @@
 /**
- * Planner-Worker Agent Engine (port of the ARTEX Goal Decomposer -> Event-Driven Planner ->
+ * Planner-Worker Agent Engine (port of the SecScan Goal Decomposer -> Event-Driven Planner ->
  * Concurrent Worker Pool -> Dual-Graph Write-Back loop).
  *
  * Security notes:

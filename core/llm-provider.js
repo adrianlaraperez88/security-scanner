@@ -1,6 +1,6 @@
 /**
  * Multi-Provider LLM Wire Adapter (`anthropic`, `openai`, `openai-responses`, `ollama`).
- * Implements ARTEX quota-aware HTTP status classification (429 -> 402 hard trip on billing/quota exhaustion),
+ * Implements SecScan quota-aware HTTP status classification (429 -> 402 hard trip on billing/quota exhaustion),
  * secret masking, request formatting, and response normalization.
  */
 

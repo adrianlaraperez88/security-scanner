@@ -13,7 +13,14 @@ import {
   buildClientSarifReport,
   renderApiCommunicationSection,
   renderApiAiOutput,
-  handleScanOriginTrigger
+  handleScanOriginTrigger,
+  normalizeTargetScheme,
+  isBareIpInput,
+  preserveBareIpOrNormalize,
+  normalizeStacksList,
+  renderDeviceInfoHtml,
+  renderMatchedEvidenceHtml,
+  renderScanResults
 } from '../../ui/app.js';
 import {
   renderCveCoveragePanel,
@@ -31,6 +38,7 @@ import {
   getProviderModelHint
 } from '../../ui/components/system-guardrails.js';
 import { evaluateAssetGate } from '../../core/guard.js';
+import { normalizeTargetInput } from '../../core/validator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -605,5 +613,176 @@ describe('UI Components, Accessibility, CSP Hygiene & CVE Coverage (M5)', () => 
     assert.ok(pkg.scripts['docker:up']);
     assert.ok(pkg.scripts['docker:watch']);
     assert.ok(pkg.scripts['ui:watch']);
+  });
+
+  test('M3 UI: normalizeTargetScheme mirrors validator.js for quoted, trailing-backslash, IPv6, localhost & bare domain inputs', () => {
+    assert.equal(normalizeTargetScheme('"192.168.68.53\\"'), 'http://192.168.68.53');
+    assert.equal(normalizeTargetScheme('192.168.68.53"'), 'http://192.168.68.53');
+    assert.equal(normalizeTargetScheme('http://192.168.68.53\\'), 'http://192.168.68.53');
+    assert.equal(normalizeTargetScheme('192.168.1.1:8443'), 'https://192.168.1.1:8443');
+    assert.equal(normalizeTargetScheme('localhost:3000'), 'http://localhost:3000');
+    assert.equal(normalizeTargetScheme('localhost:443'), 'https://localhost:443');
+    assert.equal(normalizeTargetScheme('::1'), 'http://[::1]');
+    assert.equal(normalizeTargetScheme('nas.local\\'), 'https://nas.local');
+    assert.equal(normalizeTargetScheme('nas.local:80'), 'http://nas.local:80');
+    assert.equal(normalizeTargetScheme('192.168.01.1'), 'https://192.168.01.1');
+    assert.equal(normalizeTargetScheme('fe80::1%eth0'), 'http://[fe80::1%eth0]');
+    for (const edge of ['192.168.01.1', 'fe80::1%eth0', 'fe80::1%', 'fe80::1%eth0%1', '192.168.0.1', '::1%lo']) {
+      assert.equal(normalizeTargetScheme(edge), normalizeTargetInput(edge), `Parity failed for ${edge}`);
+    }
+  });
+
+  test('R1 UI: isBareIpInput and preserveBareIpOrNormalize preserve scheme-less port-less IPs on blur/submit', () => {
+    assert.equal(isBareIpInput('104.21.43.139'), true);
+    assert.equal(isBareIpInput('"104.21.43.139\\"'), true);
+    assert.equal(isBareIpInput('::1'), true);
+    assert.equal(isBareIpInput('[::1]'), true);
+    assert.equal(isBareIpInput('104.21.43.139:8080'), false);
+    assert.equal(isBareIpInput('http://104.21.43.139'), false);
+    assert.equal(isBareIpInput('example.com'), false);
+
+    assert.equal(preserveBareIpOrNormalize('104.21.43.139'), '104.21.43.139');
+    assert.equal(preserveBareIpOrNormalize('"104.21.43.139\\"'), '104.21.43.139');
+    assert.equal(preserveBareIpOrNormalize('::1'), '::1');
+    assert.equal(preserveBareIpOrNormalize('104.21.43.139:8443'), 'https://104.21.43.139:8443');
+    assert.equal(preserveBareIpOrNormalize('example.com'), 'https://example.com');
+  });
+
+  test('M3 UI: ui/index.html & ui/app.js expose device preset, Device Category selector, allowPrivate auto-toggle & CSP compliance', () => {
+    const html = fs.readFileSync(path.join(UI_DIR, 'index.html'), 'utf8');
+    assert.match(html, /id="device-category-wrap"/);
+    assert.match(html, /id="opt-device-category"/);
+    assert.match(html, /value="all"/);
+    assert.match(html, /value="smart_tv"/);
+    assert.match(html, /value="ip_camera"/);
+    assert.match(html, /value="pc_workstation"/);
+    assert.match(html, /id="tech-detect-device-row"/);
+    assert.match(html, /id="live-device-summary"/);
+    assert.match(html, /id="results-device-info"/);
+
+    const appJs = fs.readFileSync(path.join(UI_DIR, 'app.js'), 'utf8');
+    assert.match(appJs, /id:\s*'device'/);
+    assert.match(appJs, /allowPrivateEl\.checked\s*=\s*true/);
+    assert.match(appJs, /deviceMode/);
+    assert.match(appJs, /deviceCategory/);
+  });
+
+  test('M3 UI: normalizeStacksList, renderDeviceInfoHtml, and renderMatchedEvidenceHtml handle Array/Object stacks, device badges & XSS escaping', () => {
+    const arrNorm = normalizeStacksList([{ target: 'http://192.168.68.53', primary: 'device' }]);
+    assert.equal(arrNorm.length, 1);
+    assert.equal(arrNorm[0].target, 'http://192.168.68.53');
+
+    const objNorm = normalizeStacksList({
+      'http://192.168.68.53': { primary: 'device', summary: 'Samsung Smart TV' }
+    });
+    assert.equal(objNorm.length, 1);
+    assert.equal(objNorm[0].target, 'http://192.168.68.53');
+    assert.equal(objNorm[0].summary, 'Samsung Smart TV');
+
+    const singleNorm = normalizeStacksList({ primary: 'device', deviceInfo: { detected: true } });
+    assert.equal(singleNorm.length, 1);
+
+    const devHtml = renderDeviceInfoHtml({
+      detected: true,
+      category: 'smart_tv',
+      categoryLabel: 'Smart TV & Streaming Media Device',
+      vendor: 'Samsung <script>x</script>',
+      modelName: 'UN55TU7000',
+      os: 'Tizen 5.5',
+      macAddress: 'AA:BB:CC:DD:EE:FF',
+      openPorts: [8001, 8002],
+      openServices: [{ port: 8001, scheme: 'http', label: 'Samsung TV API' }],
+      basePortClosed: true
+    });
+    assert.match(devHtml, /Smart TV &amp; Streaming Media Device/);
+    assert.match(devHtml, /UN55TU7000/);
+    assert.match(devHtml, /8001\/HTTP/);
+    assert.equal(devHtml.includes('<script>'), false);
+
+    const evHtml = renderMatchedEvidenceHtml({
+      files: [
+        {
+          name: 'Open RTSP Stream',
+          port: 554,
+          scheme: 'rtsp',
+          method: 'RTSP',
+          status: 200,
+          statusTag: 'SUSPICIOUS',
+          matchedSignal: 'RTSP DESCRIBE <img src=x>'
+        }
+      ]
+    });
+    assert.match(evHtml, /SUSPICIOUS/);
+    assert.match(evHtml, /Port 554\/RTSP/);
+    assert.match(evHtml, /\(RTSP\)/);
+    assert.equal(evHtml.includes('(HTTP 200)'), false);
+    assert.equal(evHtml.includes('<img src=x>'), false);
+  });
+
+  test('M3 UI: renderScanResults supports both Array stacks and keyed Object stacks with deviceInfo', () => {
+    const prevDocument = globalThis.document;
+    const makeEl = () => ({
+      classList: {
+        hidden: false,
+        add(c) { if (c === 'hidden') this.hidden = true; },
+        remove(c) { if (c === 'hidden') this.hidden = false; },
+        toggle(c, force) { if (c === 'hidden') this.hidden = Boolean(force); }
+      },
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      value: '',
+      checked: false,
+      querySelectorAll: () => []
+    });
+    const elements = new Map();
+    const getEl = (id) => {
+      if (!elements.has(id)) elements.set(id, makeEl());
+      return elements.get(id);
+    };
+    globalThis.document = {
+      getElementById: getEl,
+      querySelectorAll: () => []
+    };
+
+    try {
+      const sampleDevice = {
+        detected: true,
+        category: 'ip_camera',
+        categoryLabel: 'IP Camera / NVR',
+        vendor: 'Hikvision',
+        modelName: 'DS-2CD2043',
+        openPorts: [80, 554]
+      };
+      renderScanResults({
+        results: [
+          {
+            checkId: 'device-security',
+            name: 'device-security',
+            target: 'http://192.168.1.50',
+            status: 'SUSPICIOUS',
+            severity: 'MEDIUM'
+          }
+        ],
+        risk: { grade: 'B', score: 15, level: 'MEDIUM', summary: 'Camera exposed.' },
+        stacks: {
+          'http://192.168.1.50': {
+            primary: 'device',
+            summary: 'Hikvision IP Camera',
+            detectedTags: ['device', 'ip_camera'],
+            activeChecksCount: 8,
+            skippedChecksCount: 40,
+            deviceInfo: sampleDevice
+          }
+        }
+      });
+
+      assert.equal(getEl('results-stack-card').classList.hidden, false);
+      assert.equal(getEl('results-device-info').classList.hidden, false);
+      assert.match(getEl('results-device-info').innerHTML, /Hikvision/);
+      assert.match(getEl('results-device-info').innerHTML, /DS-2CD2043/);
+    } finally {
+      globalThis.document = prevDocument;
+    }
   });
 });

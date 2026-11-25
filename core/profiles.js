@@ -37,6 +37,16 @@ export const PROFILES = {
     checks: [
       'ssl-tls',
       'system-health',
+      'origin-source-ip',
+      'api-security-spectrum',
+      'bola-mass-assignment',
+      'ssti-check',
+      'cache-poisoning',
+      'http-desync-smuggling',
+      'dom-xss-sinks',
+      'xxe-injection',
+      'crlf-header-injection',
+      'ssrf-surface',
       'cors',
       'security-headers',
       'rate-limit',
@@ -98,6 +108,7 @@ export const PROFILES = {
       'php-info',
       'php-lfi',
       'php-cgi-exposure',
+      'php-session-upload-progress',
       'cve-2024-4577',
       'cve-php-ecosystem',
       'admin-panels',
@@ -394,6 +405,11 @@ export const PROFILES = {
     description: 'System health, telemetry, TLS, headers, and operational stability audit',
     checks: [
       'system-health',
+      'device-security',
+      'os-security',
+      'origin-source-ip',
+      'subdomain-takeover',
+      'iis-shortname',
       'ssl-tls',
       'security-headers',
       'server-disclosure',
@@ -401,6 +417,27 @@ export const PROFILES = {
       'http-methods',
       'http-redirect',
       'api-endpoints',
+      'api-security-spectrum',
+    ]
+  },
+
+  device: {
+    description: 'Smart TV, IP Camera/NVR, PC/Workstation & Network Device audit — non-intrusive multi-port discovery (Samsung Tizen, LG webOS, Roku, Cast, AirPlay, RTSP/ONVIF/Hikvision/Dahua/Axis, SMB/RDP/WinRM/SSH/VNC/CUPS/Docker/Ollama/dev servers, Routers, Printers, NAS)',
+    checks: [
+      'device-security',
+      'os-security',
+      'ssl-tls',
+      'system-health',
+      'origin-source-ip',
+      'security-headers',
+      'server-disclosure',
+      'admin-panels',
+      'api-endpoints',
+      'cors',
+      'http-methods',
+      'http-redirect',
+      'cookie-security',
+      'sensitive-files',
     ]
   },
 
@@ -424,6 +461,7 @@ export const PROFILES = {
       'cve-nextjs-react',
       'ai-llm-exposure',
       'sri-supply-chain',
+      'runtime-sca',
     ]
   },
 
@@ -441,6 +479,7 @@ export const PROFILES = {
       'cve-node-express',
       'ai-llm-exposure',
       'sri-supply-chain',
+      'runtime-sca',
       'jwt-security',
       'rate-limit',
       'api-endpoints',
@@ -507,6 +546,7 @@ export const PROFILES = {
       'cookie-security',
       'clickjacking',
       'http-redirect',
+      'runtime-sca',
     ]
   },
 
@@ -516,12 +556,32 @@ export const PROFILES = {
   }
 };
 
+export const DEVICE_PROFILE_ALIASES = new Set([
+  'tv',
+  'smart-tv',
+  'smart_tv',
+  'iot',
+  'camera',
+  'cam',
+  'nvr',
+  'ip-camera',
+  'ip_camera',
+  'pc',
+  'workstation',
+  'server',
+  'pc-workstation',
+  'pc_workstation',
+  'lan'
+]);
+
 /**
  * Returns the array of allowed check names for a profile,
  * or null if all checks should run (full profile).
  */
 export function getProfileChecks(profileName) {
-  const profile = PROFILES[profileName?.toLowerCase()];
+  const norm = profileName?.toLowerCase();
+  const resolvedName = DEVICE_PROFILE_ALIASES.has(norm) ? 'device' : norm;
+  const profile = PROFILES[resolvedName];
   if (!profile) {
     console.warn(`⚠️  Unknown profile "${profileName}" — defaulting to full`);
     return null;
@@ -594,7 +654,7 @@ export function selectScannersForStack(scanners = [], { profile = 'smart', fp = 
         skippedScanners.push(s);
       } else {
         const sTags = Array.isArray(s.tags) ? s.tags.map(t => String(t).toLowerCase()) : [];
-        if (sTags.includes('all') || sTags.some(t => overrideTags.includes(t))) {
+        if (sTags.includes('all') || sTags.includes('universal') || sTags.some(t => overrideTags.includes(t))) {
           activeScanners.push(s);
         } else {
           skippedScanners.push(s);
@@ -614,7 +674,7 @@ export function selectScannersForStack(scanners = [], { profile = 'smart', fp = 
     if (detectedTags.size > 0) {
       for (const s of scanners) {
         const sTags = Array.isArray(s.tags) ? s.tags.map(t => String(t).toLowerCase()) : [];
-        if (sTags.includes('all') || sTags.some(t => detectedTags.has(t))) {
+        if (sTags.includes('all') || sTags.includes('universal') || sTags.some(t => detectedTags.has(t))) {
           activeScanners.push(s);
         } else {
           skippedScanners.push(s);
@@ -626,7 +686,7 @@ export function selectScannersForStack(scanners = [], { profile = 'smart', fp = 
       } else {
         for (const s of scanners) {
           const sTags = Array.isArray(s.tags) ? s.tags.map(t => String(t).toLowerCase()) : [];
-          if (sTags.includes('all')) {
+          if (sTags.includes('all') || sTags.includes('universal')) {
             activeScanners.push(s);
           } else {
             skippedScanners.push(s);

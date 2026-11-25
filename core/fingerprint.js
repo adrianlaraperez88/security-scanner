@@ -1,11 +1,30 @@
+import net from 'node:net';
 import { DEFAULT_MAX_HTML_BYTES, inspectApiCommunication } from './api-discovery.js';
+import { detectRuntimeScaFindings } from './runtime-sca.js';
+import { scanDeviceTarget, probeSingleTcpPort, normalizeDeviceCategory } from './device-scanner.js';
+import { detectOperatingSystemFromSignals } from './os-scanner.js';
+import { normalizeTargetInput, validateTargetUrl, resolveAndValidateTarget, isPrivateOrReservedIP } from './validator.js';
+import { fetchWithRetry as defaultCoreFetch, runAssetGateCheck } from './fetch.js';
+
+function isPrivateOrLanHost(hostname) {
+  if (typeof hostname !== 'string') return false;
+  const clean = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  if (!clean) return false;
+  if (clean === 'localhost' || clean.endsWith('.local') || clean.endsWith('.localhost')) {
+    return true;
+  }
+  if (net.isIP(clean) !== 0) {
+    return isPrivateOrReservedIP(clean);
+  }
+  return false;
+}
 
 /**
  * Priority Tier definition for technologies.
  * Frameworks are given the highest weight, followed by frontend UI, languages/runtimes, and finally server/infrastructure.
  */
 export const TECH_PRIORITY = {
-  // Tier 1: Frameworks & CMS (Priority 10)
+  // Tier 1: Frameworks, CMS & Smart Devices (Priority 10)
   'laravel': 10,
   'wordpress': 10,
   'django': 10,
@@ -21,6 +40,7 @@ export const TECH_PRIORITY = {
   'aspnet': 10,
   'flask': 10,
   'fastapi': 10,
+  'device': 10,
 
   // Tier 2: Frontend UI & Frameworks (Priority 5)
   'react': 5,
@@ -71,7 +91,8 @@ export const CATEGORY_MAP = {
   apache: 'servers',
   tomcat: 'servers',
   cloudflare: 'servers',
-  varnish: 'servers'
+  varnish: 'servers',
+  device: 'servers'
 };
 
 export const TECH_DISPLAY_NAMES = {
@@ -101,8 +122,34 @@ export const TECH_DISPLAY_NAMES = {
   apache: 'Apache',
   tomcat: 'Apache Tomcat',
   cloudflare: 'Cloudflare',
-  varnish: 'Varnish'
+  varnish: 'Varnish',
+  device: 'Smart TV, Camera, PC & IoT Device'
 };
+
+/**
+ * Returns ecosystem tags associated with a canonical device category.
+ *
+ * @param {string | null | undefined} category
+ * @returns {string[]}
+ */
+export function getDeviceCategoryTags(category) {
+  switch (category) {
+    case 'smart_tv':
+      return ['device', 'tv', 'smart-tv', 'iot'];
+    case 'ip_camera':
+      return ['device', 'camera', 'ip-camera', 'iot'];
+    case 'pc_workstation':
+      return ['device', 'pc', 'workstation', 'server'];
+    case 'router_gateway':
+      return ['device', 'router', 'iot'];
+    case 'printer':
+      return ['device', 'printer', 'iot'];
+    case 'nas_media_server':
+      return ['device', 'nas', 'iot'];
+    default:
+      return ['device', 'iot'];
+  }
+}
 
 /**
  * Expands detected stack items into comprehensive ecosystem tags.
@@ -146,6 +193,40 @@ export function inferEcosystemTags(stackItems = []) {
     tags.add('java');
   }
 
+  if (tags.has('smart_tv') || tags.has('smart-tv') || tags.has('tv')) {
+    tags.add('device');
+    tags.add('tv');
+    tags.add('smart-tv');
+    tags.add('iot');
+  }
+
+  if (tags.has('ip_camera') || tags.has('ip-camera') || tags.has('camera') || tags.has('nvr')) {
+    tags.add('device');
+    tags.add('camera');
+    tags.add('ip-camera');
+    tags.add('iot');
+  }
+
+  if (tags.has('pc_workstation') || tags.has('pc-workstation') || tags.has('pc') || tags.has('workstation') || tags.has('server')) {
+    tags.add('device');
+    tags.add('pc');
+    tags.add('workstation');
+    tags.add('server');
+  }
+
+  if (tags.has('device') || tags.has('iot') || tags.has('router') || tags.has('printer') || tags.has('nas')) {
+    tags.add('device');
+    if (
+      !tags.has('camera') &&
+      !tags.has('pc') &&
+      !tags.has('workstation') &&
+      !tags.has('server') &&
+      !tags.has('tv')
+    ) {
+      tags.add('iot');
+    }
+  }
+
   return Array.from(tags);
 }
 
@@ -182,6 +263,20 @@ export function recommendProfileForStack(primary, detectedTags = []) {
       case 'angular': return 'frontend';
       case 'nginx': return 'nginx';
       case 'apache': return 'apache';
+      case 'device':
+      case 'tv':
+      case 'smart-tv':
+      case 'smart_tv':
+      case 'camera':
+      case 'ip-camera':
+      case 'ip_camera':
+      case 'nvr':
+      case 'pc':
+      case 'workstation':
+      case 'server':
+      case 'pc-workstation':
+      case 'pc_workstation':
+      case 'iot': return 'device';
       default: return null;
     }
   };
@@ -191,6 +286,8 @@ export function recommendProfileForStack(primary, detectedTags = []) {
 
   const tags = new Set(Array.isArray(detectedTags) ? detectedTags : []);
   const priorityOrder = [
+    'device', 'tv', 'smart-tv', 'smart_tv', 'camera', 'ip-camera', 'ip_camera', 'nvr',
+    'pc', 'workstation', 'server', 'pc-workstation', 'pc_workstation', 'iot',
     'laravel', 'wordpress', 'drupal', 'magento', 'symfony', 'codeigniter',
     'joomla', 'nextjs', 'express', 'django', 'flask', 'fastapi', 'spring',
     'tomcat', 'react', 'vue', 'angular', 'php', 'node', 'python', 'java', 'nginx', 'apache'
@@ -206,11 +303,124 @@ export function recommendProfileForStack(primary, detectedTags = []) {
 }
 
 export async function fingerprint(target, fetchWithRetry, options = {}) {
-  let res;
-
+  const normalizedTarget = (typeof target === 'string' ? normalizeTargetInput(target) : null) || String(target || '').trim();
+  let parsedUrl = null;
   try {
-    res = await fetchWithRetry(target, { maxBytes: DEFAULT_MAX_HTML_BYTES });
-  } catch (e) {
+    parsedUrl = new URL(normalizedTarget);
+  } catch {
+    parsedUrl = null;
+  }
+
+  const hostname = parsedUrl ? parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '') : '';
+  const isLiteralIp = Boolean(hostname && net.isIP(hostname) !== 0);
+  const isPrivateLanTarget = isPrivateOrLanHost(hostname);
+  const explicitPort = parsedUrl?.port ? Number(parsedUrl.port) : null;
+  const basePort = explicitPort || (parsedUrl?.protocol === 'https:' ? 443 : 80);
+
+  const boundGovernance = fetchWithRetry?.governance || null;
+  const allowPrivate = Boolean(boundGovernance?.allowPrivate ?? options.allowPrivate);
+  const deviceMode = Boolean(options.deviceMode);
+  const deviceCategory = normalizeDeviceCategory(options.deviceCategory);
+
+  const hasCustomProbe = typeof options.tcpProbe === 'function' || typeof options.portProbe === 'function';
+  const isLiveNetworkFetcher =
+    fetchWithRetry === defaultCoreFetch ||
+    Boolean(fetchWithRetry?.isDefaultFetch) ||
+    (Boolean(boundGovernance) && !fetchWithRetry?.hasCustomFetcher);
+
+  const deviceScanOptions = {
+    ...options,
+    allowPrivate,
+    deviceMode,
+    deviceCategory,
+    quickFingerprint: true,
+    ...(!isLiveNetworkFetcher && !hasCustomProbe && options.multiPort === undefined ? { multiPort: false } : {})
+  };
+
+  const buildDeviceOnlyResult = (dp) => ({
+    primary: 'device',
+    confidence: 10,
+    stack: [{ tech: 'device', score: 10, rank: 100 }],
+    detectedTags: getDeviceCategoryTags(dp.category),
+    recommendedProfile: 'device',
+    categories: { frameworks: [], frontend: [], runtimes: [], servers: ['device'] },
+    summary: dp.summary || 'Smart TV, Camera, PC & IoT Device',
+    apiCommunication: null,
+    runtimeSca: null,
+    deviceInfo: dp,
+    osInfo: detectOperatingSystemFromSignals({
+      deviceInfo: dp,
+      openPorts: dp?.openPorts,
+      openServices: dp?.openServices
+    })
+  });
+
+  // Fast TCP pre-check on basePort when scanning literal IPs/device targets (or when tcpProbe is supplied)
+  // so closed/filtered ports 80/443 never stall root fetchWithRetry for 30s+.
+  // For non-literal hostnames with live/governed fetchers, enforce DNS SSRF validation BEFORE any socket probe.
+  let basePortClosedPrecheck = false;
+  let dnsGovernanceBlocked = false;
+  let pinnedPrecheckHost = hostname;
+  if (parsedUrl && validateTargetUrl(normalizedTarget, { allowPrivate }).valid) {
+    const preDnsGate = runAssetGateCheck(normalizedTarget, {
+      guard: boundGovernance?.guard,
+      scopeRules: boundGovernance?.scopeRules,
+      alwaysBuiltin: true
+    });
+    if (preDnsGate && preDnsGate.allowed === false) {
+      dnsGovernanceBlocked = true;
+    } else {
+      const customProbe = typeof options.tcpProbe === 'function'
+        ? options.tcpProbe
+        : (typeof options.portProbe === 'function' ? options.portProbe : null);
+      const shouldCheckDnsBeforePrecheck =
+        !isLiteralIp && (isLiveNetworkFetcher || Boolean(boundGovernance?.dnsResolver));
+      if (shouldCheckDnsBeforePrecheck) {
+        const activeDnsResolver = boundGovernance ? boundGovernance.dnsResolver : (options.dnsResolver ?? null);
+        const dnsCheck = await resolveAndValidateTarget(normalizedTarget, {
+          allowPrivate,
+          resolver: activeDnsResolver,
+          resolveCache: boundGovernance?.resolveCache ?? null,
+          targetPinStore: boundGovernance?.targetPinStore ?? null,
+          sourceIp: boundGovernance?.sourceIp ?? null,
+          sourceIpMap: boundGovernance?.sourceIpMap ?? null
+        });
+        if (!dnsCheck.valid) {
+          dnsGovernanceBlocked = true;
+        } else {
+          if ((boundGovernance?.guard || boundGovernance?.scopeRules) && Array.isArray(dnsCheck.resolvedIps) && dnsCheck.resolvedIps.length > 0) {
+            const postDnsGate = runAssetGateCheck(
+              { url: normalizedTarget, hostname, resolvedIps: dnsCheck.resolvedIps },
+              { guard: boundGovernance?.guard, scopeRules: boundGovernance?.scopeRules }
+            );
+            if (postDnsGate && postDnsGate.allowed === false) {
+              dnsGovernanceBlocked = true;
+            }
+          }
+          if (!dnsGovernanceBlocked && dnsCheck.primaryIp) {
+            pinnedPrecheckHost = dnsCheck.primaryIp;
+          }
+        }
+      }
+
+      if (!dnsGovernanceBlocked && (deviceMode || isPrivateLanTarget || options.multiPort === true)) {
+        if (customProbe) {
+          try {
+            const pre = await customProbe(hostname, basePort, { timeoutMs: Math.min(Number(options.portTimeoutMs) || 700, 1200) });
+            const isOpen = typeof pre === 'boolean' ? pre : Boolean(pre && pre.open);
+            if (!isOpen) basePortClosedPrecheck = true;
+          } catch {}
+        } else if (isLiveNetworkFetcher) {
+          try {
+            const pre = await probeSingleTcpPort(pinnedPrecheckHost, basePort, { timeoutMs: Math.min(Number(options.portTimeoutMs) || 700, 1200) });
+            if (!pre.open) basePortClosedPrecheck = true;
+          } catch {}
+        }
+      }
+    }
+  }
+
+  if (dnsGovernanceBlocked) {
     return {
       primary: 'unknown',
       confidence: 0,
@@ -219,11 +429,95 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
       recommendedProfile: 'smart',
       categories: { frameworks: [], frontend: [], runtimes: [], servers: [] },
       summary: 'Unreachable or Unknown',
-      apiCommunication: null
+      apiCommunication: null,
+      runtimeSca: null
     };
   }
 
-  const base = target.replace(/\/+$/, '');
+  if (basePortClosedPrecheck) {
+    if (options.deviceDiscovery !== false && (deviceMode || isPrivateLanTarget || options.multiPort === true)) {
+      try {
+        const devRes = await scanDeviceTarget(normalizedTarget, fetchWithRetry, deviceScanOptions);
+        if (devRes?.ok && devRes.deviceProfile?.detected) {
+          return buildDeviceOnlyResult(devRes.deviceProfile);
+        }
+      } catch {
+        // Ignore device fallback error
+      }
+    }
+    return {
+      primary: 'unknown',
+      confidence: 0,
+      stack: [],
+      detectedTags: [],
+      recommendedProfile: 'smart',
+      categories: { frameworks: [], frontend: [], runtimes: [], servers: [] },
+      summary: 'Unreachable or Unknown',
+      apiCommunication: null,
+      runtimeSca: null,
+      deviceInfo: {
+        detected: false,
+        host: hostname,
+        basePortClosed: true,
+        openPorts: [],
+        openServices: [],
+        activeHttpOrigin: null,
+        activeHttpsOrigin: null
+      }
+    };
+  }
+
+  let res;
+  const fastTimeout = Number.isFinite(Number(options.rootTimeoutMs ?? options.probeTimeoutMs)) && Number(options.rootTimeoutMs ?? options.probeTimeoutMs) > 0
+    ? Number(options.rootTimeoutMs ?? options.probeTimeoutMs)
+    : ((deviceMode || isPrivateLanTarget || allowPrivate) ? 2000 : 10000);
+
+  try {
+    res = await fetchWithRetry(
+      normalizedTarget,
+      {
+        maxBytes: DEFAULT_MAX_HTML_BYTES,
+        retries: 0,
+        failFast: true,
+        ...((deviceMode || isPrivateLanTarget || allowPrivate) ? { timeout: fastTimeout, allowPrivate } : {})
+      },
+      0,
+      fastTimeout
+    );
+  } catch (e) {
+    // When base HTTP/HTTPS port (e.g. port 80 on a Smart TV or IoT device like 192.168.68.53) is closed,
+    // fall back to multi-port device discovery if permitted (never when blocked by governance/SSRF policy).
+    const isGovBlock =
+      dnsGovernanceBlocked ||
+      Boolean(e?.isGovernanceBlock) ||
+      e?.code === 'SSRF_POLICY_BLOCKED' ||
+      e?.code === 'DNS_REBIND_OR_PRIVATE_IP' ||
+      e?.code === 'TARGET_RULE_BLOCKED';
+    if (!isGovBlock && options.deviceDiscovery !== false && (deviceMode || isPrivateLanTarget || options.multiPort === true)) {
+      try {
+        const devRes = await scanDeviceTarget(normalizedTarget, fetchWithRetry, deviceScanOptions);
+        if (devRes?.ok && devRes.deviceProfile?.detected) {
+          return buildDeviceOnlyResult(devRes.deviceProfile);
+        }
+      } catch {
+        // Ignore device fallback error
+      }
+    }
+
+    return {
+      primary: 'unknown',
+      confidence: 0,
+      stack: [],
+      detectedTags: [],
+      recommendedProfile: 'smart',
+      categories: { frameworks: [], frontend: [], runtimes: [], servers: [] },
+      summary: 'Unreachable or Unknown',
+      apiCommunication: null,
+      runtimeSca: null
+    };
+  }
+
+  const base = normalizedTarget.replace(/\/+$/, '');
   const html = (res.text || '').toLowerCase();
   const rawHeaders = res.headers || {};
   const h = {};
@@ -479,9 +773,57 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
   if (via.includes('varnish')) varnish += 2;
   if (varnish) boost('varnish', varnish);
 
+  // ── Smart TV, IP Camera, PC/Workstation & IoT Devices ─────────────────────
+  let deviceScore = 0;
+  let customDeviceSummary = null;
+  if (html.includes('"samsung smarttv"') || html.includes('"tokenauthsupport"') || html.includes('"frametvsupport"')) {
+    deviceScore += 8;
+    customDeviceSummary = 'Samsung Smart TV (Tizen)';
+  } else if (html.includes('"cast_build_revision"') || html.includes('"ssdp_udn"') || html.includes('"hotspot_bssid"')) {
+    deviceScore += 8;
+    customDeviceSummary = 'Google TV / Android TV / Chromecast';
+  } else if (html.includes('<device-info>') && (html.includes('<wifi-mac>') || html.includes('<vendor-name>roku') || html.includes('<serial-number>'))) {
+    deviceScore += 8;
+    customDeviceSummary = 'Roku TV / Roku Streaming Device';
+  } else if (html.includes('urn:schemas-upnp-org:device:') || html.includes('urn:samsung.com:device:') || html.includes('urn:dial-multiscreen-org:')) {
+    deviceScore += 7;
+    customDeviceSummary = 'UPnP / DLNA Media Device';
+  } else if (server.includes('airtunes') || server.includes('airplay')) {
+    deviceScore += 7;
+    customDeviceSummary = 'Apple AirPlay / AirTunes Receiver';
+  } else if (server.includes('tizen') || server.includes('webos')) {
+    deviceScore += 7;
+    customDeviceSummary = server.includes('tizen') ? 'Samsung Smart TV (Tizen)' : 'LG webOS Smart TV';
+  } else if (html.includes('"statusprm"') && html.includes('"statusfwr"')) {
+    deviceScore += 7;
+    customDeviceSummary = 'Tasmota Smart Home IoT Device';
+  } else if (
+    server.includes('app-webs') ||
+    server.includes('dnvrs-webs') ||
+    server.includes('dvrdvs-webs') ||
+    server.includes('hikvision') ||
+    html.includes('doc/page/login.asp') ||
+    html.includes('rpc2_login') ||
+    html.includes('/axis-cgi/') ||
+    html.includes('onvif')
+  ) {
+    deviceScore += 7;
+    customDeviceSummary = 'IP Camera / NVR Surveillance Appliance';
+  } else if (server.includes('cups') || html.includes('<title>home - cups') || html.includes('<title>printers - cups') || html.includes('cups.org')) {
+    deviceScore += 6;
+    customDeviceSummary = 'CUPS / IPP Print Server';
+  } else if (html.includes('ollama is running')) {
+    deviceScore += 7;
+    customDeviceSummary = 'Ollama Local LLM Server';
+  }
+  if (deviceScore) boost('device', deviceScore);
+
   // ── Client-Side API Communication & Bundle Inspection ────────────────────
+  const initialSeenBundleUrls = options.seenBundleUrls instanceof Set
+    ? new Set(options.seenBundleUrls)
+    : undefined;
   let apiCommunication = null;
-  if (options.apiDiscovery !== false) {
+  if (options.apiDiscovery !== false && !deviceMode && !deviceScore) {
     try {
       apiCommunication = await inspectApiCommunication(base, fetchWithRetry, {
         rootResponse: res,
@@ -505,10 +847,27 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
     }
   }
 
+  let runtimeSca = null;
+  if (options.scaDiscovery !== false && !deviceMode && !deviceScore) {
+    try {
+      const scaSeen = initialSeenBundleUrls instanceof Set ? initialSeenBundleUrls : options.seenBundleUrls;
+      runtimeSca = await detectRuntimeScaFindings(base, fetchWithRetry, {
+        rootResponse: res,
+        seenBundleUrls: scaSeen,
+        maxBundles: 2
+      });
+      if (scaSeen instanceof Set && options.seenBundleUrls instanceof Set && scaSeen !== options.seenBundleUrls) {
+        for (const u of scaSeen) options.seenBundleUrls.add(u);
+      }
+    } catch {
+      runtimeSca = null;
+    }
+  }
+
   // ── Lightweight Secondary Fallback Probes (When Homepage Signal is Ambiguous) ──
   const hasHighTier = stack.some(item => (TECH_PRIORITY[item.tech] ?? 1) >= 5 && item.score > 0);
 
-  if (options.deepProbe !== false && !hasHighTier) {
+  if (options.deepProbe !== false && !hasHighTier && !deviceMode && !deviceScore && Number(res?.status) !== 401) {
 
     // Probe 1: /robots.txt
     try {
@@ -590,10 +949,44 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
     .filter(item => item.score > 0)
     .sort((a, b) => b.rank - a.rank);
 
-  const primary = rankedStack[0]?.tech || 'unknown';
-  const confidence = rankedStack[0]?.score || 0;
-  const detectedTags = inferEcosystemTags(rankedStack);
-  const recommendedProfile = recommendProfileForStack(primary, detectedTags);
+  const hasStrongWebStack = rankedStack.some(item => item.tech !== 'device' && (TECH_PRIORITY[item.tech] ?? 1) >= 3 && item.score > 0);
+  const rootStatus = Number(res?.status || 0);
+  const isGenericOrAuth = rootStatus === 401 || rootStatus === 403 || rootStatus === 404 || !hasStrongWebStack || deviceScore > 0;
+
+  let deviceInfo = null;
+  if (options.deviceDiscovery !== false && (deviceMode || (isPrivateLanTarget && isGenericOrAuth))) {
+    try {
+      const devRes = await scanDeviceTarget(normalizedTarget, fetchWithRetry, deviceScanOptions);
+      if (devRes?.ok && devRes.deviceProfile?.detected) {
+        deviceInfo = devRes.deviceProfile;
+      }
+    } catch {
+      deviceInfo = null;
+    }
+  }
+
+  let primary = rankedStack[0]?.tech || 'unknown';
+  let confidence = rankedStack[0]?.score || 0;
+  let detectedTags = inferEcosystemTags(rankedStack);
+  let recommendedProfile = recommendProfileForStack(primary, detectedTags);
+
+  const allowDevicePromotion = Boolean(
+    deviceInfo &&
+    (deviceMode || isPrivateLanTarget || deviceInfo.category !== 'device_web')
+  );
+  if (deviceInfo && allowDevicePromotion) {
+    const devTags = getDeviceCategoryTags(deviceInfo.category);
+    detectedTags = Array.from(new Set([...detectedTags, ...devTags]));
+    if (!rankedStack.some(s => s.tech === 'device')) {
+      rankedStack.push({ tech: 'device', score: 10, rank: 100 });
+      rankedStack.sort((a, b) => b.rank - a.rank);
+    }
+    if (deviceMode || !hasStrongWebStack) {
+      primary = 'device';
+      confidence = Math.max(confidence, 10);
+      recommendedProfile = 'device';
+    }
+  }
 
   const categories = {
     frameworks: [],
@@ -616,9 +1009,21 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
     ...categories.servers
   ];
 
-  const summary = allTechs.length === 0
-    ? 'Generic Web Application'
-    : allTechs.map(t => TECH_DISPLAY_NAMES[t] || (t.charAt(0).toUpperCase() + t.slice(1))).join(', ');
+  const summary = deviceInfo && allowDevicePromotion && (deviceMode || !hasStrongWebStack)
+    ? (deviceInfo.summary || customDeviceSummary || 'Smart TV, Camera, PC & IoT Device')
+    : customDeviceSummary && primary === 'device'
+      ? customDeviceSummary
+      : allTechs.length === 0
+        ? 'Generic Web Application'
+        : allTechs.map(t => TECH_DISPLAY_NAMES[t] || (t.charAt(0).toUpperCase() + t.slice(1))).join(', ');
+
+  const osInfo = detectOperatingSystemFromSignals({
+    headers: rawHeaders,
+    html: res.text || '',
+    deviceInfo,
+    openPorts: deviceInfo?.openPorts,
+    openServices: deviceInfo?.openServices
+  });
 
   return {
     primary,
@@ -628,6 +1033,9 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
     recommendedProfile,
     categories,
     summary,
-    apiCommunication
+    apiCommunication,
+    runtimeSca,
+    osInfo,
+    ...(deviceInfo ? { deviceInfo } : {})
   };
 }

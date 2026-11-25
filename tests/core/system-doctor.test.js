@@ -63,8 +63,8 @@ test('system-doctor: runSystemDoctor returns structured health metrics and masks
     assert.ok(doc.ai.providers.includes('gemini'));
     assert.equal(doc.ai.activeProfilesCount, 1);
 
-    // Checks count (68 scanners)
-    assert.equal(doc.checks.count, 68);
+    // Checks count (84 scanners)
+    assert.equal(doc.checks.count, 84);
     assert.equal(doc.checks.available, true);
     assert.ok(doc.checks.scanners.includes('system-health'));
     assert.ok(doc.checks.scanners.includes('api-communication'));

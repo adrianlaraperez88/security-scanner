@@ -30,6 +30,8 @@ const CONFIG_FILE = '.secscanrc';
  *   markdown     boolean|string — save Markdown report (default: false)
  *   csv          boolean|string — save CSV report (default: false)
  *   allowPrivate boolean  — allow private/internal targets (default: false)
+ *   deviceMode   boolean  — enable LAN device discovery mode (default: false)
+ *   deviceCategory string — device category filter: all|smart_tv|ip_camera|pc_workstation
  */
 export function loadConfig() {
   const configPath = path.join(process.cwd(), CONFIG_FILE);
@@ -74,7 +76,9 @@ export function mergeConfig(cliOptions = {}, config = {}) {
     agent       : Boolean(cliOptions.agent || config.agent),
     goal        : cliOptions.goal        ?? config.goal        ?? null,
     noiseProfile: cliOptions.noiseProfile ?? config.noiseProfile ?? null,
-    scopeRules  : cliOptions.scopeRules?.length ? cliOptions.scopeRules : (config.scopeRules ?? null),
-    allowPrivate: Boolean(cliOptions.allowPrivate || config.allowPrivate),
+    scopeRules    : cliOptions.scopeRules?.length ? cliOptions.scopeRules : (config.scopeRules ?? null),
+    allowPrivate  : Boolean(cliOptions.allowPrivate || config.allowPrivate),
+    deviceMode    : Boolean(cliOptions.deviceMode || cliOptions.device || config.deviceMode || config.device),
+    deviceCategory: cliOptions.deviceCategory ?? config.deviceCategory ?? null,
   };
 }

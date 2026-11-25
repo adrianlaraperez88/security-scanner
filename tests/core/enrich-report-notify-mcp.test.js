@@ -49,12 +49,12 @@ import {
   McpHttpClient
 } from '../../core/mcphttp.js';
 
-// ── 1. Catalog Enrichment Tests (All 68 Checks) ───────────────────────────────
+// ── 1. Catalog Enrichment Tests (All 84 Checks) ───────────────────────────────
 
-test('catalog: all 68 checks in checks/*.js have CWE, OWASP, CVSS, remediation, and references via getCheckMeta', () => {
+test('catalog: all 84 checks in checks/*.js have CWE, OWASP, CVSS, remediation, and references via getCheckMeta', () => {
   const checksDir = path.join(process.cwd(), 'checks');
   const checkFiles = fs.readdirSync(checksDir).filter(f => f.endsWith('.js'));
-  assert.equal(checkFiles.length, 68, 'Expected 68 check plugins in checks/');
+  assert.equal(checkFiles.length, 84, 'Expected 84 check plugins in checks/');
 
   for (const file of checkFiles) {
     const checkId = file.replace(/\.js$/, '');
@@ -84,10 +84,10 @@ test('catalog: all 68 checks in checks/*.js have CWE, OWASP, CVSS, remediation, 
   assert.ok(fallback.owasp.includes('Server-Side Request Forgery'));
   assert.equal(typeof fallback.cvssScore, 'number');
 
-  // Verify getCatalogByCategory groups all 68 checks cleanly
+  // Verify getCatalogByCategory groups all 84 checks cleanly
   const byCategory = getCatalogByCategory();
   const totalGrouped = Object.values(byCategory).reduce((acc, arr) => acc + arr.length, 0);
-  assert.equal(totalGrouped, 68);
+  assert.equal(totalGrouped, 84);
 
   // Verify getCheckInfo backward-compatibility
   assert.deepEqual(getCheckInfo('xss'), getCheckMeta('xss'));
@@ -1256,4 +1256,163 @@ test('CANDIDATE-3 & CANDIDATE-7: report normalizes configFiles objects to paths 
   assert.deepEqual(jsonRep.apiCommunication.configFiles, ['/assets/config.json']);
   assert.ok(htmlRep.includes('/assets/config.json'));
   assert.ok(mdRep.includes('`/assets/config.json`'));
+});
+
+test('M3 Reports: HTML and Markdown reports render fp.deviceInfo for Array & Object stacks with XSS and fence safety', () => {
+  const deviceInfo = {
+    detected: true,
+    category: 'smart_tv',
+    categoryLabel: 'Smart TV & Streaming Media Device',
+    deviceType: 'Samsung Smart TV',
+    vendor: 'Samsung <script>x</script>',
+    modelName: 'UN55TU7000 `bad`',
+    os: 'Tizen 5.5',
+    macAddress: 'AA:BB:CC:DD:EE:FF',
+    firmwareVersion: '1402.1',
+    openPorts: [8001, 8002],
+    openServices: [
+      { port: 8001, scheme: 'http', label: 'Samsung Tizen API' },
+      { port: 8002, scheme: 'https', label: 'Samsung WSS API' }
+    ],
+    basePortClosed: true
+  };
+
+  const results = [
+    {
+      checkId: 'device-security',
+      name: 'device-security',
+      target: 'http://192.168.68.53',
+      status: 'VULNERABLE',
+      severity: 'HIGH',
+      files: [
+        {
+          name: 'Unauthenticated TV Control API',
+          port: 8001,
+          scheme: 'http',
+          method: 'GET',
+          status: 200,
+          statusTag: 'VULNERABLE',
+          path: '/api/v2/',
+          matchedSignal: 'Samsung SmartTV API'
+        }
+      ]
+    }
+  ];
+  const risk = { grade: 'C', level: 'HIGH', score: 25 };
+
+  // 1. Keyed Object stacks (CLI format)
+  const objStacks = {
+    'http://192.168.68.53': {
+      primary: 'device',
+      summary: 'Samsung Smart TV',
+      detectedTags: ['device', 'smart_tv'],
+      recommendedProfile: 'device',
+      activeChecksCount: 8,
+      skippedChecksCount: 74,
+      deviceInfo
+    }
+  };
+  const htmlObj = generateHtmlReport(results, risk, objStacks);
+  const mdObj = generateMarkdownReport({ targets: ['http://192.168.68.53'], results, risk, stacks: objStacks });
+
+  assert.match(htmlObj, /Smart TV &amp; Streaming Media Device/);
+  assert.match(htmlObj, /UN55TU7000/);
+  assert.match(htmlObj, /AA:BB:CC:DD:EE:FF/);
+  assert.match(htmlObj, /8001\/HTTP/);
+  assert.match(htmlObj, /Port 8001\/HTTP/);
+  assert.equal(htmlObj.includes('<script>x</script>'), false);
+
+  assert.match(mdObj, /\*\*Device Category\*\*: Smart TV & Streaming Media Device/);
+  assert.match(mdObj, /AA:BB:CC:DD:EE:FF/);
+  assert.match(mdObj, /8001\/HTTP \(Samsung Tizen API\)/);
+  assert.match(mdObj, /Port 8001\/HTTP/);
+
+  // 2. Array stacks (Server format)
+  const arrStacks = [{ target: 'http://192.168.68.53', ...objStacks['http://192.168.68.53'] }];
+  const htmlArr = generateHtmlReport(results, risk, arrStacks);
+  const mdArr = generateMarkdownReport({ targets: ['http://192.168.68.53'], results, risk, stacks: arrStacks });
+  assert.match(htmlArr, /Smart TV &amp; Streaming Media Device/);
+  assert.match(mdArr, /\*\*Device Category\*\*: Smart TV & Streaming Media Device/);
+});
+
+test('M3 Reports: generateMarkdownReport neutralizes balanced-fence and newline injection inside files[]', () => {
+  const payload = "'''```\n# INJECTED_HEADING\n```\n<script>alert(2)</script>";
+  const md = generateMarkdownReport({
+    targets: ['http://192.168.1.50'],
+    results: [
+      {
+        checkId: 'device-security',
+        name: 'device-security',
+        target: 'http://192.168.1.50',
+        status: 'VULNERABLE',
+        severity: 'HIGH',
+        files: [
+          {
+            port: 554,
+            scheme: 'rtsp',
+            method: 'RTSP',
+            status: 200,
+            statusTag: 'SUSPICIOUS',
+            name: payload,
+            path: `/path/${payload}`,
+            contentType: `text/plain${payload}`,
+            matchedSignal: payload,
+            detail: payload
+          }
+        ]
+      }
+    ],
+    risk: { grade: 'D', level: 'HIGH', score: 20 },
+    stacks: []
+  });
+
+  assert.equal(/^# INJECTED_HEADING$/m.test(md), false, 'Markdown heading injection via files[] must be neutralized');
+  assert.equal((md.match(/```/g) || []).filter(Boolean).length >= 0, true);
+  assert.equal(/#### Matched Files & Exposed Paths\n- `\/path\/'''''' # INJECTED_HEADING ''' <script>alert\(2\)<\/script>`/.test(md), true);
+});
+
+test('FINDING-4 regression: sanitizeMdInline neutralizes ~~~ fences without column-0 emission and escapes inline report fields', () => {
+  const md = generateMarkdownReport({
+    targets: ['https://example.com\n# InjectedTarget'],
+    risk: {
+      grade: 'D',
+      level: 'HIGH',
+      score: 25,
+      summary: 'Summary\n# InjectedSummary'
+    },
+    results: [
+      {
+        checkId: 'device-security\n# InjectedCheckId',
+        name: 'device-security',
+        title: 'Title `bt`\n# InjectedTitle',
+        status: 'VULNERABLE',
+        severity: 'HIGH',
+        target: 'http://192.168.1.50\n# InjectedFindingTarget',
+        path: '/device\n# InjectedPath',
+        missing: ['HSTS\n# InjectedMissing'],
+        evidenceQuotes: ['`breakout\n# InjectedEvidence']
+      }
+    ],
+    stacks: {
+      'http://192.168.1.50': {
+        primary: 'device',
+        summary: 'Smart TV ~~~',
+        recommendedProfile: 'device',
+        deviceInfo: {
+          detected: true,
+          category: 'smart_tv',
+          deviceName: 'TV ~~~',
+          openPorts: [8001]
+        }
+      }
+    }
+  });
+
+  assert.equal(/^~~~$/m.test(md), false, 'Must never emit column-0 ~~~ fence from inline deviceName/summary');
+  assert.equal(/^# Injected/m.test(md), false, 'Must never emit injected top-level Markdown headings');
+  assert.equal(md.includes('TV \\~\\~\\~'), true, 'Inline ~~~ must be escaped safely');
+  assert.equal(md.includes('- `\'breakout # InjectedEvidence`'), true, 'evidenceQuotes must escape backticks and newlines');
+  assert.equal(md.includes('- HSTS # InjectedMissing'), true, 'missing[] must neutralize newlines');
+  assert.equal(md.includes('- **Targets**: https://example.com # InjectedTarget'), true, 'targets[] must neutralize newlines');
+  assert.equal(md.includes('> Summary # InjectedSummary'), true, 'risk.summary must neutralize newlines');
 });

@@ -6,6 +6,22 @@
  *  - Verbatim single-line evidence snippet extraction (>= 8 chars for S1 receipts)
  */
 
+import {
+  computeStructuralSimilarity,
+  isSoft404Response,
+  verifyDifferentialProbe,
+  ensureVerbatimEvidenceQuotes,
+  classifyFindingConfidence
+} from './fp-engine.js';
+
+export {
+  computeStructuralSimilarity,
+  isSoft404Response,
+  verifyDifferentialProbe,
+  ensureVerbatimEvidenceQuotes,
+  classifyFindingConfidence
+};
+
 /**
  * Case-insensitive header lookup supporting both Fetch Headers and plain objects.
  *
@@ -240,9 +256,20 @@ const PASSIVE_ROOT_HEADER_CHECK_IDS = new Set([
   'cve-apache-httpd',
   'cve-tomcat',
   'cve-php-ecosystem',
+  'php-session-upload-progress',
+  'php session.upload_progress lfi-to-rce & serializer mismatch (cve-2026-109618 / cve-2026-109619)',
+  'origin-source-ip',
+  'direct source-ip / origin-ip http exposure & cdn/waf bypass',
   'cve-2026-114938',
   'cve-jdk-advisories',
   'jdk & java security advisories (cve-2026-91403, cve-2026-114820, cve-2026-114939, cve-2026-114940, cve-2026-22016, cve-2026-34282, cve-2026-47063, cve-2026-91398, cve-2026-91453)'
+]);
+
+const STATUS_404_VALID_CHECK_IDS = new Set([
+  'subdomain-takeover',
+  'subdomain takeover & dangling cname cloud resource detection',
+  'iis-shortname',
+  'microsoft iis 8.3 shortname (~1) enumeration & asp.net diagnostic exposure'
 ]);
 
 function isDjangoDebug404Finding(finding) {
@@ -262,6 +289,55 @@ function sameEndpointPathname(urlA, urlB) {
   }
 }
 
+const NON_HTTP_METHODS = new Set(['TCP', 'UDP', 'RTSP']);
+const NON_HTTP_SCHEME_RE = /^(?:tcp|udp|rtsp|rtsps|ssh|rdp|smb|vnc|telnet|ftp|mqtt):\/\//i;
+const RAW_PORT_PATH_RE = /^:\d{1,5}$/;
+
+function isNonHttpOrTcpItem(item, checkId) {
+  if (!item || typeof item !== 'object') return false;
+  const m = String(item.method || '').toUpperCase();
+  if (NON_HTTP_METHODS.has(m)) return true;
+  if (NON_HTTP_SCHEME_RE.test(String(item.url || ''))) return true;
+  if (RAW_PORT_PATH_RE.test(String(item.path || '').trim())) return true;
+  if (
+    checkId === 'device-security' &&
+    /\bport\s+exposed\b|\bTCP\s+port\s+\d+\b|\bport\s+\d+\/TCP\b|\(\d{1,5}\/TCP\)/i.test(
+      `${item.name || ''} ${item.matchedSignal || ''}`
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isPureNonHttpFinding(finding) {
+  const m = String(finding.method || finding.reproduction?.method || finding.evidence?.requestMethod || '').toUpperCase();
+  if (NON_HTTP_METHODS.has(m)) return true;
+  if (NON_HTTP_SCHEME_RE.test(String(finding.url || finding.reproduction?.url || ''))) return true;
+  if (RAW_PORT_PATH_RE.test(String(finding.path || '').trim())) return true;
+  return false;
+}
+
+function isNonHttpOrTcpFinding(finding, checkId) {
+  if (isPureNonHttpFinding(finding)) return true;
+  if (Array.isArray(finding.files) && finding.files.some(item => isNonHttpOrTcpItem(item, checkId))) return true;
+  if (Array.isArray(finding.issues) && finding.issues.some(item => isNonHttpOrTcpItem(item, checkId))) return true;
+  return false;
+}
+
+function attachConfidence(finding, options = {}) {
+  if (!finding || typeof finding !== 'object') return finding;
+  const hasTier = typeof finding.confidenceTier === 'string' && finding.confidenceTier.length > 0;
+  const hasScore = Number.isFinite(finding.confidenceScore);
+  if (hasTier && hasScore) return finding;
+  const classified = classifyFindingConfidence(finding, options);
+  return {
+    ...finding,
+    confidenceTier: hasTier ? finding.confidenceTier : classified.confidenceTier,
+    confidenceScore: hasScore ? finding.confidenceScore : classified.confidenceScore
+  };
+}
+
 /**
  * Pre-Report Verification Gate:
  * Validates a VULNERABLE or SUSPICIOUS finding against its captured HTTP traces,
@@ -276,47 +352,62 @@ function sameEndpointPathname(urlA, urlB) {
 export function verifyFindingBeforeReport(finding, options = {}) {
   if (!finding || typeof finding !== 'object') return finding;
   const status = String(finding.status || 'SAFE').toUpperCase();
-  if (status !== 'VULNERABLE' && status !== 'SUSPICIOUS') return finding;
+  if (status !== 'VULNERABLE' && status !== 'SUSPICIOUS') {
+    return attachConfidence(finding, options);
+  }
 
   if (isDjangoDebug404Finding(finding)) {
-    return finding;
+    return attachConfidence(finding, options);
   }
 
   const checkId = String(finding.checkId || finding.meta?.id || finding.name || '').toLowerCase();
   const isRedirectCheck = REDIRECT_TESTING_CHECK_IDS.has(checkId);
   const isPassiveRootCheck = PASSIVE_ROOT_HEADER_CHECK_IDS.has(checkId);
+  const isStatus404ValidCheck = STATUS_404_VALID_CHECK_IDS.has(checkId);
+  const isPureNonHttp = isPureNonHttpFinding(finding);
+  const isNonHttpFinding = isNonHttpOrTcpFinding(finding, checkId);
   const traces = Array.isArray(options.capturedTraces) ? options.capturedTraces : [];
 
-  const downgradeToSafe = (reason) => ({
-    ...finding,
-    status: 'SAFE',
-    severity: 'NONE',
-    reproVerified: false,
-    poeLevel: 0,
-    verificationStatus: 'not_assessed',
-    detail: reason,
-    files: undefined,
-    panels: undefined,
-    findings: undefined,
-    evidenceQuotes: undefined,
-    reproduction: undefined
-  });
+  const downgradeToSafe = (reason) => {
+    const downgraded = {
+      ...finding,
+      status: 'SAFE',
+      severity: 'NONE',
+      reproVerified: false,
+      poeLevel: 0,
+      verificationStatus: 'not_assessed',
+      detail: reason,
+      files: undefined,
+      panels: undefined,
+      findings: undefined,
+      evidenceQuotes: undefined,
+      reproduction: undefined
+    };
+    const classified = classifyFindingConfidence(downgraded, options);
+    return {
+      ...downgraded,
+      confidenceTier: classified.confidenceTier,
+      confidenceScore: classified.confidenceScore
+    };
+  };
 
   // 1. Check finding.observedStatus or reproduction.responseStatus
   const reproStatus = Number(finding.reproduction?.responseStatus ?? finding.observedStatus);
-  if (reproStatus === 404 || reproStatus === 405 || reproStatus === 410) {
+  if (!isNonHttpFinding && ((!isStatus404ValidCheck && reproStatus === 404) || reproStatus === 405 || reproStatus === 410)) {
     return downgradeToSafe(`Endpoint returned HTTP ${reproStatus} (not exposed)`);
   }
 
   // 2. Check evidenceQuotes / observedSignal for framework route-not-found messages
   const quotes = Array.isArray(finding.evidenceQuotes) ? finding.evidenceQuotes : [];
   if (
+    !isPureNonHttp &&
     quotes.length > 0 &&
     quotes.every(q => isFrameworkRouteErrorText(String(q || '')))
   ) {
     return downgradeToSafe('Response body matched framework route-not-found error message');
   }
   if (
+    !isPureNonHttp &&
     finding.reproduction?.observedSignal &&
     isFrameworkRouteErrorText(finding.reproduction.observedSignal) &&
     !quotes.length
@@ -330,6 +421,7 @@ export function verifyFindingBeforeReport(finding, options = {}) {
       const validItems = finding[listKey].filter(item => {
         if (!item || typeof item !== 'object') return false;
         if (isDjangoDebug404Finding(item)) return true;
+        if (isNonHttpOrTcpItem(item, checkId)) return true;
         const st = Number(item.status);
         if (st === 404 || st === 405 || st === 410) return false;
         if (isFrameworkRouteErrorText(String(item.preview || ''))) return false;
@@ -342,7 +434,7 @@ export function verifyFindingBeforeReport(finding, options = {}) {
   }
 
   // 4. Validate against captured HTTP traces for the triggering endpoint
-  if (traces.length > 0 && !isPassiveRootCheck) {
+  if (traces.length > 0 && !isPassiveRootCheck && !isNonHttpFinding) {
     let triggerTrace = null;
     if (finding.trafficId) {
       triggerTrace = traces.find(t => t.trafficId === finding.trafficId) || null;
@@ -355,7 +447,7 @@ export function verifyFindingBeforeReport(finding, options = {}) {
 
     if (triggerTrace) {
       const st = Number(triggerTrace.status);
-      if (st === 404 || st === 405 || st === 410) {
+      if ((!isStatus404ValidCheck && st === 404) || st === 405 || st === 410) {
         return downgradeToSafe(`Triggering request returned HTTP ${st}`);
       }
       if (isFrameworkRouteErrorText(triggerTrace.responseSnippet || '')) {
@@ -373,7 +465,7 @@ export function verifyFindingBeforeReport(finding, options = {}) {
     } else if (endpointTraces.length > 0) {
       const allDeadOrNotFound = endpointTraces.every(t => {
         const st = Number(t.status);
-        if (st === 404 || st === 405 || st === 410) return true;
+        if ((!isStatus404ValidCheck && st === 404) || st === 405 || st === 410) return true;
         if (isFrameworkRouteErrorText(t.responseSnippet || '')) return true;
         if (
           !isRedirectCheck &&
@@ -392,5 +484,9 @@ export function verifyFindingBeforeReport(finding, options = {}) {
     }
   }
 
-  return finding;
+  const verifiedFinding = traces.length > 0 && !isNonHttpFinding
+    ? ensureVerbatimEvidenceQuotes(finding, traces)
+    : finding;
+
+  return attachConfidence(verifiedFinding, options);
 }

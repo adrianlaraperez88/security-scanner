@@ -1,6 +1,6 @@
 /**
  * Hierarchical budgets (task-level BudgetLedger + per-intent IntentMeter) with the
- * ARTEX `BudgetWrapupBlocks` pre-tool gate.
+ * SecScan `BudgetWrapupBlocks` pre-tool gate.
  *
  * When the remaining budget enters the wrap-up reserve window, exploratory tools are
  * blocked and only graph write-back tools may run, so that findings/facts/coverage
@@ -195,7 +195,7 @@ export class BudgetLedger {
   }
 
   /**
-   * ARTEX BudgetWrapupBlocks pre-tool gate: consults task budget and (optionally) intent meter.
+   * SecScan BudgetWrapupBlocks pre-tool gate: consults task budget and (optionally) intent meter.
    */
   checkToolGate(toolName, { intentMeter = null } = {}) {
     const wrapup = this.isWrapupActive() || Boolean(intentMeter && intentMeter.isWrapupActive());

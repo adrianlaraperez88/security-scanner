@@ -17,13 +17,31 @@ function getHeader(headers, name) {
   return '';
 }
 
+function hasErrorCode(err, targetCode) {
+  const seen = new Set();
+  const queue = [err];
+  while (queue.length > 0 && seen.size < 12) {
+    const node = queue.shift();
+    if (!node || typeof node !== 'object' || seen.has(node)) continue;
+    seen.add(node);
+    if (String(node.code || '').toUpperCase() === targetCode) return true;
+    if (node.cause && typeof node.cause === 'object') queue.push(node.cause);
+    if (Array.isArray(node.errors)) {
+      for (const child of node.errors) {
+        if (child && typeof child === 'object') queue.push(child);
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Checks whether plain HTTP requests are properly redirected to HTTPS.
  *
  * Uses governed fetchWithRetry with followRedirects: false so we see the raw 3xx
  * response while enforcing SSRF, DNS pinning, scope rules, NoiseGovernor, and TrafficStore.
  */
-export default async function run(target, fetchWithRetry = defaultFetch) {
+export default async function run(target, fetchWithRetry = defaultFetch, options = {}) {
   let parsed;
   try {
     parsed = new URL(String(target ?? '').trim());
@@ -31,17 +49,26 @@ export default async function run(target, fetchWithRetry = defaultFetch) {
     return { name: 'https redirect', status: 'ERROR', severity: 'NONE', reason: 'Invalid URL' };
   }
 
-  if (parsed.protocol === 'http:') {
-    return { name: 'https redirect', status: 'SAFE', severity: 'NONE', detail: 'Target is already HTTP — HTTPS check skipped' };
-  }
+  const siblingSchemes = options?.siblingSchemes instanceof Set
+    ? Array.from(options.siblingSchemes)
+    : (Array.isArray(options?.siblingSchemes) ? options.siblingSchemes : null);
+  const hasSiblingContext = Array.isArray(siblingSchemes) && siblingSchemes.length > 0;
+  const hasHttpsSibling = hasSiblingContext && siblingSchemes.some(s => String(s).toLowerCase() === 'https:');
+  const hasHttpSibling = hasSiblingContext && siblingSchemes.some(s => String(s).toLowerCase() === 'http:');
 
-  if (parsed.protocol !== 'https:') {
+  if (parsed.protocol === 'http:') {
+    if (!hasHttpsSibling) {
+      return { name: 'https redirect', status: 'SAFE', severity: 'NONE', detail: 'Target is already HTTP — HTTPS check skipped' };
+    }
+  } else if (parsed.protocol !== 'https:') {
     return { name: 'https redirect', status: 'ERROR', severity: 'NONE', reason: `Unsupported protocol: ${parsed.protocol}` };
   }
 
   const httpTarget = new URL(parsed.toString());
   httpTarget.protocol = 'http:';
-  httpTarget.port = '';
+  if (parsed.protocol === 'https:' || httpTarget.port === '80') {
+    httpTarget.port = '';
+  }
   httpTarget.hash = '';
   const httpUrl = httpTarget.toString();
 
@@ -122,6 +149,20 @@ export default async function run(target, fetchWithRetry = defaultFetch) {
     return { name: 'https redirect', status: 'SAFE', severity: 'NONE', ...trafficField };
 
   } catch (err) {
+    if (
+      parsed.protocol === 'https:' &&
+      (
+        hasErrorCode(err, 'ECONNREFUSED') ||
+        (hasSiblingContext && !hasHttpSibling && /ECONNREFUSED/i.test(String(err?.message || '')))
+      )
+    ) {
+      return {
+        name: 'https redirect',
+        status: 'SAFE',
+        severity: 'NONE',
+        detail: 'Plaintext HTTP port 80 is closed/unreachable; HTTPS-only'
+      };
+    }
     return {
       name    : 'https redirect',
       status  : 'ERROR',

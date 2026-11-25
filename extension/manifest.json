@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Security Scanner Traffic Capture (SecScan CDP Bridge)",
+  "version": "2.5.0",
+  "description": "Capture the active tab's HTTP/HTTPS/XHR/GraphQL traffic via Chrome DevTools Protocol into Security Scanner (http://127.0.0.1:4321) with live passive vulnerability scanning.",
+  "permissions": ["debugger", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Security Scanner Traffic Capture" }
+}

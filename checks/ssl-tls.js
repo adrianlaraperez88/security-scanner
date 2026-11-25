@@ -25,6 +25,22 @@ function isGovernanceBlockError(err) {
   );
 }
 
+function isSniRequiredTlsError(err) {
+  if (!err) return false;
+  const code = String(err.code || '').toUpperCase();
+  const msg = String(err.message || '');
+  if (
+    code === 'ECONNRESET' ||
+    code === 'ERR_SSL_SSLV3_ALERT_UNRECOGNIZED_NAME' ||
+    code === 'ERR_SSL_TLSV1_ALERT_UNRECOGNIZED_NAME' ||
+    code === 'ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE' ||
+    code === 'ERR_SSL_TLSV1_ALERT_HANDSHAKE_FAILURE'
+  ) {
+    return true;
+  }
+  return /(?:unrecognized_name|unrecognized name|handshake_failure|handshake failure|ECONNRESET|socket hang up|before secure TLS connection was established)/i.test(msg);
+}
+
 /**
  * Checks SSL/TLS certificate validity and connection protocol using governed
  * URL validation, scope rules, DNS resolution/pinning, and pinned TLS connections.
@@ -143,14 +159,49 @@ export default async function run(target, fetchWithRetry, options = {}) {
     };
   }
 
+  const siblingSchemes = options?.siblingSchemes instanceof Set
+    ? Array.from(options.siblingSchemes)
+    : (Array.isArray(options?.siblingSchemes) ? options.siblingSchemes : []);
+  const hasHttpsSibling = siblingSchemes.some(s => String(s).toLowerCase() === 'https:');
+
+  let auditTarget = target;
+  let auditParsed = parsed;
+
   if (parsed.protocol !== 'https:') {
-    return {
-      name: 'ssl/tls check',
-      status: 'SUSPICIOUS',
-      severity: 'HIGH',
-      detail: 'Server not using HTTPS at all',
-      fix: "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate."
-    };
+    if (!hasHttpsSibling) {
+      return {
+        name: 'ssl/tls check',
+        status: 'SUSPICIOUS',
+        severity: 'HIGH',
+        detail: 'Server not using HTTPS at all',
+        fix: "Enable HTTPS (TLS) immediately to encrypt all data in transit. You can use Let's Encrypt for a free, trusted certificate."
+      };
+    }
+
+    auditParsed = new URL(parsed.toString());
+    auditParsed.protocol = 'https:';
+    if (auditParsed.port === '80') auditParsed.port = '';
+    auditTarget = auditParsed.toString();
+
+    const siblingUrlCheck = validateTargetUrl(auditTarget, { allowPrivate });
+    if (!siblingUrlCheck.valid) {
+      return {
+        name: 'ssl/tls check',
+        status: 'ERROR',
+        severity: 'NONE',
+        reason: `Request blocked by SSRF policy: ${siblingUrlCheck.error}`
+      };
+    }
+
+    const siblingGate = runAssetGateCheck(auditTarget, { guard, scopeRules, alwaysBuiltin: true });
+    if (siblingGate && siblingGate.allowed === false) {
+      return {
+        name: 'ssl/tls check',
+        status: 'ERROR',
+        severity: 'NONE',
+        reason: siblingGate.reason
+      };
+    }
   }
 
   // ── DNS resolution, TargetPinStore pinning & post-DNS gate ─────────────────
@@ -165,13 +216,13 @@ export default async function run(target, fetchWithRetry, options = {}) {
     options?.allowPrivate
   );
 
-  let cleanHostname = String(parsed.hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  let cleanHostname = String(auditParsed.hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
   let connectHost = cleanHostname;
   let resolvedIp = null;
   let resolvedIps = [];
 
   if (!customTlsConnect || hasGovernance) {
-    const dnsRes = await resolveAndValidateTarget(target, {
+    const dnsRes = await resolveAndValidateTarget(auditTarget, {
       resolver: dnsResolver,
       targetPinStore,
       allowPrivate
@@ -192,7 +243,7 @@ export default async function run(target, fetchWithRetry, options = {}) {
     if (Array.isArray(dnsRes.resolvedIps) && dnsRes.resolvedIps.length > 0) {
       const postDnsGate = runAssetGateCheck(
         {
-          url: target,
+          url: auditTarget,
           hostname: dnsRes.hostname,
           resolvedIps: dnsRes.resolvedIps
         },
@@ -215,12 +266,12 @@ export default async function run(target, fetchWithRetry, options = {}) {
   }
 
   const servername = net.isIP(cleanHostname) === 0 ? cleanHostname : undefined;
-  const port = parseInt(parsed.port || '443', 10);
+  const port = parseInt(auditParsed.port || '443', 10);
 
   const invokeTlsConnect = (tlsOptions = {}) => {
     if (customTlsConnect) {
       return customTlsConnect({
-        url: parsed.toString(),
+        url: auditParsed.toString(),
         host: connectHost,
         resolvedIp,
         resolvedIps,
@@ -246,6 +297,17 @@ export default async function run(target, fetchWithRetry, options = {}) {
   try {
     conn = await invokeTlsConnect();
   } catch (e) {
+    if (net.isIP(cleanHostname) !== 0 && !servername && isSniRequiredTlsError(e)) {
+      const diag = `TLS endpoint ${cleanHostname}:${port} rejected bare-IP handshake without SNI hostname (${e?.code || e?.message || 'TLS alert'}); scan a domain hostname to inspect certificates and TLS versions.`;
+      return {
+        name: 'ssl/tls check',
+        status: 'ERROR',
+        severity: 'NONE',
+        sniRequired: true,
+        reason: diag,
+        detail: diag
+      };
+    }
     return { name: 'ssl/tls check', status: 'ERROR', severity: 'NONE', reason: e?.message || 'TLS connection failed' };
   }
 

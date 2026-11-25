@@ -21,6 +21,7 @@ import {
   generateSarifReport
 } from '../../core/report.js';
 import { runScanner, normalizeScopeRules } from '../../scan.js';
+import { runIntruderCampaign, runAutorizeMatrix } from '../../core/intruder.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -2476,5 +2477,400 @@ test('CANDIDATE-2, 3, 4, 5 & 6: server /api/ai/analyze-api resists DoS (<200ms) 
     assert.ok((cliCounts.get('https://hardened-spa.example.com/main.js') || 0) <= 3, 'Expected /main.js memoized across CLI crawl');
   } finally {
     close();
+  }
+});
+
+test('M3 Server API: deviceCategories meta, target normalization, deviceCategory validation, T2.1 boundary & executeScanJob device parity', async () => {
+  const { PROFILES } = await import('../../core/profiles.js');
+
+  const metaSrv = createTestServer();
+  try {
+    const metaRes = await dispatch(metaSrv.server, '/api/meta');
+    assert.equal(metaRes.status, 200);
+    assert.ok(metaRes.json.deviceCategories);
+    assert.ok(metaRes.json.deviceCategories.smart_tv);
+    assert.ok(metaRes.json.deviceCategories.ip_camera);
+    assert.ok(metaRes.json.deviceCategories.pc_workstation);
+
+    // T2.1 security boundary: 127.0.0.1 without allowPrivate returns 400 even with profile: 'device' or deviceMode: true
+    for (const payload of [
+      { target: 'http://127.0.0.1:4321' },
+      { target: 'http://127.0.0.1:4321', profile: 'device' },
+      { target: 'http://127.0.0.1:4321', deviceMode: true, deviceCategory: 'smart_tv' },
+      { target: 'http://169.254.169.254/latest/meta-data/', allowPrivate: true }
+    ]) {
+      const scanBlocked = await dispatch(metaSrv.server, '/api/scan', { method: 'POST', body: payload });
+      assert.equal(scanBlocked.status, 400);
+    }
+
+    // Invalid deviceCategory returns 400 on /api/scan and /api/fingerprint
+    for (const badCat of ['invalid_cat', 12345]) {
+      const badScan = await dispatch(metaSrv.server, '/api/scan', {
+        method: 'POST',
+        body: { target: 'https://example.com', deviceCategory: badCat }
+      });
+      assert.equal(badScan.status, 400);
+
+      const badFp = await dispatch(metaSrv.server, '/api/fingerprint', {
+        method: 'POST',
+        body: { target: 'https://example.com', deviceCategory: badCat }
+      });
+      assert.equal(badFp.status, 400);
+    }
+  } finally {
+    metaSrv.close();
+  }
+
+  // Test target normalization across /api/fingerprint, /api/real-ip, /api/scan, /api/tasks, /api/system/diagnose-target
+  const portProbeCounts = new Map();
+  const observedFetchUrls = [];
+  const tvFetcher = async (url, opts = {}) => {
+    observedFetchUrls.push({ url, retries: opts.retries, timeout: opts.timeout, failFast: opts.failFast });
+    if (url.includes(':8001/api/v2/')) {
+      return new Response(
+        JSON.stringify({
+          device: {
+            type: 'Samsung SmartTV',
+            name: 'Bedroom TV',
+            modelName: 'UN50TU7000',
+            os: 'Tizen 5.5',
+            wifiMac: 'AA:11:22:33:44:55'
+          }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json', server: 'Tizen/5.5' } }
+      );
+    }
+    if (url.startsWith('http://192.168.68.53:8001')) {
+      return new Response('<html><title>Samsung TV</title></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', server: 'Tizen/5.5' }
+      });
+    }
+    return new Response('<html>ok</html>', { status: 404, headers: { 'content-type': 'text/html' } });
+  };
+
+  const tvTcpProbe = async (_host, port) => {
+    portProbeCounts.set(port, (portProbeCounts.get(port) || 0) + 1);
+    return { open: port === 8001 || port === 8002, banner: '' };
+  };
+
+  const tvSrv = createTestServer({
+    fetcher: tvFetcher,
+    tcpProbe: tvTcpProbe,
+    dnsResolver: async () => ['93.184.216.34']
+  });
+
+  try {
+    // 1. /api/tasks & /api/real-ip & /api/system/diagnose-target normalize quoted/backslash targets
+    const taskRes = await dispatch(tvSrv.server, '/api/tasks', {
+      method: 'POST',
+      body: { target: '"192.168.68.53\\"', allowPrivate: true }
+    });
+    assert.equal(taskRes.status, 201);
+    assert.equal(taskRes.json.task.target, 'http://192.168.68.53');
+
+    const realIpRes = await dispatch(tvSrv.server, '/api/real-ip', {
+      method: 'POST',
+      body: { target: '"example.com\\"', verifyCandidates: false }
+    });
+    assert.equal(realIpRes.status, 200);
+    assert.equal(realIpRes.json.target, 'https://example.com');
+
+    const diagRes = await dispatch(tvSrv.server, '/api/system/diagnose-target', {
+      method: 'POST',
+      body: { target: '"192.168.68.53\\"', allowPrivate: true }
+    });
+    assert.equal(diagRes.status, 200);
+    assert.notEqual(diagRes.json.stage, 'url_validation', 'Normalized target should pass Stage 1 URL validation');
+
+    // 2. /api/fingerprint with quoted/backslash target + deviceCategory alias + basePortClosed
+    const fpRes = await dispatch(tvSrv.server, '/api/fingerprint', {
+      method: 'POST',
+      body: {
+        target: '"192.168.68.53\\"',
+        allowPrivate: true,
+        deviceMode: true,
+        deviceCategory: 'smart-tv'
+      }
+    });
+    assert.equal(fpRes.status, 200);
+    assert.equal(fpRes.json.target, 'http://192.168.68.53');
+    assert.equal(fpRes.json.recommendedProfile, 'device');
+    assert.ok(fpRes.json.deviceInfo?.detected);
+    assert.equal(fpRes.json.deviceInfo.basePortClosed, true);
+    assert.equal(fpRes.json.deviceInfo.vendor, 'Samsung');
+    assert.deepEqual(
+      fpRes.json.activeChecks.map(c => c.id).sort(),
+      [...PROFILES.device.checks].sort()
+    );
+
+    // 3. /api/scan full device job parity (smart -> device switch, crawl skip, origin routing, cachedDeviceScan, SSE events)
+    portProbeCounts.clear();
+    observedFetchUrls.length = 0;
+
+    const scanRes = await dispatch(tvSrv.server, '/api/scan', {
+      method: 'POST',
+      body: {
+        target: '"192.168.68.53\\"',
+        profile: 'smart',
+        deviceMode: true,
+        deviceCategory: 'tv',
+        allowPrivate: true,
+        maxDepth: 2,
+        noHistory: true
+      }
+    });
+    assert.equal(scanRes.status, 202);
+    assert.equal(scanRes.json.targets[0], 'http://192.168.68.53');
+    assert.equal(scanRes.json.deviceMode, true);
+    assert.equal(scanRes.json.deviceCategory, 'smart_tv');
+
+    let doneJob = null;
+    for (let i = 0; i < 400; i++) {
+      const poll = await dispatch(tvSrv.server, `/api/scan/${encodeURIComponent(scanRes.json.scanId)}`);
+      if (poll.json.status === 'completed' || poll.json.status === 'failed') {
+        doneJob = poll.json;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 30));
+    }
+    assert.ok(doneJob);
+    assert.equal(doneJob.status, 'completed');
+
+    const jobObj = tvSrv.server.context.jobs.get(scanRes.json.scanId);
+    const fpEvt = jobObj.events.find(e => e.type === 'fingerprint');
+    assert.ok(fpEvt?.deviceInfo?.detected);
+    assert.equal(doneJob.result.stacks[0].deviceInfo.vendor, 'Samsung');
+
+    // Crawl skipped when basePortClosed
+    const crawlEvt = jobObj.events.find(e => e.type === 'crawl_complete');
+    assert.equal(crawlEvt.pagesFound, 1);
+
+    // TCP port sweep deduplicated via cachedDeviceScan
+    assert.equal(portProbeCounts.get(8001), 1);
+
+    // SSE check event carries device / deviceCategory / openPorts
+    const devCheckEvt = jobObj.events.find(e => e.type === 'check' && e.checkId === 'device-security');
+    assert.ok(devCheckEvt);
+    assert.equal(devCheckEvt.deviceCategory, 'smart_tv');
+    assert.ok(Array.isArray(devCheckEvt.openPorts) && devCheckEvt.openPorts.includes(8001));
+
+    // HTTP checks routed to activeHttpOrigin (:8001) instead of closed port 80
+    const headersCheckEvt = jobObj.events.find(e => e.type === 'check' && e.checkId === 'security-headers');
+    assert.ok(headersCheckEvt);
+    assert.equal(headersCheckEvt.target, 'http://192.168.68.53:8001');
+  } finally {
+    tvSrv.close();
+  }
+
+  // 4. Non-HTTP-only device (basePortClosed + no activeHttpOrigin/activeHttpsOrigin) skips HTTP-only checks cleanly
+  const pcSrv = createTestServer({
+    fetcher: async () => {
+      const err = new Error('connect ECONNREFUSED');
+      err.code = 'ECONNREFUSED';
+      throw err;
+    },
+    tcpProbe: async (_host, port) => {
+      if (port === 22) return { open: true, banner: 'SSH-2.0-OpenSSH_8.9p1 Ubuntu' };
+      return { open: port === 445 || port === 3389, banner: '' };
+    }
+  });
+
+  try {
+    const pcScan = await dispatch(pcSrv.server, '/api/scan', {
+      method: 'POST',
+      body: {
+        target: '192.168.68.120',
+        profile: 'smart',
+        deviceMode: true,
+        deviceCategory: 'pc',
+        allowPrivate: true,
+        noHistory: true
+      }
+    });
+    assert.equal(pcScan.status, 202);
+    assert.equal(pcScan.json.deviceCategory, 'pc_workstation');
+
+    let donePc = null;
+    for (let i = 0; i < 400; i++) {
+      const poll = await dispatch(pcSrv.server, `/api/scan/${encodeURIComponent(pcScan.json.scanId)}`);
+      if (poll.json.status === 'completed' || poll.json.status === 'failed') {
+        donePc = poll.json;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 30));
+    }
+    assert.equal(donePc.status, 'completed');
+    assert.equal(donePc.result.results.length, 1);
+    assert.equal(donePc.result.results[0].checkId, 'device-security');
+    assert.notEqual(donePc.result.results[0].status, 'ERROR');
+
+    // 5. POST /api/fingerprint on HTTP-less basePortClosed device returns activeChecksCount === 1 (device-security)
+    const fpNoHttp = await dispatch(pcSrv.server, '/api/fingerprint', {
+      method: 'POST',
+      body: {
+        target: '192.168.68.120',
+        deviceMode: true,
+        deviceCategory: 'pc',
+        allowPrivate: true
+      }
+    });
+    assert.equal(fpNoHttp.status, 200);
+    assert.equal(fpNoHttp.json.activeChecksCount, 1);
+    assert.deepEqual(fpNoHttp.json.activeChecks.map(c => c.id), ['device-security']);
+
+    // 6. POST /api/scan device profile alias parity (tv, ip_camera, pc_workstation) & strict allowPrivate 400 boundary
+    for (const alias of ['tv', 'ip_camera', 'pc_workstation']) {
+      const blockedAliasScan = await dispatch(pcSrv.server, '/api/scan', {
+        method: 'POST',
+        body: {
+          target: '127.0.0.1',
+          profile: alias,
+          noHistory: true
+        }
+      });
+      assert.equal(blockedAliasScan.status, 400, `Expected 400 on 127.0.0.1 for profile=${alias} without allowPrivate`);
+
+      const aliasScan = await dispatch(pcSrv.server, '/api/scan', {
+        method: 'POST',
+        body: {
+          target: '192.168.68.120',
+          profile: alias,
+          allowPrivate: true,
+          noHistory: true
+        }
+      });
+      assert.equal(aliasScan.status, 202, `Expected 202 for profile=${alias} with allowPrivate: true`);
+      assert.equal(aliasScan.json.deviceMode, true, `Expected deviceMode: true for profile=${alias}`);
+    }
+  } finally {
+    pcSrv.close();
+  }
+});
+
+test('FINDING-2 & FINDING-3 regressions: built-in .gov gate pre-DNS 403 on /api/fingerprint & /api/scan, and enforceDnsValidation on openapi/auth/intruder/autorize', async () => {
+  // 1. FINDING-2: /api/fingerprint and /api/scan must enforce built-in .gov deny rules BEFORE dnsResolver runs even when scopeRules is empty
+  let dnsLookupCount = 0;
+  let fetchCount = 0;
+  const gateSrv = createTestServer({
+    allowPrivate: false,
+    scopeRules: [],
+    dnsResolver: async () => {
+      dnsLookupCount++;
+      return [{ address: '127.0.0.1', family: 4 }];
+    }
+  });
+
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCount++;
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const fpGov = await dispatch(gateSrv.server, '/api/fingerprint', {
+      method: 'POST',
+      body: { target: 'https://agency.gov', allowPrivate: false }
+    });
+    assert.equal(fpGov.status, 403);
+    assert.equal(fpGov.json?.code, 'TARGET_RULE_BLOCKED');
+    assert.equal(dnsLookupCount, 0, '/api/fingerprint must reject .gov before DNS lookup');
+
+    const scanGov = await dispatch(gateSrv.server, '/api/scan', {
+      method: 'POST',
+      body: { target: 'https://agency.gov', allowPrivate: false, noHistory: true }
+    });
+    assert.equal(scanGov.status, 403);
+    assert.equal(scanGov.json?.code, 'TARGET_RULE_BLOCKED');
+    assert.equal(dnsLookupCount, 0, '/api/scan must reject .gov before DNS lookup');
+
+    // 2. FINDING-3: /api/openapi/import, /api/auth/macro-test, /api/auth/record-session, /api/intruder/run, /api/autorize/run
+    // must enforce DNS validation via createGovernedFetch and block 127.0.0.1-resolving hostnames with HTTP 403 and 0 fetch calls
+    const openapiRes = await dispatch(gateSrv.server, '/api/openapi/import', {
+      method: 'POST',
+      body: { targetUrl: 'https://rebind.example.com', allowPrivate: false }
+    });
+    assert.equal(openapiRes.status, 403);
+    assert.match(String(openapiRes.json?.error || ''), /private or reserved IP|DNS rebinding/i);
+    assert.equal(fetchCount, 0);
+
+    const macroRes = await dispatch(gateSrv.server, '/api/auth/macro-test', {
+      method: 'POST',
+      body: {
+        targetUrl: 'https://rebind.example.com',
+        loginUrl: 'https://rebind.example.com/login',
+        username: 'admin',
+        password: 'pw',
+        allowPrivate: false
+      }
+    });
+    assert.equal(macroRes.status, 403);
+    assert.match(String(macroRes.json?.error || ''), /private or reserved IP|DNS rebinding/i);
+    assert.equal(fetchCount, 0);
+
+    const recordRes = await dispatch(gateSrv.server, '/api/auth/record-session', {
+      method: 'POST',
+      body: {
+        targetUrl: 'https://rebind.example.com',
+        loginUrl: 'https://rebind.example.com/login',
+        username: 'admin',
+        password: 'pw',
+        allowPrivate: false
+      }
+    });
+    assert.equal(recordRes.status, 403);
+    assert.match(String(recordRes.json?.error || ''), /private or reserved IP|DNS rebinding/i);
+    assert.equal(fetchCount, 0);
+
+    const intruderRes = await dispatch(gateSrv.server, '/api/intruder/run', {
+      method: 'POST',
+      body: {
+        url: 'https://rebind.example.com/item?id=§1§',
+        payloadSets: [['1', '2']],
+        allowPrivate: false
+      }
+    });
+    assert.equal(intruderRes.status, 403);
+    assert.match(String(intruderRes.json?.error || ''), /private or reserved IP|DNS rebinding/i);
+    assert.equal(fetchCount, 0);
+
+    const autorizeRes = await dispatch(gateSrv.server, '/api/autorize/run', {
+      method: 'POST',
+      body: {
+        endpoints: ['https://rebind.example.com/admin'],
+        primaryHeaders: { Authorization: 'Bearer a' },
+        allowPrivate: false
+      }
+    });
+    assert.equal(autorizeRes.status, 403);
+    assert.match(String(autorizeRes.json?.error || ''), /private or reserved IP|DNS rebinding/i);
+    assert.equal(fetchCount, 0);
+    assert.ok(dnsLookupCount >= 5, 'Governance must invoke DNS validation on all 5 endpoints');
+
+    // 3. Direct runIntruderCampaign & runAutorizeMatrix must also reject metadata/private DNS resolution when allowPrivate: false
+    await assert.rejects(
+      () => runIntruderCampaign(
+        { url: 'https://rebind.example.com/item?id=§1§', payloadSets: [['1']] },
+        {
+          allowPrivate: false,
+          dnsResolver: async () => [{ address: '169.254.169.254', family: 4 }]
+        }
+      ),
+      (err) => err?.isGovernanceBlock === true && err?.code === 'DNS_REBIND_OR_PRIVATE_IP'
+    );
+    await assert.rejects(
+      () => runAutorizeMatrix(
+        { endpoints: ['https://rebind.example.com/admin'] },
+        {
+          allowPrivate: false,
+          dnsResolver: async () => [{ address: '169.254.169.254', family: 4 }]
+        }
+      ),
+      (err) => err?.isGovernanceBlock === true && err?.code === 'DNS_REBIND_OR_PRIVATE_IP'
+    );
+    assert.equal(fetchCount, 0);
+  } finally {
+    globalThis.fetch = origFetch;
+    gateSrv.close();
   }
 });
