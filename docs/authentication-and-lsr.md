@@ -100,16 +100,34 @@ After running **`▶️ Play / Test Sequence`**, `#lsr-visual-canvas` switches i
 2. **`change_input`**: Binds a value (literal, `{{VAR:name}}`, or `{{SECRET:name}}`) to a form input matched by `selectorType` (`id`, `name`, or `css`). Supports `isSecret: true` masking (`***`).
 3. **`fill_otp`**: Computes a live RFC 6238 TOTP code at execution time and populates the target OTP input (`selector: "auto"` auto-detects fields with `autocomplete="one-time-code"` or `otp|totp|mfa|2fa|passcode` names/labels).
 4. **`click_button`**: Submits the enclosing form (including hidden fields, CSRF tokens, and filled `change_input`/`fill_otp` values) matched by `text`, `id`, `name`, or `css`, with optional `submitUrl`, `method`, and `contentType` (`form` or `json`) overrides.
-5. **`extract_token`**: Extracts an authentication token from `json` (dot-path such as `data.accessToken`), `header`, `cookie`, or `csrf` DOM meta/input into the `AuthSessionManager` bearer/header state.
+5. **`extract_token`**: Extracts an authentication token from `json` (dot-path such as `data.accessToken`), `header` (e.g., `Authorization`, `X-Auth-Token`), `cookie`, `csrf` DOM meta/input, `local_storage` (`localStorage.setItem(key, val)`), or `session_storage` (`sessionStorage.setItem(key, val)`) into the `AuthSessionManager` bearer/header state.
 6. **`custom_request`**: Executes a direct `GET`/`POST`/`PUT`/`PATCH`/`DELETE` request with custom headers and JSON/form/raw payload supporting `{{VAR:...}}`, `{{SECRET:...}}`, and `{{OTP}}` template interpolation.
 
+### Top-of-Scan Token, Cookie & `localStorage` Harvester + Local Store Checker (`#top-auth-token-bar` & `#tab-login-lsr`)
+- **Dedicated `🔐 Login & LSR Studio` Tab (`#tab-login-lsr`) vs. Compact Scan Selector**:
+  - Manage all `.lsr` sequences, System Variables (`{{VAR:name}}`), Secrets (`{{SECRET:name}}`), and TOTP MFA inside the dedicated **`🔐 Login & LSR Studio`** navigation tab (`#tab-btn-login-lsr`).
+  - Inside **Tab 1 (`New Scan`)**, both the top quick bar (`#top-auth-token-bar` -> `#top-lsr-select`) and `⚙️ Advanced Options` (`#adv-lsr-select`) provide a clean dropdown to select an existing `.lsr` sequence or click **`🎬 + Create New .lsr`**.
+- **`🎟️ Get Token / Cookie` (`harvestAuthTokensAndCookies`)**:
+  - Executes the selected `.lsr` sequence (or login macro) via `POST /api/auth/record-session` (`includeArtifactValues: true`) and harvests all returned authentication artifacts via `extractWebStorageAndTokensFromResponse()`:
+    1. **API / Bearer Tokens** from JSON bodies (`access_token`, `accessToken`, `token`, `jwt`, `id_token`, `apiKey`), response headers (`Authorization`, `X-Auth-Token`, `X-Access-Token`, `X-Api-Token`), and OAuth redirect URL hashes/queries,
+    2. **Session & CSRF Cookies** (`Set-Cookie` headers formatted as a ready-to-use `Cookie` header),
+    3. **Web Storage Tokens** (`localStorage.setItem(...)` and `sessionStorage.setItem(...)` assignments in login responses).
+- **`🔍 Check Local Store` (`checkLocalStoreForTargetAuth`)**:
+  - Checks origin-scoped browser `localStorage` (`secscan_auth_artifact_vault_v1`), same-origin `localStorage`/`sessionStorage` token keys (`scanBrowserWebStorageForTokens`), and active backend sessions (`GET /api/auth/sessions?includeArtifactValues=1&origin=...`), inspects JWT expiration (`inspectExtractedJwtMeta`), and lets you apply cached tokens and cookies to your scan in 1 click.
+
 ### `Restrictions` Tab & `Session detection` Tab
-- **`Restrictions` Tab (`#lsr-panel-restrictions`)**: Add URL paths or wildcard patterns (e.g., `/logout`, `/signout`, `/api/auth/revoke`, `/admin/delete*`) that the crawler, active fuzzers, and checks must **never** request during an authenticated scan. Built-in logout protection (`isLogoutOrDestructiveUrl`) also blocks `/logout`, `/signout`, `/logoff`, `/kill-session`, and `/destroy-session` automatically.
+- **`Restrictions` Tab (`#lsr-panel-restrictions`)**: Add URL paths or wildcard patterns (e.g., `/logout`, `/signout`, `/api/auth/revoke`, `/admin/delete*`) that the crawler, active fuzzers, and checks must **never** request during an authenticated scan. Built-in logout protection (`isLogoutOrDestructiveUrl`) also blocks `/logout`, `/signout`, `/logoff`, `/kill-session`, `/destroy-session`, and query routes like `?r=site/logout` automatically.
 - **`Session detection` Tab (`#lsr-panel-session`)**: Configure how `AuthSessionManager` detects session expiration mid-scan and triggers automatic `.lsr` replay (with a freshly generated TOTP code):
   - **Logged-Out HTTP Status Codes (`#lsr-session-status-codes`)**: Default `401, 403`.
   - **Login Redirect URL Pattern (`#lsr-session-redirect-pattern`)**: Default `/login`.
   - **Logged-Out Response Body Pattern (`#lsr-session-logged-out-pattern`)**: Regex/text indicator (e.g., `Sign In|Session Expired`).
   - **Logged-In Response Body Pattern (`#lsr-session-logged-in-pattern`)**: Positive indicator confirming an active session (e.g., `Sign Out|Dashboard`).
+
+### Yii 1 (`yii1`), Yii 2 (`yii2`) & PHP Framework Post-Login Crawling & RBAC Verification
+- **Cross-Version Yii Selector Normalization**: `findMatchingInputInForm()` in `core/auth-session.js` automatically bridges Yii 1 (`id="LoginForm_username"`, `name="LoginForm[username]"`, `YII_CSRF_TOKEN`, submit button `name="yt0"`) and Yii 2 (`id="loginform-username"`, `name="LoginForm[username]"`, `_csrf` / `_csrf-frontend` / `_csrf-backend`) so `.lsr` sequences work across both Yii 1.1.x and Yii 2.0.x portals without manual selector rewriting.
+- **In-Place `PHPSESSID` Promotion & Post-Login Seed Discovery (`getPostLoginSeedUrls`)**: When a scan targets a login URL directly (such as `https://example.com/broadbandAdmin/index.php/site/login`), `AuthSessionManager` tracks the post-login redirect landing page (`postLoginUrl`, e.g., `/broadbandAdmin/index.php/default/index`) plus base application entrypoints and seeds them directly into `runTargetCrawlPipeline()` (`core/crawler.js`).
+- **SPA `$routeProvider`, Dropdown Submenu & JS AJAX Form Extraction**: After authenticating, the crawler automatically resolves AngularJS `$routeProvider.when('/route', { templateUrl })` views, `ng-click="selectPage(...)"` top menus and dropdown submenus, `ng-model` form inputs, and `$http`/`fetch`/`axios`/`$.ajax` endpoints while isolating sibling external apps on the same domain (`kind: 'external_app'`) so they cannot overwrite the active `PHPSESSID` cookie.
+- **Automated In-Scan RBAC / BFLA Matrix (`core/rbac-matrix.js`)**: Every authenticated scan automatically audits discovered menus, submenus, SPA views, and forms for Broken Function Level Authorization (`CWE-285`) using an isolated unauthenticated fetcher (`Cookie: ''`, `Authorization: ''`, `followRedirects: false`) without touching or logging out the active authenticated session.
 
 ---
 

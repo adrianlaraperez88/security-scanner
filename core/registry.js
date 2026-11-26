@@ -5,25 +5,53 @@ import { getCheckInfo } from './catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+let cachedCheckNames = null;
+let cachedScanners = null;
+
+function cloneScannerDescriptor(s) {
+  return {
+    name: s.name,
+    run: s.run,
+    tags: [...s.tags],
+    meta: {
+      ...s.meta,
+      cveIds: [...(s.meta.cveIds || [])],
+      references: [...(s.meta.references || [])]
+    }
+  };
+}
+
 export function getAvailableCheckNames() {
+  if (cachedCheckNames) {
+    return [...cachedCheckNames];
+  }
   const dir = path.join(__dirname, '../checks');
-  return fs.readdirSync(dir)
+  cachedCheckNames = fs.readdirSync(dir)
     .filter(f => f.endsWith('.js'))
     .map(f => f.replace(/\.js$/, ''))
     .sort();
+  return [...cachedCheckNames];
 }
 
 export async function getScanners(options = {}) {
-  const dir = path.join(__dirname, '../checks');
-  let files = fs.readdirSync(dir).filter(f => f.endsWith('.js')).sort();
-
   const rawOnly = options?.onlyChecks;
-  if (rawOnly) {
-    const onlySet = new Set(
-      Array.from(rawOnly)
-        .map(name => String(name || '').trim().toLowerCase().replace(/\.js$/, ''))
-        .filter(Boolean)
-    );
+  const onlySet = rawOnly
+    ? new Set(
+        Array.from(rawOnly)
+          .map(name => String(name || '').trim().toLowerCase().replace(/\.js$/, ''))
+          .filter(Boolean)
+      )
+    : null;
+
+  if (cachedScanners) {
+    const source = onlySet
+      ? cachedScanners.filter(s => onlySet.has(s.name.toLowerCase()))
+      : cachedScanners;
+    return source.map(cloneScannerDescriptor);
+  }
+
+  let files = getAvailableCheckNames().map(name => `${name}.js`);
+  if (onlySet) {
     files = files.filter(f => onlySet.has(f.replace(/\.js$/, '').toLowerCase()));
   }
 
@@ -63,5 +91,9 @@ export async function getScanners(options = {}) {
     }
   }
 
-  return scanners;
+  if (!onlySet) {
+    cachedScanners = scanners;
+  }
+
+  return scanners.map(cloneScannerDescriptor);
 }

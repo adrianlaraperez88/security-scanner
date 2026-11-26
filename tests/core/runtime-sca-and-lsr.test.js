@@ -1800,6 +1800,566 @@ describe('Runtime SCA Dependency Engine & Visual Multi-Step Login Sequence Recor
               r => r.checkId === 'sqli' && r.status === 'VULNERABLE'
             );
             assert.ok(sqliVulnerable, 'Expected SQL injection to be detected on post-login POST form Router[hostname]');
+
+            // Verify automatic in-scan RBAC/BFLA matrix ran on discovered menus & forms without triggering logout
+            assert.ok(scanRes.result.rbacMatrix, 'Expected rbacMatrix to be populated on authenticated scan result');
+            assert.ok(scanRes.result.rbacMatrix.summary.enforcedCount >= 2);
+            const logoutMenuEntry = scanRes.result.discoveredMenus.find(m => m.kind === 'logout');
+            assert.equal(logoutMenuEntry?.accessControlStatus, 'skipped');
+          });
+        }
+      );
+    });
+
+    test('2.13 Multi-Role RBAC/BFLA Access Control Matrix & Zero-Touch SBOM CVE Drift Monitor (/api/asm/sbom & /api/asm/rbac-audit)', async () => {
+      const { auditMenuAndFormAccessControl } = await import('../../core/rbac-matrix.js');
+      const { buildSbomAndCveDriftReport } = await import('../../core/sbom-monitor.js');
+
+      // 1. Direct unit test of auditMenuAndFormAccessControl (enforced vs bfla_unauthenticated vs bfla_low_privilege vs skipped logout)
+      let destructiveCalled = false;
+      const menus = [
+        { parentMenu: 'Manage Tools', label: 'Providers Configuration', kind: 'submenu', url: 'https://portal.example.com/admin/config' },
+        { parentMenu: 'Manage Tools', label: 'Unprotected Zip Export', kind: 'submenu', url: 'https://portal.example.com/admin/zip-export' },
+        { parentMenu: 'Manage Tools', label: 'Role Leak Audit Log', kind: 'submenu', url: 'https://portal.example.com/admin/audit-log' },
+        { parentMenu: 'Account', label: 'Logout', kind: 'logout', url: 'https://portal.example.com/site/logout' },
+        { parentMenu: 'Danger', label: 'Purge All', kind: 'submenu', url: 'https://portal.example.com/admin/delete-all' }
+      ];
+      const forms = [
+        { formName: 'Save Config', method: 'POST', actionUrl: 'https://portal.example.com/admin/config' }
+      ];
+
+      const mockRbacFetch = async (url, opts = {}) => {
+        if (url.includes('logout') || url.includes('delete')) {
+          destructiveCalled = true;
+        }
+        const cookie = String(opts.headers?.Cookie || opts.headers?.cookie || '');
+        if (url === 'https://portal.example.com/admin/config') {
+          return { status: 302, headers: { location: '/site/login' }, text: '' };
+        }
+        if (url === 'https://portal.example.com/admin/zip-export') {
+          // Vulnerable to unauthenticated BFLA!
+          return {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            text: JSON.stringify({ zips: ['33101', '90210'] })
+          };
+        }
+        if (url === 'https://portal.example.com/admin/audit-log') {
+          if (cookie.includes('role=low_priv')) {
+            // Vulnerable to low-privilege vertical BFLA!
+            return {
+              status: 200,
+              headers: { 'content-type': 'text/html' },
+              text: '<html><body><h1>Internal Audit Log Table</h1></body></html>'
+            };
+          }
+          return { status: 403, headers: { 'content-type': 'text/html' }, text: 'Forbidden' };
+        }
+        return { status: 404, headers: {}, text: 'Not Found' };
+      };
+
+      const rbacReport = await auditMenuAndFormAccessControl({
+        discoveredMenus: menus,
+        discoveredForms: forms,
+        unauthFetch: mockRbacFetch,
+        secondaryAuthHeaders: { Cookie: 'role=low_priv' }
+      });
+
+      assert.equal(destructiveCalled, false, 'Destructive/logout URLs must never be probed');
+      assert.equal(rbacReport.summary.status, 'VULNERABLE');
+      assert.equal(rbacReport.summary.enforcedCount, 2); // menu + form for /admin/config
+      assert.equal(rbacReport.summary.unauthenticatedBflaCount, 1); // /admin/zip-export
+      assert.equal(rbacReport.summary.lowPrivilegeBflaCount, 1); // /admin/audit-log
+      assert.equal(rbacReport.summary.skippedCount, 2); // logout + delete-all
+      assert.equal(rbacReport.findings.length, 2);
+      assert.ok(rbacReport.findings.some(f => f.accessControlStatus === 'bfla_unauthenticated' && f.cwe === 'CWE-285'));
+      assert.ok(rbacReport.findings.some(f => f.accessControlStatus === 'bfla_low_privilege' && f.cwe === 'CWE-285'));
+
+      // 2. Direct unit test of buildSbomAndCveDriftReport (Zero-Touch in-memory CVE drift monitor)
+      const sbomReport = buildSbomAndCveDriftReport([
+        {
+          id: 'hist-1',
+          timestamp: '2026-11-25T12:00:00Z',
+          targets: ['https://satprocess.com/broadbandAdmin/index.php'],
+          runtimeSca: {
+            findings: [
+              { key: 'yii', tech: 'Yii PHP Framework', version: '2.0.45', category: 'Framework', source: 'composer.lock' },
+              { key: 'php', tech: 'PHP', version: '8.2.10', category: 'Runtime', source: 'X-Powered-By' }
+            ]
+          }
+        }
+      ]);
+
+      assert.equal(sbomReport.zeroTouchMode, true);
+      assert.equal(sbomReport.totalTargets, 1);
+      assert.equal(sbomReport.vulnerableTargetsCount, 1);
+      assert.equal(sbomReport.outOfDateComponentsCount, 2);
+      assert.equal(sbomReport.vulnerableComponentsCount, 2);
+      assert.ok(sbomReport.driftAlerts.some(a => a.cveIds.includes('CVE-2024-58136')));
+
+      // 3. Test REST endpoints GET /api/asm/sbom and POST /api/asm/rbac-audit
+      await withMockTarget(
+        {
+          routes: (reqInfo) => {
+            if (reqInfo.pathname === '/admin/protected') {
+              return { status: 401, body: 'Unauthorized' };
+            }
+            if (reqInfo.pathname === '/admin/leaked-panel') {
+              return {
+                status: 200,
+                headers: { 'Content-Type': 'text/html' },
+                body: '<html><body><h1>Admin Panel Without Auth Check</h1></body></html>'
+              };
+            }
+            return { status: 404, body: 'Not Found' };
+          }
+        },
+        async (mockSrv) => {
+          await withAppHarness({}, async (app) => {
+            const sbomApiRes = await app.jsonFetch('/api/asm/sbom');
+            assert.equal(sbomApiRes.status, 200);
+            assert.equal(sbomApiRes.data.zeroTouchMode, true);
+            assert.ok(Array.isArray(sbomApiRes.data.targets));
+
+            const rbacApiRes = await app.jsonFetch('/api/asm/rbac-audit', {
+              method: 'POST',
+              body: {
+                allowPrivate: true,
+                discoveredMenus: [
+                  { parentMenu: 'Admin', label: 'Protected Settings', kind: 'submenu', url: `${mockSrv.baseUrl}/admin/protected` },
+                  { parentMenu: 'Admin', label: 'Leaked Panel', kind: 'submenu', url: `${mockSrv.baseUrl}/admin/leaked-panel` },
+                  { parentMenu: 'Admin', label: 'Logout', kind: 'logout', url: `${mockSrv.baseUrl}/admin/logout` }
+                ],
+                discoveredForms: []
+              }
+            });
+            assert.equal(rbacApiRes.status, 200);
+            assert.equal(rbacApiRes.data.rbacMatrix.summary.enforcedCount, 1);
+            assert.equal(rbacApiRes.data.rbacMatrix.summary.unauthenticatedBflaCount, 1);
+            assert.equal(rbacApiRes.data.rbacMatrix.summary.skippedCount, 1);
+
+            // Verify SSRF block when allowPrivate is false on private loopback URL
+            const ssrfBlockedRes = await app.jsonFetch('/api/asm/rbac-audit', {
+              method: 'POST',
+              body: {
+                allowPrivate: false,
+                discoveredMenus: [
+                  { parentMenu: 'Admin', label: 'Internal', kind: 'submenu', url: `${mockSrv.baseUrl}/admin/protected` }
+                ]
+              }
+            });
+            assert.ok(ssrfBlockedRes.status === 400 || ssrfBlockedRes.status === 403);
+          });
+        }
+      );
+    });
+
+    test('2.14 Token, Cookie & WebStorage (localStorage / sessionStorage) Harvester + JWT Expiry Inspection & Origin-Scoped Session Lookup', async () => {
+      const {
+        inspectExtractedJwtMeta,
+        extractWebStorageAndTokensFromResponse,
+        AuthSessionManager
+      } = await import('../../core/auth-session.js');
+
+      // 1. Verify inspectExtractedJwtMeta decodes valid 3-part JWTs and checks exp
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      const headerB64 = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+      const payloadB64 = Buffer.from(JSON.stringify({ sub: 'admin@satprocess.com', iss: 'broadband-sso', exp: futureExp })).toString('base64url');
+      const validJwt = `${headerB64}.${payloadB64}.sig_test_123`;
+
+      const jwtMeta = inspectExtractedJwtMeta(validJwt);
+      assert.equal(jwtMeta.isJwt, true);
+      assert.equal(jwtMeta.alg, 'HS256');
+      assert.equal(jwtMeta.subject, 'admin@satprocess.com');
+      assert.equal(jwtMeta.issuer, 'broadband-sso');
+      assert.equal(jwtMeta.isExpired, false);
+      assert.ok(jwtMeta.remainingSeconds > 3500);
+
+      // 2. Verify extractWebStorageAndTokensFromResponse extracts localStorage, sessionStorage, headers, and URL hash tokens
+      const spaLoginHtml = `
+        <html>
+        <body>
+          <script>
+            localStorage.setItem('access_token', '${validJwt}');
+            window.localStorage['tenant_id'] = 'broadband_prod';
+            sessionStorage.setItem('csrf_session_token', 'sess_tok_998877');
+          </script>
+        </body>
+        </html>
+      `;
+      const extracted = extractWebStorageAndTokensFromResponse(
+        spaLoginHtml,
+        { 'x-auth-token': 'hdr_api_token_555' },
+        'https://portal.example.com/dashboard#id_token=hash_id_tok_777'
+      );
+      assert.equal(extracted.localStorageItems.access_token, validJwt);
+      assert.equal(extracted.localStorageItems.tenant_id, 'broadband_prod');
+      assert.equal(extracted.sessionStorageItems.csrf_session_token, 'sess_tok_998877');
+      assert.ok(extracted.extractedTokens.some(t => t.source === 'local_storage' && t.key === 'access_token'));
+      assert.ok(extracted.extractedTokens.some(t => t.source === 'header' && t.key === 'x-auth-token'));
+      assert.ok(extracted.extractedTokens.some(t => t.source === 'url' && t.key === 'id_token'));
+
+      // 3. Verify .lsr extract_token step with source: 'local_storage' promotes localStorage token to bearerToken
+      const mgr = new AuthSessionManager({
+        targetUrl: 'https://portal.example.com/login',
+        loginSequence: {
+          name: 'SpaLocalStorageAuth.lsr',
+          targetUrl: 'https://portal.example.com/login',
+          actions: [
+            { type: 'navigate', url: 'https://portal.example.com/login' },
+            { type: 'extract_token', source: 'local_storage', key: 'access_token' }
+          ]
+        }
+      });
+
+      const seqOutcome = await mgr.executeLoginSequence(async () => ({
+        status: 200,
+        url: 'https://portal.example.com/login',
+        headers: { 'set-cookie': 'PHPSESSID=spa_sess_42; Path=/; HttpOnly' },
+        text: spaLoginHtml
+      }));
+      assert.equal(seqOutcome.authenticated, true);
+      assert.equal(mgr.bearerToken, validJwt);
+      assert.equal(seqOutcome.jwtMeta.isJwt, true);
+      assert.equal(seqOutcome.jwtMeta.subject, 'admin@satprocess.com');
+
+      const fullSession = mgr.getRecordedSession({ includeSecrets: true });
+      assert.equal(fullSession.authArtifacts.hasToken, true);
+      assert.equal(fullSession.authArtifacts.hasCookies, true);
+      assert.equal(fullSession.authArtifacts.hasLocalStorage, true);
+      assert.equal(fullSession.authArtifacts.bearerToken, validJwt);
+      assert.match(fullSession.authArtifacts.cookieHeader, /PHPSESSID=spa_sess_42/);
+      assert.equal(fullSession.authArtifacts.localStorageItems.access_token, validJwt);
+
+      // 4. Verify POST /api/auth/record-session (includeArtifactValues: true) & GET /api/auth/sessions?includeArtifactValues=1&origin=...
+      await withAppHarness({}, async (app) => {
+        const demoUrl = `${app.baseUrl}/api/auth/demo-login`;
+        const recRes = await app.jsonFetch('/api/auth/record-session', {
+          method: 'POST',
+          body: {
+            targetUrl: demoUrl,
+            allowPrivate: true,
+            includeArtifactValues: true,
+            loginSequence: {
+              name: 'DemoTokenHarvest.lsr',
+              targetUrl: demoUrl,
+              otpConfig: {
+                enabled: true,
+                secret: 'JBSWY3DPEHPK3PXP',
+                digits: 6,
+                period: 30,
+                algorithm: 'SHA1',
+                inputSelector: 'otp_code'
+              },
+              actions: [
+                { type: 'navigate', url: demoUrl },
+                { type: 'change_input', selectorType: 'id', selector: 'email', value: 'auditor@infsalesgroup.com' },
+                { type: 'change_input', selectorType: 'id', selector: 'password', value: 'DemoEnterprisePass2026!', isSecret: true },
+                { type: 'fill_otp', selectorType: 'id', selector: 'otp_code' },
+                { type: 'click_button', selectorType: 'text', selector: 'Log In' }
+              ]
+            }
+          }
+        });
+        assert.equal(recRes.status, 200);
+        assert.equal(recRes.data.authenticated, true);
+        assert.equal(recRes.data.password, '[REDACTED]');
+        assert.ok(recRes.data.authArtifacts, 'Expected authArtifacts in record-session response');
+        assert.equal(recRes.data.authArtifacts.hasToken, true);
+        assert.equal(recRes.data.authArtifacts.hasCookies, true);
+        assert.equal(recRes.data.authArtifacts.hasLocalStorage, true);
+        assert.ok(recRes.data.authArtifacts.bearerToken);
+        assert.ok(recRes.data.authArtifacts.cookieHeader.includes('SECSCAN_DEMO_SESSION='));
+        assert.ok(recRes.data.authArtifacts.localStorageItems.demo_access_token);
+
+        // Query active sessions filtered by origin
+        const sessListRes = await app.jsonFetch('/api/auth/sessions?includeArtifactValues=1');
+        assert.equal(sessListRes.status, 200);
+        assert.ok(sessListRes.data.sessions.length >= 1);
+        assert.ok(sessListRes.data.sessions[0].authArtifacts?.bearerToken);
+
+        // Query with non-matching origin must return 0 sessions (origin isolation)
+        const otherOriginRes = await app.jsonFetch('/api/auth/sessions?includeArtifactValues=1&origin=https://unrelated-origin.example.org');
+        assert.equal(otherOriginRes.status, 200);
+        assert.equal(otherOriginRes.data.sessions.length, 0);
+      });
+    });
+
+    test('3.7 Target Systems Registry, 1-Click Clone, Delta Fix Verification (open_issues_only vs full_profile) & Scheduler API', async () => {
+      const {
+        normalizeTargetSystem,
+        cloneTargetSystemConfig,
+        computeNextScheduleRunAt,
+        extractUnfixedChecksFromResults,
+        mergeDeltaScanSummary,
+        resolveChecksForTargetSystemRun,
+        exportTargetSystem
+      } = await import('../../core/target-systems.js');
+
+      // 1) Unit tests for core/target-systems.js
+      const baseNow = new Date('2026-11-26T00:00:00.000Z');
+      const nextDaily = computeNextScheduleRunAt({ enabled: true, interval: 'daily' }, baseNow);
+      assert.equal(nextDaily, '2026-11-27T00:00:00.000Z');
+      assert.equal(computeNextScheduleRunAt({ enabled: false, interval: 'daily' }, baseNow), null);
+
+      const sys = normalizeTargetSystem({
+        name: 'Broadband Portal Prod',
+        environment: 'production',
+        targetUrl: 'https://portal.example.com/broadbandAdmin/index.php',
+        profile: 'smart',
+        allowPrivate: false,
+        sequenceId: 'seq_yii_123',
+        sequenceName: 'BroadbandYii.lsr',
+        authHeader: 'Bearer super_secret_token_999',
+        customHeaders: {
+          Authorization: 'Bearer custom_hdr_secret',
+          'X-Api-Key': 'api_key_secret_123',
+          'X-Tenant-Id': 'broadband-us'
+        },
+        schedule: {
+          interval: 'daily',
+          mode: 'open_issues_only'
+        }
+      });
+
+      assert.match(sys.id, /^ts_/);
+      assert.equal(sys.environment, 'production');
+      assert.equal(sys.authMethod, 'lsr');
+      assert.equal(sys.schedule.enabled, true);
+      assert.equal(sys.schedule.interval, 'daily');
+      assert.equal(sys.schedule.intervalMinutes, 1440);
+      assert.equal(sys.schedule.mode, 'open_issues_only');
+      assert.ok(sys.schedule.nextRunAt);
+
+      // Verify exportTargetSystem masks secrets when includeSecrets: false
+      const exportedPublic = exportTargetSystem(sys, { includeSecrets: false });
+      assert.equal(exportedPublic.hasAuthHeader, true);
+      assert.equal(exportedPublic.authHeader, '[REDACTED]');
+      assert.equal(exportedPublic.customHeaders.Authorization, '[REDACTED]');
+      assert.equal(exportedPublic.customHeaders['X-Api-Key'], '[REDACTED]');
+      assert.equal(exportedPublic.customHeaders['X-Tenant-Id'], 'broadband-us');
+
+      // Verify normalizeTargetSystem preserves existing unredacted secrets when updated with '[REDACTED]'
+      const updatedSys = normalizeTargetSystem(
+        {
+          name: 'Broadband Portal Prod v2',
+          authHeader: '[REDACTED]',
+          customHeaders: {
+            Authorization: '[REDACTED]',
+            'X-Api-Key': '[REDACTED]',
+            'X-Tenant-Id': 'broadband-eu'
+          }
+        },
+        sys
+      );
+      assert.equal(updatedSys.authHeader, 'Bearer super_secret_token_999');
+      assert.equal(updatedSys.customHeaders.Authorization, 'Bearer custom_hdr_secret');
+      assert.equal(updatedSys.customHeaders['X-Api-Key'], 'api_key_secret_123');
+      assert.equal(updatedSys.customHeaders['X-Tenant-Id'], 'broadband-eu');
+
+      // Verify extractUnfixedChecksFromResults and mergeDeltaScanSummary (full_profile -> open_issues_only delta)
+      const initialScanResults = [
+        { checkId: 'xss', name: 'Reflected XSS', status: 'VULNERABLE', severity: 'HIGH', category: 'Injection' },
+        { checkId: 'sqli', name: 'SQL Injection', status: 'VULNERABLE', severity: 'CRITICAL', category: 'Injection' },
+        { checkId: 'cors', name: 'CORS Misconfiguration', status: 'SUSPICIOUS', severity: 'MEDIUM', category: 'Configuration' },
+        { checkId: 'ssl-tls', name: 'SSL/TLS', status: 'SAFE', severity: 'NONE', category: 'Transport' }
+      ];
+      const extracted = extractUnfixedChecksFromResults(initialScanResults);
+      assert.deepEqual(extracted.unfixedCheckIds, ['xss', 'sqli', 'cors']);
+      assert.equal(extracted.vulnerableCount, 2);
+      assert.equal(extracted.suspiciousCount, 1);
+
+      const summaryAfterFull = mergeDeltaScanSummary(
+        null,
+        {
+          scanId: 'scan_full_1',
+          results: initialScanResults,
+          risk: { grade: 'D', level: 'HIGH', score: 68 }
+        },
+        'full_profile'
+      );
+      assert.deepEqual(summaryAfterFull.unfixedCheckIds, ['xss', 'sqli', 'cors']);
+      assert.equal(summaryAfterFull.fixedInLastRunCount, 0);
+
+      // Now simulate an open_issues_only re-scan that tests ['xss', 'sqli'] where 'xss' is now SAFE and 'sqli' is still VULNERABLE,
+      // while 'cors' was not re-tested in this partial run:
+      // - 'xss' must be removed from unfixedCheckIds and recorded in fixedInLastRunCheckIds
+      // - 'sqli' (still vulnerable) and 'cors' (untested open check) must remain in unfixedCheckIds
+      const deltaSummary = mergeDeltaScanSummary(
+        summaryAfterFull,
+        {
+          scanId: 'scan_delta_2',
+          results: [
+            { checkId: 'xss', name: 'Reflected XSS', status: 'SAFE', severity: 'NONE', category: 'Injection' },
+            { checkId: 'sqli', name: 'SQL Injection', status: 'VULNERABLE', severity: 'CRITICAL', category: 'Injection' }
+          ],
+          risk: { grade: 'C', level: 'MEDIUM', score: 35 }
+        },
+        'open_issues_only',
+        ['xss', 'sqli']
+      );
+      assert.deepEqual(deltaSummary.fixedInLastRunCheckIds, ['xss']);
+      assert.equal(deltaSummary.fixedInLastRunCount, 1);
+      assert.deepEqual(deltaSummary.unfixedCheckIds, ['sqli', 'cors']);
+
+      // Verify resolveChecksForTargetSystemRun
+      const sysWithSummary = normalizeTargetSystem({ ...sys, lastScanSummary: deltaSummary }, sys);
+      const resolvedOpenOnly = resolveChecksForTargetSystemRun(sysWithSummary, 'open_issues_only');
+      assert.deepEqual(resolvedOpenOnly.checks, ['sqli', 'cors']);
+      assert.equal(resolvedOpenOnly.fallbackToFullProfile, false);
+
+      // Verify cloneTargetSystemConfig creates fresh ID, applies overrides, and disables schedule by default
+      const clonedSys = cloneTargetSystemConfig(sysWithSummary, {
+        name: 'Broadband Portal Staging',
+        environment: 'staging',
+        targetUrl: 'https://staging-portal.example.com/broadbandAdmin/index.php',
+        copyUnfixedChecks: true
+      });
+      assert.notEqual(clonedSys.id, sysWithSummary.id);
+      assert.equal(clonedSys.name, 'Broadband Portal Staging');
+      assert.equal(clonedSys.environment, 'staging');
+      assert.equal(clonedSys.targetUrl, 'https://staging-portal.example.com/broadbandAdmin/index.php');
+      assert.equal(clonedSys.schedule.enabled, false);
+      assert.equal(clonedSys.lastScanSummary, null);
+      assert.deepEqual(clonedSys.checks, ['sqli', 'cors']);
+
+      // 2) End-to-End Server API & Scheduler tests (/api/target-systems)
+      await withMockTarget(
+        {
+          routes: () => ({
+            status: 200,
+            headers: {
+              'Content-Type': 'text/html',
+              Server: 'nginx/1.24.0'
+            },
+            body: '<!doctype html><html><head><script src="/jquery-3.4.1.min.js"></script></head><body>Portal</body></html>'
+          })
+        },
+        async (mockTarget) => {
+          await withAppHarness({ inMemory: true }, async (app) => {
+            // A) POST /api/target-systems
+            const createRes = await app.jsonFetch('/api/target-systems', {
+              method: 'POST',
+              body: {
+                name: 'Prod Broadband System',
+                environment: 'production',
+                targetUrl: mockTarget.baseUrl,
+                allowPrivate: true,
+                profile: 'smart',
+                maxDepth: 0,
+                customHeaders: {
+                  Authorization: 'Bearer secret_prod_jwt',
+                  'X-Env': 'prod'
+                },
+                schedule: {
+                  interval: 'daily',
+                  mode: 'open_issues_only'
+                },
+                lastScanSummary: {
+                  lastGrade: 'C',
+                  unfixedChecks: [
+                    { id: 'runtime-sca', name: 'Runtime SCA', status: 'VULNERABLE', severity: 'MEDIUM', category: 'Supply Chain' }
+                  ]
+                }
+              }
+            });
+            assert.equal(createRes.status, 201);
+            const createdSys = createRes.data.system;
+            assert.ok(createdSys?.id);
+            assert.equal(createdSys.customHeaders.Authorization, '[REDACTED]');
+            assert.equal(createdSys.customHeaders['X-Env'], 'prod');
+            assert.equal(createdSys.schedule.enabled, true);
+            assert.equal(createdSys.schedule.interval, 'daily');
+            assert.deepEqual(createdSys.lastScanSummary.unfixedCheckIds, ['runtime-sca']);
+
+            // B) GET /api/target-systems lists the system with redacted secrets
+            const listRes = await app.jsonFetch('/api/target-systems');
+            assert.equal(listRes.status, 200);
+            assert.equal(listRes.data.systems.length, 1);
+            assert.equal(listRes.data.systems[0].id, createdSys.id);
+            assert.equal(listRes.data.systems[0].customHeaders.Authorization, '[REDACTED]');
+
+            // C) POST /api/target-systems/:id/clone clones with overrides and disables schedule by default
+            const cloneRes = await app.jsonFetch(`/api/target-systems/${encodeURIComponent(createdSys.id)}/clone`, {
+              method: 'POST',
+              body: {
+                name: 'Staging Broadband Clone',
+                environment: 'staging',
+                targetUrl: `${mockTarget.baseUrl}/staging`,
+                copyUnfixedChecks: true
+              }
+            });
+            assert.equal(cloneRes.status, 201);
+            const cloned = cloneRes.data.system;
+            assert.equal(cloneRes.data.clonedFromId, createdSys.id);
+            assert.notEqual(cloned.id, createdSys.id);
+            assert.equal(cloned.name, 'Staging Broadband Clone');
+            assert.equal(cloned.environment, 'staging');
+            assert.equal(cloned.schedule.enabled, false);
+            assert.deepEqual(cloned.checks, ['runtime-sca']);
+
+            // D) PUT /api/target-systems/:id updates schedule/config and preserves redacted secret headers
+            const putRes = await app.jsonFetch(`/api/target-systems/${encodeURIComponent(createdSys.id)}`, {
+              method: 'PUT',
+              body: {
+                name: 'Prod Broadband System (Updated)',
+                customHeaders: {
+                  Authorization: '[REDACTED]',
+                  'X-Env': 'prod-v2'
+                },
+                schedule: {
+                  interval: 'every_6h',
+                  mode: 'open_issues_only'
+                }
+              }
+            });
+            assert.equal(putRes.status, 200);
+            assert.equal(putRes.data.system.name, 'Prod Broadband System (Updated)');
+            assert.equal(putRes.data.system.schedule.interval, 'every_6h');
+            assert.equal(putRes.data.system.customHeaders['X-Env'], 'prod-v2');
+
+            // E) POST /api/target-systems/:id/run (mode: 'open_issues_only') launches delta verification scan
+            const runRes = await app.jsonFetch(`/api/target-systems/${encodeURIComponent(createdSys.id)}/run`, {
+              method: 'POST',
+              body: {
+                mode: 'open_issues_only'
+              }
+            });
+            assert.equal(runRes.status, 202);
+            assert.equal(runRes.data.mode, 'open_issues_only');
+            assert.deepEqual(runRes.data.checks, ['runtime-sca']);
+            const scanId = runRes.data.scanId;
+            assert.ok(scanId);
+
+            // Wait for scan job completion and verify lastScanSummary is updated on the Target System
+            let finishedJob = null;
+            for (let i = 0; i < 60; i++) {
+              const pollRes = await app.jsonFetch(`/api/scan/${scanId}`);
+              if (['completed', 'done', 'failed', 'error'].includes(pollRes.data?.status)) {
+                finishedJob = pollRes.data;
+                break;
+              }
+              await new Promise(r => setTimeout(r, 100));
+            }
+            assert.ok(finishedJob, 'Expected target-system delta verification scan to finish');
+            assert.ok(['completed', 'done'].includes(finishedJob.status));
+
+            const getUpdatedSys = await app.jsonFetch(`/api/target-systems/${encodeURIComponent(createdSys.id)}`);
+            assert.equal(getUpdatedSys.status, 200);
+            assert.equal(getUpdatedSys.data.system.lastScanSummary.lastScanId, scanId);
+            assert.equal(getUpdatedSys.data.system.lastScanSummary.lastMode, 'open_issues_only');
+            assert.ok(getUpdatedSys.data.system.lastScanSummary.unfixedCheckIds.includes('runtime-sca'));
+
+            // F) DELETE /api/target-systems/:id deletes the cloned system
+            const delCloneRes = await app.jsonFetch(`/api/target-systems/${encodeURIComponent(cloned.id)}`, {
+              method: 'DELETE'
+            });
+            assert.equal(delCloneRes.status, 200);
+            assert.equal(delCloneRes.data.deleted, true);
+
+            const afterDelList = await app.jsonFetch('/api/target-systems');
+            assert.equal(afterDelList.data.systems.length, 1);
+            assert.equal(afterDelList.data.systems[0].id, createdSys.id);
           });
         }
       );

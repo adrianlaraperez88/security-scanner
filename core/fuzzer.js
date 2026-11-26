@@ -1,4 +1,5 @@
 import { URL } from 'node:url';
+import { getSampleFieldValue } from './crawler.js';
 
 const GOVERNANCE_ERROR_CODES = new Set([
   'SSRF_POLICY_BLOCKED',
@@ -7,7 +8,7 @@ const GOVERNANCE_ERROR_CODES = new Set([
   'DNS_REBIND_OR_PRIVATE_IP'
 ]);
 
-function isGovernanceBlockError(err) {
+export function isGovernanceBlockError(err) {
   if (!err) return false;
   if (err.isGovernanceBlock === true) return true;
   if (GOVERNANCE_ERROR_CODES.has(err.code)) return true;
@@ -39,20 +40,6 @@ function normalizeUrlForFormMatch(rawUrl) {
   } catch {
     return '';
   }
-}
-
-function getDefaultFormFieldValue(field) {
-  const existing = typeof field?.value === 'string' ? field.value.trim() : '';
-  if (existing) return existing;
-  const name = String(field?.name || '');
-  const type = String(field?.type || '').toLowerCase();
-  if (type === 'number' || /id|num|count|page|status|type/i.test(name)) {
-    return '1';
-  }
-  if (type === 'email') {
-    return 'test@example.com';
-  }
-  return 'test';
 }
 
 function getHeader(headers, name) {
@@ -87,27 +74,32 @@ export class Fuzzer {
     const params = Array.from(url.searchParams.keys());
     const findings = [];
 
-    const normTarget = normalizeUrlForFormMatch(url.href);
+    const WRITE_FORM_METHODS = new Set(['POST', 'PUT', 'PATCH']);
     const rawForms = Array.isArray(options?.discoveredForms) ? options.discoveredForms : [];
     const matchingPostForms = [];
-    const seenFormKeys = new Set();
-
-    for (const f of rawForms) {
-      if (!f || typeof f !== 'object') continue;
-      if (String(f.method || '').toUpperCase() !== 'POST') continue;
-      if (!Array.isArray(f.fields) || f.fields.length === 0) continue;
-      const normAction = normalizeUrlForFormMatch(f.actionUrl);
-      if (!normAction) continue;
-      const normPage = normalizeUrlForFormMatch(f.pageUrl);
-      if (normTarget && (normAction === normTarget || normPage === normTarget)) {
-        const fieldNames = f.fields
-          .map(field => (typeof field?.name === 'string' ? field.name.trim() : ''))
-          .filter(Boolean);
-        if (fieldNames.length === 0) continue;
-        const dedupKey = `${f.actionUrl}::${fieldNames.join(',')}`;
-        if (!seenFormKeys.has(dedupKey)) {
-          seenFormKeys.add(dedupKey);
-          matchingPostForms.push(f);
+    if (rawForms.length > 0) {
+      const normTarget = normalizeUrlForFormMatch(url.href);
+      if (normTarget) {
+        const seenFormKeys = new Set();
+        for (const f of rawForms) {
+          if (!f || typeof f !== 'object') continue;
+          const fMethod = String(f.method || '').toUpperCase();
+          if (!WRITE_FORM_METHODS.has(fMethod)) continue;
+          if (!Array.isArray(f.fields) || f.fields.length === 0) continue;
+          const normAction = normalizeUrlForFormMatch(f.actionUrl);
+          if (!normAction) continue;
+          const normPage = normalizeUrlForFormMatch(f.pageUrl);
+          if (normAction === normTarget || normPage === normTarget) {
+            const fieldNames = f.fields
+              .map(field => (typeof field?.name === 'string' ? field.name.trim() : ''))
+              .filter(Boolean);
+            if (fieldNames.length === 0) continue;
+            const dedupKey = `${fMethod}::${f.actionUrl}::${fieldNames.join(',')}`;
+            if (!seenFormKeys.has(dedupKey)) {
+              seenFormKeys.add(dedupKey);
+              matchingPostForms.push(f);
+            }
+          }
         }
       }
     }
@@ -255,8 +247,45 @@ export class Fuzzer {
     }
 
     if (!governanceError && matchingPostForms.length > 0) {
+      const isReflectedCheck = signatureType === 'REFLECTED' || signatureType === 'XSS_REFLECTED';
+      const sameOriginVerificationUrls = [];
+      if (isReflectedCheck && Array.isArray(options?.verificationUrls) && options.verificationUrls.length > 0) {
+        const seenVerify = new Set();
+        for (const rawVerifyUrl of options.verificationUrls) {
+          if (sameOriginVerificationUrls.length >= 3) break;
+          if (typeof rawVerifyUrl !== 'string' || !rawVerifyUrl.trim()) continue;
+          try {
+            const parsedVerify = new URL(rawVerifyUrl.trim(), url.origin);
+            if (!['http:', 'https:'].includes(parsedVerify.protocol)) continue;
+            if (parsedVerify.origin !== url.origin) continue;
+            const cleanHref = parsedVerify.href;
+            if (seenVerify.has(cleanHref)) continue;
+            seenVerify.add(cleanHref);
+            sameOriginVerificationUrls.push(cleanHref);
+          } catch {
+            continue;
+          }
+        }
+      }
+      const storedVerifiedUrlsForPayload = new Set();
+
       for (const form of matchingPostForms.slice(0, 5)) {
         if (governanceError) break;
+        const formMethod = String(form.method || 'POST').toUpperCase();
+        const reqMethod = WRITE_FORM_METHODS.has(formMethod) ? formMethod : 'POST';
+        const isJsonForm = String(form.contentType || '').toLowerCase() === 'json';
+        const reqHeaders = {
+          'Content-Type': isJsonForm ? 'application/json' : 'application/x-www-form-urlencoded'
+        };
+        const serializeFormBody = (paramsObj) => {
+          if (isJsonForm) {
+            return JSON.stringify(paramsObj);
+          }
+          return new URLSearchParams(
+            Object.entries(paramsObj).map(([k, v]) => [k, String(v ?? '')])
+          ).toString();
+        };
+
         const defaultFormParams = Object.create(null);
         if (form.hiddenFields && typeof form.hiddenFields === 'object') {
           for (const [k, v] of Object.entries(form.hiddenFields)) {
@@ -268,12 +297,10 @@ export class Fuzzer {
         for (const f of form.fields) {
           const fName = typeof f?.name === 'string' ? f.name.trim() : '';
           if (!fName || FORBIDDEN_FORM_KEYS.has(fName)) continue;
-          defaultFormParams[fName] = getDefaultFormFieldValue(f);
+          defaultFormParams[fName] = getSampleFieldValue(f);
         }
 
-        const defaultBodyStr = new URLSearchParams(
-          Object.entries(defaultFormParams).map(([k, v]) => [k, String(v ?? '')])
-        ).toString();
+        const defaultBodyStr = serializeFormBody(defaultFormParams);
 
         let formBaselineMs = baselineMs;
         if (signatureType === 'SQLI_TIME') {
@@ -281,8 +308,8 @@ export class Fuzzer {
           const bStart = Date.now();
           try {
             const bRes = await this.fetch(form.actionUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              method: reqMethod,
+              headers: reqHeaders,
               body: defaultBodyStr
             });
             if (bRes?.isGovernanceBlock) {
@@ -311,17 +338,15 @@ export class Fuzzer {
           const fieldName = typeof field?.name === 'string' ? field.name.trim() : '';
           if (!fieldName || FORBIDDEN_FORM_KEYS.has(fieldName)) continue;
 
-          const formParams = { ...defaultFormParams, [fieldName]: payload };
-          const bodyStr = new URLSearchParams(
-            Object.entries(formParams).map(([k, v]) => [k, String(v ?? '')])
-          ).toString();
+          const probeParams = { ...defaultFormParams, [fieldName]: payload };
+          const bodyStr = serializeFormBody(probeParams);
 
           attempted += 1;
           const startTime = Date.now();
           try {
             const res = await this.fetch(form.actionUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              method: reqMethod,
+              headers: reqHeaders,
               body: bodyStr
             });
             if (res?.isGovernanceBlock) {
@@ -345,8 +370,8 @@ export class Fuzzer {
                   postSqliErrorBaselineFetched = true;
                   try {
                     const bRes = await this.fetch(form.actionUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                      method: reqMethod,
+                      headers: reqHeaders,
                       body: defaultBodyStr
                     });
                     if (bRes?.isGovernanceBlock) {
@@ -391,10 +416,50 @@ export class Fuzzer {
                   payload,
                   type: signatureType,
                   url: form.actionUrl,
-                  method: 'POST',
+                  method: reqMethod,
                   ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {})
                 });
               }
+            } else if (isReflectedCheck && sameOriginVerificationUrls.length > 0) {
+              for (const verifyUrl of sameOriginVerificationUrls) {
+                if (storedVerifiedUrlsForPayload.has(verifyUrl)) continue;
+                attempted += 1;
+                try {
+                  const vRes = await this.fetch(verifyUrl);
+                  if (vRes?.isGovernanceBlock) {
+                    const gErr = new Error(vRes.reason || vRes.error || 'Blocked by governance policy');
+                    gErr.isGovernanceBlock = true;
+                    governanceError = gErr;
+                    lastError = gErr;
+                    break;
+                  }
+                  networkSuccess = true;
+                  if (this.isVulnerable(vRes, payload, 'REFLECTED', 0)) {
+                    storedVerifiedUrlsForPayload.add(verifyUrl);
+                    findings.push({
+                      parameter: fieldName,
+                      payload,
+                      type: 'STORED_REFLECTED',
+                      storedOnUrl: verifyUrl,
+                      url: form.actionUrl,
+                      method: reqMethod,
+                      ...(vRes?.trafficId !== undefined
+                        ? { trafficId: vRes.trafficId }
+                        : res?.trafficId !== undefined
+                          ? { trafficId: res.trafficId }
+                          : {})
+                    });
+                    break;
+                  }
+                } catch (vErr) {
+                  lastError = vErr;
+                  if (isGovernanceBlockError(vErr)) {
+                    governanceError = vErr;
+                    break;
+                  }
+                }
+              }
+              if (governanceError) break;
             }
           } catch (err) {
             lastError = err;
@@ -433,6 +498,7 @@ export class Fuzzer {
     const body = typeof res.text === 'string' ? res.text : '';
 
     switch (type) {
+      case 'REFLECTED':
       case 'XSS_REFLECTED': {
         const contentType = getHeader(res.headers, 'content-type').toLowerCase();
         if (contentType.includes('application/json') && !/^\s*</.test(body)) {

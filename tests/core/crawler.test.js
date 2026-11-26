@@ -5,7 +5,9 @@ import {
   crawlPage,
   extractLinksAndFormsFromHtml,
   extractMenusFromHtml,
-  parseSpaRoutesFromScript
+  parseSpaRoutesFromScript,
+  extractAjaxFormsFromScript,
+  synthesizeFormsFromOpenApi
 } from '../../core/crawler.js';
 
 test('TaskQueue: deduplicates, filters static asset extensions, and locks to domain', () => {
@@ -220,4 +222,165 @@ test('crawlPage & extractMenusFromHtml: discovers Yii + AngularJS dropdown menus
     orderForm.fields.map(f => f.name),
     ['customerName', 'provider', 'notes']
   );
+});
+
+test('extractAjaxFormsFromScript & synthesizeFormsFromOpenApi: extracts JS AJAX/JSON API forms and OpenAPI v3 operations while skipping destructive routes', () => {
+  const pageUrl = 'https://satprocess.com/broadbandAdmin/index.php/default/index';
+  const serviceJs = `
+    var adminPath = '/broadbandAdmin/';
+    adminApp.service('adminService', ['$http', function($http) {
+      this.saveProviderConfig = function() {
+        return $http.post(adminPath + 'index.php/configuration/save', {
+          providerId: 'att',
+          timeoutMs: 5000,
+          active: true
+        });
+      };
+      this.deleteZipCode = function(id) {
+        return $http.post(adminPath + 'index.php/zipcodemanager/delete', { zipId: id });
+      };
+      this.searchOrders = function() {
+        return axios.get('/broadbandAdmin/index.php/logreport/filter', {
+          params: { status: 'pending', zip: '33101' }
+        });
+      };
+    }]);
+  `;
+
+  const ajaxForms = extractAjaxFormsFromScript(serviceJs, pageUrl, '/broadbandAdmin/');
+  assert.ok(Array.isArray(ajaxForms) && ajaxForms.length >= 2);
+
+  const saveForm = ajaxForms.find(f => f.actionUrl.endsWith('/broadbandAdmin/index.php/configuration/save'));
+  assert.ok(saveForm, 'Expected $http.post configuration/save endpoint to be synthesized');
+  assert.equal(saveForm.method, 'POST');
+  assert.equal(saveForm.contentType, 'json');
+  assert.equal(saveForm.formType, 'ajax_endpoint');
+  assert.deepEqual(saveForm.fields.map(f => f.name), ['providerId', 'timeoutMs', 'active']);
+
+  // Destructive endpoint (/zipcodemanager/delete) must be excluded
+  assert.equal(
+    ajaxForms.some(f => f.actionUrl.includes('delete')),
+    false,
+    'Destructive delete endpoint must be skipped'
+  );
+
+  // OpenAPI v3 specification synthesis
+  const openApiSpec = {
+    openapi: '3.0.3',
+    paths: {
+      '/api/v1/orders': {
+        post: {
+          operationId: 'createBroadbandOrder',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    customerName: { type: 'string' },
+                    zipCode: { type: 'string' },
+                    speedTier: { type: 'integer' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        delete: {
+          operationId: 'deleteAllOrders'
+        }
+      },
+      '/api/v1/orders/purge': {
+        post: {
+          operationId: 'purgeOrders',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: { confirm: { type: 'boolean' } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const openApiForms = synthesizeFormsFromOpenApi(openApiSpec, 'https://satprocess.com/broadbandAdmin/');
+  assert.equal(openApiForms.length, 1);
+  assert.equal(openApiForms[0].actionUrl, 'https://satprocess.com/api/v1/orders');
+  assert.equal(openApiForms[0].method, 'POST');
+  assert.equal(openApiForms[0].contentType, 'json');
+  assert.equal(openApiForms[0].formType, 'openapi_operation');
+  assert.deepEqual(
+    openApiForms[0].fields.map(f => f.name),
+    ['customerName', 'zipCode', 'speedTier']
+  );
+});
+
+test('crawlPage & parseSpaRoutesFromScript: discovers Laravel Wayfinder + Inertia.js post-login routes (/how-we-trade, /zero-dte/live, /zero-dte/closed, /positions, /settings/profile) and AppSidebar submenus', async () => {
+  const dashboardUrl = 'https://fearlessbull.com/dashboard';
+  const dashboardHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <link rel="modulepreload" as="script" href="https://fearlessbull.com/build/assets/wayfinder-DsECxCHm.js" />
+        <script type="module" src="https://fearlessbull.com/build/assets/app-Dhbkp27W.js"></script>
+        <script type="module" src="https://fearlessbull.com/build/assets/Dashboard-Ctc30dMp.js"></script>
+      </head>
+      <body>
+        <script data-page="app" type="application/json">{"component":"Dashboard","props":{},"url":"/dashboard"}</script>
+        <div id="app"></div>
+      </body>
+    </html>
+  `;
+
+  const wayfinderAndSidebarJs = `
+    var G=e=>({url:G.url(e),method:\`get\`});G.definition={methods:[\`get\`,\`head\`],url:\`/dashboard\`};
+    var kc=e=>({url:kc.url(e),method:\`get\`});kc.definition={methods:[\`get\`,\`head\`],url:\`/vce-analysis\`};
+    var K=e=>({url:K.url(e),method:\`get\`});K.definition={methods:[\`get\`,\`head\`,\`post\`],url:\`/positions\`};
+    var Mc=e=>({url:Mc.url(e),method:\`get\`});Mc.definition={methods:[\`get\`,\`head\`],url:\`/how-we-trade\`};
+    var q=e=>({url:q.url(e),method:\`get\`});q.definition={methods:[\`get\`,\`head\`],url:\`/settings/profile\`};
+    var cc=e=>({url:cc.url(e),method:\`post\`});cc.definition={methods:[\`post\`],url:\`/logout\`};
+    var J=e=>({url:J.url(e),method:\`get\`});J.definition={methods:[\`get\`,\`head\`],url:\`/zero-dte/live\`};
+    var Y=e=>({url:Y.url(e),method:\`get\`});Y.definition={methods:[\`get\`,\`head\`],url:\`/zero-dte/closed\`};
+    var Wc=r({__name:\`AppSidebar\`,setup(e){
+      let n=P(()=>[
+        {title:\`Dashboard\`,href:G(),icon:yo},
+        {title:\`Zero DTE\`,href:J(),icon:ho,items:[{title:\`Live\`,href:J()},{title:\`Closed\`,href:Y()}]},
+        {title:\`VCE Analysis\`,href:kc(),icon:fo}
+      ]);
+      let r=[{title:\`Repository\`,href:\`https://github.com/fearless-bull\`,icon:vo},{title:\`Documentation\`,href:Mc(),icon:mo}];
+    }});
+  `;
+
+  const mockFetch = async (url) => {
+    if (url === dashboardUrl) {
+      return { status: 200, url: dashboardUrl, text: dashboardHtml };
+    }
+    if (url === 'https://fearlessbull.com/build/assets/app-Dhbkp27W.js') {
+      return { status: 200, url, text: wayfinderAndSidebarJs };
+    }
+    return { status: 200, url, text: '' };
+  };
+
+  const crawlRes = await crawlPage(dashboardUrl, mockFetch, { includeResponse: true });
+
+  // Verify all post-login Wayfinder routes are discovered as crawlable links
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/how-we-trade'), 'Expected /how-we-trade to be discovered');
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/zero-dte/live'), 'Expected /zero-dte/live to be discovered');
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/zero-dte/closed'), 'Expected /zero-dte/closed to be discovered');
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/vce-analysis'), 'Expected /vce-analysis to be discovered');
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/positions'), 'Expected /positions to be discovered');
+  assert.ok(crawlRes.links.includes('https://fearlessbull.com/settings/profile'), 'Expected /settings/profile to be discovered');
+  assert.equal(crawlRes.links.some(l => l.includes('/logout')), false, 'Logout route must not be enqueued');
+
+  // Verify AppSidebar menus and Zero DTE -> Live / Closed submenus are extracted
+  assert.ok(crawlRes.menus.some(m => m.parentMenu === 'Zero DTE' && m.label === 'Live' && m.kind === 'submenu' && m.url === 'https://fearlessbull.com/zero-dte/live'));
+  assert.ok(crawlRes.menus.some(m => m.parentMenu === 'Zero DTE' && m.label === 'Closed' && m.kind === 'submenu' && m.url === 'https://fearlessbull.com/zero-dte/closed'));
+  assert.ok(crawlRes.menus.some(m => m.label === 'Documentation' && m.url === 'https://fearlessbull.com/how-we-trade'));
+  assert.ok(crawlRes.menus.some(m => m.label === 'Repository' && m.kind === 'external_app'));
+  assert.ok(crawlRes.menus.some(m => m.kind === 'logout' && m.url === 'https://fearlessbull.com/logout'));
 });

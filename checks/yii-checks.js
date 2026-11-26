@@ -7,7 +7,7 @@ export const meta = {
   cwe: 'CWE-215',
   owasp: 'A05:2021-Security Misconfiguration',
   cvssScore: 9.8,
-  cveIds: ['CVE-2024-58136', 'CVE-2024-4991', 'CVE-2021-3692'],
+  cveIds: ['CVE-2024-58136', 'CVE-2024-4991', 'CVE-2023-47129', 'CVE-2021-3692'],
   plainExplanation:
     'Audits Yii 1.x and Yii 2.x applications for exposed Gii code generators (/gii, ?r=gii), Yii 2 Debug module toolbars (/debug, X-Debug-Tag), YII_DEBUG stack trace disclosures (CException, CDbException), and accessible protected/runtime logs or configuration files.',
   whyItMatters:
@@ -18,6 +18,8 @@ export const meta = {
     'https://www.yiiframework.com/doc/guide/2.0/en/security-best-practices',
     'https://nvd.nist.gov/vuln/detail/CVE-2024-58136',
     'https://nvd.nist.gov/vuln/detail/CVE-2024-4991',
+    'https://nvd.nist.gov/vuln/detail/CVE-2023-47129',
+    'https://nvd.nist.gov/vuln/detail/CVE-2021-3692',
     'https://cwe.mitre.org/data/definitions/215.html'
   ]
 };

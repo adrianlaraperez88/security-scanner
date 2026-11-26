@@ -50,7 +50,11 @@ const state = {
   selectedLsrStepIndex: -1,
   lastInspectedPage: null,
   lastLsrPlayResult: null,
-  lsrDraftDismissed: false
+  lsrDraftDismissed: false,
+  lsrDetailViewOpen: false,
+  activeAuthArtifacts: null,
+  targetSystems: [],
+  activeTargetSystemId: ''
 };
 
 function createDefaultLoginSequence() {
@@ -436,6 +440,38 @@ async function apiPost(endpoint, body) {
   return data;
 }
 
+async function apiRequest(method, endpoint, body = undefined) {
+  let res;
+  try {
+    const headers = { Accept: 'application/json' };
+    const fetchOpts = { method, headers };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      fetchOpts.body = JSON.stringify(body);
+    }
+    res = await fetch(endpoint, fetchOpts);
+  } catch (err) {
+    setServerStatus(false, 'Server Disconnected');
+    throw new Error(
+      `Cannot reach the local Security Scanner UI server (${err.message}). Make sure "npm run ui" or "secscan --ui" is running and refresh the page.`
+    );
+  }
+  setServerStatus(true, 'Server Connected');
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+async function apiPut(endpoint, body) {
+  return apiRequest('PUT', endpoint, body);
+}
+
+async function apiDelete(endpoint) {
+  return apiRequest('DELETE', endpoint);
+}
+
 function triggerFileDownload(content, mimeType, filename) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -454,6 +490,7 @@ if (typeof document !== 'undefined') {
     initNavigation();
     initSystemDoctorModal();
     initNewScanForm();
+    initTargetSystemsManager();
     initLoginSequenceRecorder();
     initResultsToolbar();
     initEvidenceDrawer();
@@ -465,6 +502,7 @@ if (typeof document !== 'undefined') {
     loadHistory();
     loadSystemVariables();
     loadSavedLoginSequences();
+    loadTargetSystems();
   });
 }
 
@@ -557,6 +595,16 @@ function switchTab(rawTabId) {
     const root = document.getElementById('traffic-inspector-root');
     if (root) {
       renderTrafficInspector(root);
+    }
+  } else if (tabId === 'login-lsr') {
+    const targetEl = document.getElementById('target-url');
+    const studioTargetEl = document.getElementById('studio-target-url');
+    if (studioTargetEl && !studioTargetEl.value.trim() && targetEl?.value.trim()) {
+      studioTargetEl.value = targetEl.value.trim();
+    }
+    renderLsrSequenceCards();
+    if (state.activeAuthArtifacts) {
+      renderAuthArtifactsCard(state.activeAuthArtifacts, { sourceLabel: 'Active Vault Artifacts' });
     }
   }
 }
@@ -1285,12 +1333,19 @@ function initNewScanForm() {
     const loginContentType = document.getElementById('adv-auth-type')?.value || 'auto';
     const recordedSessionId = document.getElementById('adv-recorded-session-id')?.value.trim() || null;
     const authMethod = document.getElementById('adv-auth-method')?.value || 'login_sequence';
+    const topLsrVal = document.getElementById('top-lsr-select')?.value;
+    const advLsrVal = document.getElementById('adv-lsr-select')?.value;
+    const explicitNoneSelected = Boolean(
+      state.lsrDraftDismissed ||
+      (document.getElementById('top-lsr-select') && topLsrVal === '') ||
+      (document.getElementById('adv-lsr-select') && advLsrVal === '')
+    );
     syncLsrConfigFromInputs();
     const lsrPayload = buildLoginSequencePayload({ includeSecrets: true });
     const hasLsrActions = Array.isArray(lsrPayload.actions) && lsrPayload.actions.length > 0;
     const hasLsrSecrets = Array.isArray(lsrPayload.secrets) && lsrPayload.secrets.length > 0;
     const hasLsrOtp = Boolean(lsrPayload.otpConfig?.secret || lsrPayload.otpConfig?.enabled);
-    const useLoginSequence = authMethod === 'login_sequence' || hasLsrActions;
+    const useLoginSequence = !explicitNoneSelected && (authMethod === 'login_sequence' || hasLsrActions);
 
     const customHeadersRaw = document.getElementById('custom-headers-input')?.value || '';
     const parsedHeaders = parseCustomHeadersInput(customHeadersRaw);
@@ -1327,10 +1382,11 @@ function initNewScanForm() {
       ...(recordedSessionId ? { recordedSessionId } : {}),
       ...(useLoginSequence && (hasLsrActions || lsrPayload.sequenceId) ? { loginSequence: lsrPayload, sequenceId: state.loginSequence.sequenceId || '' } : {}),
       systemVariables: state.systemVariables,
-      ...(hasLsrSecrets ? { secrets: lsrPayload.secrets } : {}),
-      ...(hasLsrOtp ? { otpConfig: lsrPayload.otpConfig } : {}),
-      ...(lsrPayload.restrictions?.length ? { restrictions: lsrPayload.restrictions } : {}),
+      ...(useLoginSequence && hasLsrSecrets ? { secrets: lsrPayload.secrets } : {}),
+      ...(useLoginSequence && hasLsrOtp ? { otpConfig: lsrPayload.otpConfig } : {}),
+      ...(useLoginSequence && lsrPayload.restrictions?.length ? { restrictions: lsrPayload.restrictions } : {}),
       ...(useLoginSequence ? { sessionDetection: lsrPayload.sessionDetection } : {}),
+      ...(state.activeTargetSystemId ? { targetSystemId: state.activeTargetSystemId } : {}),
       techOverride: tech,
       noHistory: !saveHistory,
       agent: agentMode,
@@ -2011,7 +2067,7 @@ function renderPresetCards() {
 }
 
 // ── Execute Scan & Live SSE Streaming ────────────────────────────────────────
-async function startScan(options) {
+async function startScan(options, prelaunchedData = null) {
   const btnStart = document.getElementById('btn-start-scan');
   const spinner = document.getElementById('scan-spinner');
   const btnText = document.getElementById('btn-start-text');
@@ -2036,7 +2092,7 @@ async function startScan(options) {
   progressPanel.classList.remove('hidden');
   progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  liveTargetUrl.textContent = options.target;
+  liveTargetUrl.textContent = options.target || prelaunchedData?.targets?.[0] || '';
   livePhaseBadge.textContent = 'Initializing...';
   liveProgressFill.style.width = '5%';
   liveProgressPct.textContent = '5%';
@@ -2064,7 +2120,7 @@ async function startScan(options) {
   updateFindingsCounts();
 
   try {
-    const launchData = await apiPost('/api/scan', options);
+    const launchData = prelaunchedData || await apiPost('/api/scan', options);
     state.activeScanId = launchData.scanId;
 
     if (state.eventSource) {
@@ -2192,6 +2248,7 @@ async function startScan(options) {
 
           renderScanResults(state.currentResults);
           loadHistory();
+          loadTargetSystems();
         }
 
         if (data.type === 'error') {
@@ -2799,6 +2856,44 @@ export function renderScanResults(resultData) {
   filterAndRenderFindings();
 }
 
+function renderAccessControlBadge(item, { isMenu = false } = {}) {
+  const status = String(item?.accessControlStatus || '').trim();
+  if (status === 'enforced') {
+    return `<span class="finding-status-badge safe" title="Unauthenticated access blocked (${escapeHtml(String(item.unauthStatus || '302/401/403'))})">🔒 Auth Enforced</span>`;
+  }
+  if (status === 'bfla_unauthenticated') {
+    return '<span class="finding-status-badge vulnerable" title="Accessible without authentication!">🚨 Unprotected (BFLA)</span>';
+  }
+  if (status === 'bfla_low_privilege') {
+    return '<span class="finding-status-badge suspicious" title="Accessible to low-privilege role">⚠️ Low-Priv Accessible</span>';
+  }
+  if (isMenu) {
+    if (item?.kind === 'logout') return '<span class="form-hint">Session Endpoint</span>';
+    if (item?.kind === 'external_app') return '<span class="form-hint">External App</span>';
+    return '<span class="ev-pill">Public / Standard</span>';
+  }
+  return '<span class="ev-pill">Standard</span>';
+}
+
+function applyMenuFilterToTable(filterBarEl, menusTbody, filterKey = 'all') {
+  if (filterBarEl) {
+    filterBarEl.querySelectorAll('[data-menu-filter]').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-menu-filter') === filterKey);
+    });
+  }
+  if (!menusTbody) return;
+  menusTbody.querySelectorAll('tr[data-menu-kind]').forEach(row => {
+    const kind = row.getAttribute('data-menu-kind') || '';
+    const isBfla = row.getAttribute('data-menu-bfla') === 'true';
+    const show = filterKey === 'all'
+      ? true
+      : filterKey === 'bfla'
+        ? isBfla
+        : kind === filterKey;
+    row.classList.toggle('hidden', !show);
+  });
+}
+
 export function renderCrawlInventorySection(resultData) {
   const card = document.getElementById('results-crawl-inventory-card');
   if (!card) return;
@@ -2819,6 +2914,7 @@ export function renderCrawlInventorySection(resultData) {
   const summaryEl = document.getElementById('results-crawl-inventory-summary');
   const kpisEl = document.getElementById('results-crawl-inventory-kpis');
   const groupsSummaryEl = document.getElementById('results-menus-groups-summary');
+  const filterBarEl = document.getElementById('results-menus-filter-bar');
   const menusWrapEl = document.getElementById('results-menus-table-wrap');
   const menusTbody = document.getElementById('results-menus-tbody');
   const formsWrapEl = document.getElementById('results-forms-table-wrap');
@@ -2841,13 +2937,22 @@ export function renderCrawlInventorySection(resultData) {
     summaryEl.textContent = `Discovered ${menus.length} menu/submenu item(s) across ${groupCounts.size} navigation group(s), tested ${forms.length} form(s), and audited ${rawPages.length} unique URL(s).`;
   }
 
-  const crawledMenusCount = menus.filter(m => m?.auditStatus === 'crawled' || m?.kind === 'submenu' || m?.kind === 'menu' || m?.kind === 'spa_route').length;
   if (kpisEl) {
+    const rbacSummary = resultData?.rbacMatrix?.summary;
+    const rbacKpiHtml = rbacSummary
+      ? `<span class="ev-pill">RBAC Enforced: <strong>${Number(rbacSummary.enforcedCount || 0)}/${Number(rbacSummary.totalEvaluated || 0)}</strong></span>`
+      : '';
+    const bflaAlertHtml = rbacSummary && Number(rbacSummary.unauthenticatedBflaCount) > 0
+      ? `<span class="finding-status-badge vulnerable">BFLA Alerts: <strong>${Number(rbacSummary.unauthenticatedBflaCount)}</strong></span>`
+      : '';
+
     kpisEl.innerHTML = `
       <span class="ev-pill">Menu Groups: <strong>${groupCounts.size}</strong></span>
       <span class="ev-pill">Submenus &amp; Views: <strong>${menus.length}</strong></span>
       <span class="ev-pill">Forms Tested: <strong>${forms.length}</strong></span>
       <span class="ev-pill">Pages Audited: <strong>${rawPages.length}</strong></span>
+      ${rbacKpiHtml}
+      ${bflaAlertHtml}
     `;
   }
 
@@ -2890,19 +2995,36 @@ export function renderCrawlInventorySection(resultData) {
             ? '<span class="ev-pill" title="Points to a different application outside target subpath">↗ External App Link</span>'
             : '<span class="finding-status-badge safe">✓ Crawled &amp; Audited</span>';
 
+        const isBfla = m.accessControlStatus === 'bfla_unauthenticated' || m.accessControlStatus === 'bfla_low_privilege';
+        const rbacBadge = renderAccessControlBadge(m, { isMenu: true });
+
         return `
-          <tr>
+          <tr data-menu-kind="${escapeHtml(kind)}" data-menu-bfla="${isBfla ? 'true' : 'false'}">
             <td><strong>${parentMenu}</strong></td>
             <td><strong>${label}</strong></td>
             <td>${kindBadge}${triggerText}</td>
             <td>${urlHtml}</td>
             <td>${statusBadge}</td>
+            <td>${rbacBadge}</td>
           </tr>
         `;
       }).join('');
     } else {
-      menusTbody.innerHTML = '<tr><td colspan="5" class="empty-muted">No navigation menu or dropdown submenu blocks detected on crawled pages.</td></tr>';
+      menusTbody.innerHTML = '<tr><td colspan="6" class="empty-muted">No navigation menu or dropdown submenu blocks detected on crawled pages.</td></tr>';
     }
+  }
+
+  if (filterBarEl) {
+    if (filterBarEl.dataset.wired !== '1') {
+      filterBarEl.dataset.wired = '1';
+      filterBarEl.addEventListener('click', e => {
+        const btn = e.target.closest('[data-menu-filter]');
+        if (!btn) return;
+        const filterKey = btn.getAttribute('data-menu-filter') || 'all';
+        applyMenuFilterToTable(filterBarEl, document.getElementById('results-menus-tbody'), filterKey);
+      });
+    }
+    applyMenuFilterToTable(filterBarEl, menusTbody, 'all');
   }
 
   if (formsWrapEl && formsTbody) {
@@ -2911,10 +3033,18 @@ export function renderCrawlInventorySection(resultData) {
       formsTbody.innerHTML = forms.map(f => {
         const formName = escapeHtml(f.formName || f.formId || 'HTML Form');
         const method = escapeHtml(String(f.method || 'GET').toUpperCase());
-        const methodBadge = method === 'POST'
-          ? '<span class="finding-status-badge suspicious">POST</span>'
-          : '<span class="ev-pill">GET</span>';
-        const typeLabel = f.formType === 'spa_view_controls' ? '<div class="form-hint">SPA View Controls</div>' : '';
+        const methodBadge = method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH'
+          ? `<span class="finding-status-badge suspicious">${method}</span>`
+          : `<span class="ev-pill">${method}</span>`;
+        const typeBadge = f.contentType === 'json'
+          ? '<span class="ev-pill">JSON API</span>'
+          : f.formType === 'ajax_endpoint'
+            ? '<span class="ev-pill">AJAX Endpoint</span>'
+            : f.formType === 'openapi_operation'
+              ? '<span class="ev-pill">OpenAPI</span>'
+              : f.formType === 'spa_view_controls'
+                ? '<span class="ev-pill">SPA View Controls</span>'
+                : '<span class="ev-pill">HTML Form</span>';
         const pageUrl = escapeHtml(f.pageUrl || '');
         const actionUrl = escapeHtml(f.actionUrl || f.pageUrl || '');
         const fields = Array.isArray(f.fields) ? f.fields : [];
@@ -2924,6 +3054,7 @@ export function renderCrawlInventorySection(resultData) {
         const csrfHtml = f.csrfField
           ? `<span class="finding-status-badge safe">🔒 ${escapeHtml(f.csrfField)}</span>`
           : '<span class="form-hint">None</span>';
+        const rbacHtml = renderAccessControlBadge(f, { isMenu: false });
         const checks = Array.isArray(f.checksRun) && f.checksRun.length > 0
           ? f.checksRun
           : ['sqli', 'xss', 'open-redirect', 'php-lfi'];
@@ -2931,20 +3062,21 @@ export function renderCrawlInventorySection(resultData) {
 
         return `
           <tr>
-            <td><strong>${formName}</strong>${typeLabel}</td>
-            <td>${methodBadge}</td>
+            <td><strong>${formName}</strong></td>
+            <td>${methodBadge} ${typeBadge}</td>
             <td>
               <div><small>Page:</small> <code>${pageUrl}</code></div>
               ${actionUrl !== pageUrl ? `<div><small>Action:</small> <code>${actionUrl}</code></div>` : ''}
             </td>
             <td>${fieldsHtml}</td>
             <td>${csrfHtml}</td>
+            <td>${rbacHtml}</td>
             <td>${checksHtml}</td>
           </tr>
         `;
       }).join('');
     } else {
-      formsTbody.innerHTML = '<tr><td colspan="6" class="empty-muted">No interactive HTML or SPA forms found on crawled pages.</td></tr>';
+      formsTbody.innerHTML = '<tr><td colspan="7" class="empty-muted">No interactive HTML or SPA forms found on crawled pages.</td></tr>';
     }
   }
 
@@ -4421,6 +4553,733 @@ const LSR_FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const SYS_VARS_STORAGE_KEY = 'secscan_system_variables_v1';
 const LSR_SEQUENCES_STORAGE_KEY = 'secscan_saved_sequences_v1';
 const LSR_ACTIVE_SEQ_STORAGE_KEY = 'secscan_active_sequence_id_v1';
+const LSR_TOKEN_VAULT_STORAGE_KEY = 'secscan_auth_artifact_vault_v1';
+const LSR_TOKEN_VAULT_MAX_ORIGINS = 30;
+
+export function getCanonicalOrigin(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    const normalized = normalizeTargetScheme(rawUrl.trim());
+    if (!normalized || !/^https?:\/\//i.test(normalized)) return '';
+    return new URL(normalized).origin;
+  } catch {
+    return '';
+  }
+}
+
+function loadLocalAuthVault() {
+  const out = Object.create(null);
+  try {
+    if (typeof localStorage === 'undefined') return out;
+    const raw = localStorage.getItem(LSR_TOKEN_VAULT_STORAGE_KEY);
+    if (!raw) return out;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out;
+    for (const [k, v] of Object.entries(parsed)) {
+      if (!k || LSR_FORBIDDEN_KEYS.has(k) || !v || typeof v !== 'object' || Array.isArray(v)) continue;
+      out[k] = v;
+    }
+  } catch {
+    return Object.create(null);
+  }
+  return out;
+}
+
+function writeLocalAuthVault(vaultMap) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const entries = Object.entries(vaultMap || {})
+      .filter(([k, v]) => k && !LSR_FORBIDDEN_KEYS.has(k) && v && typeof v === 'object')
+      .sort((a, b) => String(b[1].capturedAt || '').localeCompare(String(a[1].capturedAt || '')))
+      .slice(0, LSR_TOKEN_VAULT_MAX_ORIGINS);
+    const trimmed = Object.create(null);
+    for (const [k, v] of entries) trimmed[k] = v;
+    localStorage.setItem(LSR_TOKEN_VAULT_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
+
+function saveToLocalAuthVault(origin, artifactBundle) {
+  const cleanOrigin = getCanonicalOrigin(origin) || String(origin || '').trim();
+  if (!cleanOrigin || LSR_FORBIDDEN_KEYS.has(cleanOrigin) || !artifactBundle || typeof artifactBundle !== 'object') {
+    return null;
+  }
+  const vault = loadLocalAuthVault();
+  const normalizedBundle = {
+    origin: cleanOrigin,
+    targetUrl: String(artifactBundle.targetUrl || cleanOrigin),
+    sequenceId: String(artifactBundle.sequenceId || ''),
+    sequenceName: String(artifactBundle.sequenceName || 'Login Macro / Local Store'),
+    sessionId: String(artifactBundle.sessionId || ''),
+    capturedAt: artifactBundle.capturedAt || new Date().toISOString(),
+    bearerToken: String(artifactBundle.bearerToken || ''),
+    bearerTokenPreview: String(artifactBundle.bearerTokenPreview || maskTokenPreview(artifactBundle.bearerToken || '')),
+    authorizationHeader: String(artifactBundle.authorizationHeader || (artifactBundle.bearerToken ? `Bearer ${artifactBundle.bearerToken}` : '')),
+    cookieHeader: String(artifactBundle.cookieHeader || ''),
+    cookieNames: Array.isArray(artifactBundle.cookieNames) ? artifactBundle.cookieNames : [],
+    cookies: artifactBundle.cookies && typeof artifactBundle.cookies === 'object' ? artifactBundle.cookies : {},
+    csrfHeaderName: String(artifactBundle.csrfHeaderName || ''),
+    csrfHeaderValue: String(artifactBundle.csrfHeaderValue || ''),
+    csrfFormField: String(artifactBundle.csrfFormField || ''),
+    csrfFormValue: String(artifactBundle.csrfFormValue || ''),
+    localStorageItems: artifactBundle.localStorageItems && typeof artifactBundle.localStorageItems === 'object' ? artifactBundle.localStorageItems : {},
+    sessionStorageItems: artifactBundle.sessionStorageItems && typeof artifactBundle.sessionStorageItems === 'object' ? artifactBundle.sessionStorageItems : {},
+    jwtMeta: artifactBundle.jwtMeta || evaluateJwtMeta(artifactBundle.bearerToken || '')
+  };
+  vault[cleanOrigin] = normalizedBundle;
+  writeLocalAuthVault(vault);
+  return normalizedBundle;
+}
+
+function clearLocalAuthVaultForOrigin(origin) {
+  const cleanOrigin = getCanonicalOrigin(origin) || String(origin || '').trim();
+  const vault = loadLocalAuthVault();
+  if (cleanOrigin && Object.hasOwn(vault, cleanOrigin)) {
+    delete vault[cleanOrigin];
+    writeLocalAuthVault(vault);
+  }
+}
+
+function maskTokenPreview(token) {
+  const s = String(token || '').trim();
+  if (!s) return '';
+  if (s.length <= 16) return `${s.slice(0, 4)}…${s.slice(-2)}`;
+  return `${s.slice(0, 12)}…${s.slice(-6)}`;
+}
+
+function extractTokenValueFromStorageEntry(rawVal) {
+  if (rawVal === null || rawVal === undefined) return '';
+  const str = String(rawVal).trim();
+  if (!str) return '';
+  if (/^Bearer\s+/i.test(str)) return str.replace(/^Bearer\s+/i, '').trim();
+  if (str.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed && typeof parsed === 'object') {
+        const cand = parsed.access_token || parsed.accessToken || parsed.token || parsed.jwt || parsed.id_token || '';
+        if (typeof cand === 'string' && cand.trim()) return cand.trim();
+      }
+    } catch {
+      // Return raw string below
+    }
+  }
+  return str;
+}
+
+function evaluateJwtMeta(token, existingMeta = null) {
+  const tok = String(token || '').trim().replace(/^Bearer\s+/i, '');
+  if (!tok) {
+    return existingMeta && typeof existingMeta === 'object' ? existingMeta : null;
+  }
+  const parts = tok.split('.');
+  if (parts.length === 3 && parts[0] && parts[1]) {
+    try {
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+      const decodedJson = typeof atob === 'function'
+        ? atob(b64 + pad)
+        : Buffer.from(b64 + pad, 'base64').toString('utf8');
+      const payload = JSON.parse(decodedJson);
+      if (payload && typeof payload === 'object') {
+        const exp = typeof payload.exp === 'number' ? payload.exp : null;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const remainingSeconds = exp !== null ? Math.max(0, Math.floor(exp - nowSec)) : null;
+        const isExpired = exp !== null ? exp <= nowSec : false;
+        return {
+          isJwt: true,
+          exp,
+          sub: payload.sub || '',
+          remainingSeconds,
+          isExpired
+        };
+      }
+    } catch {
+      // Not a valid base64 JSON JWT
+    }
+  }
+  if (existingMeta && typeof existingMeta === 'object') {
+    return existingMeta;
+  }
+  return { isJwt: false, isExpired: false, remainingSeconds: null };
+}
+
+export function scanBrowserWebStorageForTokens() {
+  const localStorageFound = Object.create(null);
+  const sessionStorageFound = Object.create(null);
+  const keyRe = /token|jwt|auth|access|session|api[_-]?key|bearer|csrf|xsrf/i;
+  let candidateToken = '';
+
+  const readStorage = (storageObj, targetMap) => {
+    if (!storageObj || typeof storageObj.length !== 'number') return;
+    try {
+      for (let i = 0; i < storageObj.length; i++) {
+        const k = storageObj.key(i);
+        if (!k || k.startsWith('secscan_') || LSR_FORBIDDEN_KEYS.has(k)) continue;
+        if (!keyRe.test(k)) continue;
+        const rawVal = storageObj.getItem(k);
+        if (rawVal === null || rawVal === '') continue;
+        targetMap[k] = rawVal;
+        const extracted = extractTokenValueFromStorageEntry(rawVal);
+        if (extracted && (!candidateToken || /^eyJ[A-Za-z0-9_-]+\./.test(extracted))) {
+          candidateToken = extracted;
+        }
+      }
+    } catch {
+      // Ignore cross-origin or restricted storage access
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    try { readStorage(window.localStorage, localStorageFound); } catch {}
+    try { readStorage(window.sessionStorage, sessionStorageFound); } catch {}
+  }
+
+  return { localStorageFound, sessionStorageFound, candidateToken };
+}
+
+function buildCookieHeaderFromRecord(cookiesObj) {
+  if (!cookiesObj || typeof cookiesObj !== 'object') return '';
+  return Object.entries(cookiesObj)
+    .filter(([k, v]) => k && !LSR_FORBIDDEN_KEYS.has(k) && v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
+function normalizeAuthArtifactsBundle(raw = {}, fallbackTargetUrl = '') {
+  const artifacts = raw.authArtifacts && typeof raw.authArtifacts === 'object' ? raw.authArtifacts : {};
+  const origin = getCanonicalOrigin(artifacts.origin || raw.origin || raw.loginUrl || raw.targetUrl || fallbackTargetUrl)
+    || String(artifacts.origin || raw.origin || '').trim();
+  const cookiesObj = (artifacts.cookies && typeof artifacts.cookies === 'object' && !Array.isArray(artifacts.cookies))
+    ? artifacts.cookies
+    : (raw.cookies && typeof raw.cookies === 'object' && !Array.isArray(raw.cookies) ? raw.cookies : {});
+  const cookieNames = Array.isArray(artifacts.cookieNames)
+    ? artifacts.cookieNames
+    : (Array.isArray(raw.cookieNames) ? raw.cookieNames : Object.keys(cookiesObj));
+  const cookieHeader = String(artifacts.cookieHeader || raw.cookieHeader || buildCookieHeaderFromRecord(cookiesObj) || '');
+
+  const rawBearer = String(artifacts.bearerToken || raw.bearerToken || '').trim();
+  const authHdr = String(artifacts.authorizationHeader || raw.authorizationHeader || (rawBearer ? `Bearer ${rawBearer}` : '')).trim();
+  const effectiveBearer = rawBearer || (authHdr ? authHdr.replace(/^Bearer\s+/i, '').trim() : '');
+  const bearerTokenPreview = String(
+    artifacts.bearerTokenPreview ||
+    raw.bearerTokenPreview ||
+    (effectiveBearer ? maskTokenPreview(effectiveBearer) : '')
+  );
+
+  const localItems = {
+    ...(artifacts.localStorageItems && typeof artifacts.localStorageItems === 'object' ? artifacts.localStorageItems : {}),
+    ...(raw.localStorageItems && typeof raw.localStorageItems === 'object' ? raw.localStorageItems : {})
+  };
+  const sessionItems = {
+    ...(artifacts.sessionStorageItems && typeof artifacts.sessionStorageItems === 'object' ? artifacts.sessionStorageItems : {}),
+    ...(raw.sessionStorageItems && typeof raw.sessionStorageItems === 'object' ? raw.sessionStorageItems : {})
+  };
+
+  return {
+    origin,
+    targetUrl: String(artifacts.targetUrl || raw.targetUrl || raw.loginUrl || fallbackTargetUrl || origin),
+    sequenceId: String(artifacts.sequenceId || raw.sequenceId || state.loginSequence?.sequenceId || ''),
+    sequenceName: String(artifacts.sequenceName || raw.sequenceName || (!state.lsrDraftDismissed ? state.loginSequence?.name : '') || 'Login Macro / Local Store'),
+    sessionId: String(artifacts.sessionId || raw.sessionId || ''),
+    capturedAt: artifacts.capturedAt || raw.capturedAt || raw.authenticatedAt || new Date().toISOString(),
+    bearerToken: effectiveBearer,
+    bearerTokenPreview,
+    authorizationHeader: authHdr,
+    cookieHeader,
+    cookieNames,
+    cookies: cookiesObj,
+    csrfHeaderName: String(artifacts.csrfHeaderName || raw.csrfHeaderName || ''),
+    csrfHeaderValue: String(artifacts.csrfHeaderValue || raw.csrfHeaderValue || ''),
+    csrfFormField: String(artifacts.csrfFormField || raw.csrfFormField || ''),
+    csrfFormValue: String(artifacts.csrfFormValue || raw.csrfFormValue || ''),
+    localStorageItems: localItems,
+    sessionStorageItems: sessionItems,
+    jwtMeta: evaluateJwtMeta(effectiveBearer, artifacts.jwtMeta || raw.jwtMeta || null)
+  };
+}
+
+function updateTopAuthActiveBadge({ applied = false } = {}) {
+  if (typeof document === 'undefined') return;
+  const badge = document.getElementById('top-auth-active-badge');
+  if (!badge) return;
+  const authVal = document.getElementById('adv-auth')?.value.trim() || '';
+  const recSessionId = document.getElementById('adv-recorded-session-id')?.value.trim() || '';
+  if (applied || (state.activeAuthArtifacts && (authVal || recSessionId))) {
+    badge.textContent = '🔐 Token/Cookie Applied';
+    badge.className = 'badge badge-primary';
+    return;
+  }
+  if (!state.lsrDraftDismissed && state.loginSequence && (state.loginSequence.sequenceId || (state.loginSequence.actions?.length || 0) > 0)) {
+    badge.textContent = `🎬 Active: ${state.loginSequence.name || 'Sequence.lsr'}`;
+    badge.className = 'badge badge-outline';
+    return;
+  }
+  badge.textContent = 'Public Scan';
+  badge.className = 'badge badge-outline';
+}
+
+function showTopAuthFeedback(message, isError = false) {
+  if (typeof document === 'undefined') return;
+  const statusBadge = document.getElementById('top-auth-active-badge');
+  if (statusBadge && message) {
+    statusBadge.title = message;
+  }
+  const studioStatus = document.getElementById('lsr-studio-token-status');
+  if (studioStatus) {
+    studioStatus.textContent = message;
+    studioStatus.className = `form-hint ${isError ? 'error' : 'success'}`;
+    studioStatus.classList.remove('hidden');
+  }
+}
+
+async function copyTextToClipboardSafe(text, label) {
+  const val = String(text || '');
+  if (!val) {
+    showTopAuthFeedback(`Nothing to copy for ${label}.`, true);
+    return;
+  }
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(val);
+      showTopAuthFeedback(`📋 Copied ${label} to clipboard.`, false);
+      return;
+    }
+  } catch {
+    // Fallback below
+  }
+  showTopAuthFeedback(`Prepared ${label} (${val.slice(0, 24)}…).`, false);
+}
+
+function applyAuthArtifactsToScan(bundle) {
+  if (!bundle || typeof bundle !== 'object') return;
+  state.activeAuthArtifacts = bundle;
+
+  const recIdEl = document.getElementById('adv-recorded-session-id');
+  if (recIdEl) recIdEl.value = bundle.sessionId || '';
+
+  let tokenToApply = bundle.bearerToken || '';
+  if (!tokenToApply) {
+    const allStorage = { ...(bundle.localStorageItems || {}), ...(bundle.sessionStorageItems || {}) };
+    for (const v of Object.values(allStorage)) {
+      const candidate = extractTokenValueFromStorageEntry(v);
+      if (candidate) {
+        tokenToApply = candidate;
+        break;
+      }
+    }
+  }
+
+  const advAuthEl = document.getElementById('adv-auth');
+  if (advAuthEl && tokenToApply) {
+    advAuthEl.value = /^Bearer\s+/i.test(tokenToApply) ? tokenToApply : `Bearer ${tokenToApply}`;
+  }
+
+  updateTopAuthActiveBadge({ applied: true });
+  showTopAuthFeedback(`🔐 Applied token & cookies for ${bundle.origin || 'target'} to active scan.`, false);
+}
+
+export function renderAuthArtifactsCard(artifactBundle, { sourceLabel = 'Harvested via Login' } = {}) {
+  if (typeof document === 'undefined') return;
+  const topCard = document.getElementById('top-auth-artifacts-card');
+  const topBody = document.getElementById('top-auth-artifacts-body');
+  const studioBody = document.getElementById('lsr-studio-token-vault-body');
+  const containers = [topBody, studioBody].filter(Boolean);
+  if (containers.length === 0) return;
+
+  if (!artifactBundle || typeof artifactBundle !== 'object') {
+    const emptyHtml = `
+      <div class="auth-artifacts-empty">
+        <div>No cached tokens, cookies, or browser storage artifacts found in Local Store for this target origin yet.</div>
+        <div class="auth-artifacts-actions">
+          <button type="button" class="btn-primary btn-small" data-refresh-auth-artifact="1">🎟️ Get Token / Cookie Now</button>
+        </div>
+      </div>
+    `;
+    for (const c of containers) c.innerHTML = emptyHtml;
+    if (topCard) topCard.classList.remove('hidden');
+    return;
+  }
+
+  const originText = escapeHtml(artifactBundle.origin || artifactBundle.targetUrl || 'Unknown Origin');
+  const seqText = escapeHtml(artifactBundle.sequenceName || 'Login Macro / Local Store');
+  const capturedText = artifactBundle.capturedAt
+    ? escapeHtml(new Date(artifactBundle.capturedAt).toLocaleString())
+    : 'Just now';
+
+  const hasToken = Boolean(artifactBundle.bearerToken || artifactBundle.bearerTokenPreview || artifactBundle.authorizationHeader);
+  const previewText = escapeHtml(
+    artifactBundle.bearerTokenPreview ||
+    (artifactBundle.bearerToken ? maskTokenPreview(artifactBundle.bearerToken) : 'None captured')
+  );
+  const jwt = artifactBundle.jwtMeta;
+  let jwtBadgeHtml = '<span class="badge badge-outline">None</span>';
+  if (jwt?.isJwt) {
+    if (jwt.isExpired) {
+      jwtBadgeHtml = '<span class="finding-status-badge vulnerable">⚠️ JWT Expired</span>';
+    } else if (typeof jwt.remainingSeconds === 'number') {
+      jwtBadgeHtml = `<span class="finding-status-badge safe">✅ Valid JWT (${escapeHtml(jwt.remainingSeconds)}s left)</span>`;
+    } else {
+      jwtBadgeHtml = '<span class="finding-status-badge safe">✅ Valid JWT</span>';
+    }
+  } else if (hasToken) {
+    jwtBadgeHtml = '<span class="badge badge-primary">🎟️ API Token</span>';
+  }
+
+  const cookieNames = Array.isArray(artifactBundle.cookieNames) ? artifactBundle.cookieNames : [];
+  const csrfParts = [];
+  if (artifactBundle.csrfHeaderName) csrfParts.push(`Header: ${artifactBundle.csrfHeaderName}`);
+  if (artifactBundle.csrfFormField) csrfParts.push(`Field: ${artifactBundle.csrfFormField}`);
+  const csrfText = csrfParts.length > 0 ? csrfParts.join(' · ') : 'None';
+
+  const localEntries = Object.entries(artifactBundle.localStorageItems || {});
+  const sessionEntries = Object.entries(artifactBundle.sessionStorageItems || {});
+  const storageRowsHtml = [...localEntries.map(([k, v]) => ({ scope: 'localStorage', k, v })), ...sessionEntries.map(([k, v]) => ({ scope: 'sessionStorage', k, v }))]
+    .map(({ scope, k, v }) => `
+      <div class="auth-storage-item-row">
+        <div>
+          <span class="badge badge-outline">${escapeHtml(scope)}</span>
+          <code>${escapeHtml(k)}</code>
+          <span class="form-hint">${escapeHtml(maskTokenPreview(v))}</span>
+        </div>
+        <button type="button" class="btn-secondary btn-small" data-use-storage-token="${escapeHtml(k)}">📌 Use Storage Token as Bearer</button>
+      </div>
+    `).join('');
+
+  const html = `
+    <div class="auth-artifacts-grid">
+      <div class="auth-artifact-meta-bar">
+        <span><strong>Origin:</strong> <code>${originText}</code></span>
+        <span> · <strong>Sequence:</strong> <code>${seqText}</code></span>
+        <span> · <span class="badge badge-primary">${escapeHtml(sourceLabel)}</span></span>
+        <span> · <span class="form-hint">${capturedText}</span></span>
+      </div>
+
+      <div class="auth-artifact-section">
+        <div class="auth-artifact-section-head">
+          <strong>🎟️ API / Bearer Token</strong>
+          ${jwtBadgeHtml}
+        </div>
+        <div class="auth-artifact-val-row">
+          <code>${previewText}</code>
+          <div class="auth-artifact-btn-group">
+            <button type="button" class="btn-secondary btn-small" data-copy-auth-token="1" ${hasToken ? '' : 'disabled'}>📋 Copy Authorization Header</button>
+            <button type="button" class="btn-secondary btn-small" data-apply-auth-token="1" ${hasToken ? '' : 'disabled'}>📌 Apply Token to Authorization Header</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-artifact-section">
+        <div class="auth-artifact-section-head">
+          <strong>🍪 Session &amp; CSRF Cookies (${escapeHtml(cookieNames.length)})</strong>
+          <span class="form-hint">CSRF: <code>${escapeHtml(csrfText)}</code></span>
+        </div>
+        <div class="auth-artifact-val-row">
+          <div>${cookieNames.length > 0 ? cookieNames.map(c => `<span class="ev-pill"><code>${escapeHtml(c)}</code></span>`).join(' ') : '<span class="form-hint">No cookies captured</span>'}</div>
+          <button type="button" class="btn-secondary btn-small" data-copy-auth-cookie="1" ${cookieNames.length > 0 || artifactBundle.cookieHeader ? '' : 'disabled'}>📋 Copy Cookie Header</button>
+        </div>
+      </div>
+
+      <div class="auth-artifact-section">
+        <div class="auth-artifact-section-head">
+          <strong>🗄️ Web Storage (<code>localStorage</code> / <code>sessionStorage</code>)</strong>
+          <span class="badge badge-outline">${escapeHtml(localEntries.length + sessionEntries.length)} key(s)</span>
+        </div>
+        <div class="auth-storage-items-list">
+          ${storageRowsHtml || '<span class="form-hint">No token/auth keys detected in browser localStorage or sessionStorage.</span>'}
+        </div>
+      </div>
+
+      <div class="auth-artifacts-actions">
+        <button type="button" class="btn-primary btn-small" data-apply-auth-artifact="1">✅ Apply Token &amp; Cookies to Active Scan</button>
+        <button type="button" class="btn-secondary btn-small" data-refresh-auth-artifact="1">🔄 Re-Fetch Fresh Token / Cookie</button>
+        <button type="button" class="btn-secondary btn-small" data-clear-auth-store="1">🗑️ Clear Local Store Cache</button>
+      </div>
+    </div>
+  `;
+
+  for (const c of containers) c.innerHTML = html;
+  if (topCard) topCard.classList.remove('hidden');
+}
+
+function wireAuthArtifactsContainer(containerEl) {
+  if (!containerEl || containerEl.dataset.authVaultWired === '1') return;
+  containerEl.dataset.authVaultWired = '1';
+  containerEl.addEventListener('click', async e => {
+    const bundle = state.activeAuthArtifacts;
+
+    const refreshBtn = e.target.closest('[data-refresh-auth-artifact="1"]');
+    if (refreshBtn) {
+      await harvestAuthTokensAndCookies();
+      return;
+    }
+
+    if (!bundle) return;
+
+    if (e.target.closest('[data-copy-auth-token="1"]')) {
+      const headerStr = bundle.authorizationHeader || (bundle.bearerToken ? `Bearer ${bundle.bearerToken}` : '');
+      await copyTextToClipboardSafe(headerStr, 'Authorization Header');
+      return;
+    }
+
+    if (e.target.closest('[data-apply-auth-token="1"]')) {
+      const tok = bundle.bearerToken || (bundle.authorizationHeader ? bundle.authorizationHeader.replace(/^Bearer\s+/i, '').trim() : '');
+      const advAuthEl = document.getElementById('adv-auth');
+      if (advAuthEl && tok) {
+        advAuthEl.value = /^Bearer\s+/i.test(tok) ? tok : `Bearer ${tok}`;
+      }
+      updateTopAuthActiveBadge({ applied: true });
+      showTopAuthFeedback('📌 Applied Bearer token to Authorization Header (#adv-auth).', false);
+      return;
+    }
+
+    if (e.target.closest('[data-copy-auth-cookie="1"]')) {
+      await copyTextToClipboardSafe(bundle.cookieHeader || buildCookieHeaderFromRecord(bundle.cookies), 'Cookie Header');
+      return;
+    }
+
+    const storageBtn = e.target.closest('[data-use-storage-token]');
+    if (storageBtn) {
+      const key = storageBtn.getAttribute('data-use-storage-token') || '';
+      const rawVal = Object.hasOwn(bundle.localStorageItems || {}, key)
+        ? bundle.localStorageItems[key]
+        : (Object.hasOwn(bundle.sessionStorageItems || {}, key) ? bundle.sessionStorageItems[key] : '');
+      const tok = extractTokenValueFromStorageEntry(rawVal);
+      if (tok) {
+        bundle.bearerToken = tok;
+        bundle.bearerTokenPreview = maskTokenPreview(tok);
+        bundle.authorizationHeader = `Bearer ${tok}`;
+        bundle.jwtMeta = evaluateJwtMeta(tok);
+        const advAuthEl = document.getElementById('adv-auth');
+        if (advAuthEl) advAuthEl.value = `Bearer ${tok}`;
+        if (bundle.origin) saveToLocalAuthVault(bundle.origin, bundle);
+        updateTopAuthActiveBadge({ applied: true });
+        renderAuthArtifactsCard(bundle, { sourceLabel: 'Applied from Web Storage' });
+        showTopAuthFeedback(`📌 Applied ${key} as Bearer token.`, false);
+      }
+      return;
+    }
+
+    if (e.target.closest('[data-apply-auth-artifact="1"]')) {
+      applyAuthArtifactsToScan(bundle);
+      return;
+    }
+
+    if (e.target.closest('[data-clear-auth-store="1"]')) {
+      clearLocalAuthVaultForOrigin(bundle.origin);
+      state.activeAuthArtifacts = null;
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
+      updateTopAuthActiveBadge({ applied: false });
+      renderAuthArtifactsCard(null);
+    }
+  });
+}
+
+function resolveTargetUrlForAuth() {
+  const studioVal = document.getElementById('studio-target-url')?.value.trim();
+  const topVal = document.getElementById('target-url')?.value.trim();
+  const inspectVal = document.getElementById('lsr-inspect-url')?.value.trim();
+  const loginVal = document.getElementById('adv-auth-login-url')?.value.trim();
+  const seqVal = !state.lsrDraftDismissed ? state.loginSequence?.targetUrl : '';
+  const navVal = !state.lsrDraftDismissed
+    ? (state.loginSequence?.actions || []).find(a => a.type === 'navigate' && a.url)?.url
+    : '';
+  return topVal || studioVal || inspectVal || loginVal || seqVal || navVal || '';
+}
+
+export async function checkLocalStoreForTargetAuth({ targetUrlOverride = '' } = {}) {
+  const rawTarget = targetUrlOverride || resolveTargetUrlForAuth();
+  const origin = getCanonicalOrigin(rawTarget);
+
+  const vault = loadLocalAuthVault();
+  const cachedVaultEntry = origin && Object.hasOwn(vault, origin) ? vault[origin] : null;
+  const webStorage = scanBrowserWebStorageForTokens();
+  const hasWebStorage = Object.keys(webStorage.localStorageFound).length > 0 || Object.keys(webStorage.sessionStorageFound).length > 0;
+
+  let serverSessionMatch = null;
+  if (typeof fetch === 'function') {
+    try {
+      const res = await fetch('/api/auth/sessions?includeArtifactValues=1', { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const data = await res.json();
+        const sessions = Array.isArray(data?.sessions) ? data.sessions : [];
+        const activeSessionId = document.getElementById('adv-recorded-session-id')?.value.trim() || '';
+        serverSessionMatch = sessions.find(s => {
+          const sOrigin = getCanonicalOrigin(s?.authArtifacts?.origin || s?.loginUrl || s?.targetUrl || '');
+          return (origin && sOrigin === origin) || (activeSessionId && s?.sessionId === activeSessionId);
+        }) || null;
+        if (!serverSessionMatch && !origin && sessions.length > 0) {
+          serverSessionMatch = sessions[0];
+        }
+      }
+    } catch {
+      // Ignore network/offline errors
+    }
+  }
+
+  if (!cachedVaultEntry && !hasWebStorage && !serverSessionMatch) {
+    state.activeAuthArtifacts = null;
+    renderAuthArtifactsCard(null);
+    return null;
+  }
+
+  const baseNormalized = normalizeAuthArtifactsBundle(
+    serverSessionMatch || cachedVaultEntry || {},
+    rawTarget || origin
+  );
+  const mergedLocalStorage = {
+    ...(cachedVaultEntry?.localStorageItems || {}),
+    ...(baseNormalized.localStorageItems || {}),
+    ...webStorage.localStorageFound
+  };
+  const mergedSessionStorage = {
+    ...(cachedVaultEntry?.sessionStorageItems || {}),
+    ...(baseNormalized.sessionStorageItems || {}),
+    ...webStorage.sessionStorageFound
+  };
+  const mergedBearer = baseNormalized.bearerToken || cachedVaultEntry?.bearerToken || webStorage.candidateToken || '';
+
+  const mergedBundle = normalizeAuthArtifactsBundle({
+    ...cachedVaultEntry,
+    ...baseNormalized,
+    origin: origin || baseNormalized.origin || cachedVaultEntry?.origin || '',
+    targetUrl: rawTarget || baseNormalized.targetUrl || cachedVaultEntry?.targetUrl || origin,
+    bearerToken: mergedBearer,
+    localStorageItems: mergedLocalStorage,
+    sessionStorageItems: mergedSessionStorage,
+    jwtMeta: evaluateJwtMeta(mergedBearer, baseNormalized.jwtMeta || cachedVaultEntry?.jwtMeta || null)
+  }, rawTarget);
+
+  if (mergedBundle.origin) {
+    saveToLocalAuthVault(mergedBundle.origin, mergedBundle);
+  }
+  state.activeAuthArtifacts = mergedBundle;
+  renderAuthArtifactsCard(mergedBundle, { sourceLabel: 'Found in Local Store' });
+  return mergedBundle;
+}
+
+export async function harvestAuthTokensAndCookies({ seqOverride = null } = {}) {
+  const authMethod = document.getElementById('adv-auth-method')?.value || 'login_sequence';
+  const username = document.getElementById('adv-auth-username')?.value.trim() || '';
+  const password = document.getElementById('adv-auth-password')?.value || '';
+  const loginUrlRaw = document.getElementById('adv-auth-login-url')?.value.trim() || '';
+  const loginContentType = document.getElementById('adv-auth-type')?.value || 'auto';
+  const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+  const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || '';
+  const timeout = Number(document.getElementById('adv-timeout')?.value) || 10000;
+
+  const seqCandidate = seqOverride
+    ? normalizeClientLoginSequence(seqOverride)
+    : (!state.lsrDraftDismissed ? buildLoginSequencePayload({ includeSecrets: true }) : null);
+  const hasSeqActions = Boolean(seqCandidate && Array.isArray(seqCandidate.actions) && seqCandidate.actions.length > 0);
+  const useMacro = !seqOverride && authMethod === 'macro' && Boolean(username);
+
+  const rawTarget = resolveTargetUrlForAuth()
+    || seqCandidate?.targetUrl
+    || (seqCandidate?.actions || []).find(a => a.type === 'navigate' && a.url)?.url
+    || '';
+
+  if (!rawTarget && !loginUrlRaw && !hasSeqActions) {
+    showTopAuthFeedback('Enter a Target URL or select/create a Login Sequence first.', true);
+    renderAuthArtifactsCard(null);
+    return null;
+  }
+
+  const targetUrl = rawTarget ? normalizeTargetScheme(rawTarget) : '';
+  const loginUrl = loginUrlRaw ? normalizeTargetScheme(loginUrlRaw) : '';
+  const requestBody = {
+    ...(targetUrl ? { targetUrl } : {}),
+    ...(loginUrl ? { loginUrl } : {}),
+    allowPrivate,
+    timeout,
+    includeArtifactValues: true,
+    ...(sourceIp ? { sourceIp } : {})
+  };
+
+  if (useMacro) {
+    requestBody.username = username;
+    requestBody.password = password;
+    requestBody.loginContentType = loginContentType;
+  } else if (hasSeqActions || seqCandidate?.sequenceId) {
+    requestBody.sequenceId = seqCandidate.sequenceId || '';
+    requestBody.loginSequence = seqCandidate;
+    requestBody.systemVariables = state.systemVariables;
+    requestBody.secrets = seqCandidate.secrets || [];
+    requestBody.otpConfig = seqCandidate.otpConfig || {};
+    requestBody.restrictions = seqCandidate.restrictions || [];
+    requestBody.sessionDetection = seqCandidate.sessionDetection || {};
+  } else if (username) {
+    requestBody.username = username;
+    requestBody.password = password;
+    requestBody.loginContentType = loginContentType;
+  } else {
+    showTopAuthFeedback('Select a Login Sequence (.lsr) or enter Macro credentials first.', true);
+    renderAuthArtifactsCard(null);
+    return null;
+  }
+
+  const btns = [
+    document.getElementById('btn-top-get-auth-token'),
+    document.getElementById('btn-adv-get-token'),
+    document.getElementById('btn-studio-get-token')
+  ].filter(Boolean);
+  for (const b of btns) b.disabled = true;
+
+  try {
+    const res = await apiPost('/api/auth/record-session', requestBody);
+    const webStorage = scanBrowserWebStorageForTokens();
+    const fallbackUrl = targetUrl || loginUrl || res.loginUrl || '';
+    const bundle = normalizeAuthArtifactsBundle({
+      ...res,
+      sequenceId: seqCandidate?.sequenceId || res.sequenceId || '',
+      sequenceName: seqCandidate?.name || (useMacro ? 'Standard Login Macro' : 'Login Sequence'),
+      localStorageItems: {
+        ...(res?.authArtifacts?.localStorageItems || {}),
+        ...webStorage.localStorageFound
+      },
+      sessionStorageItems: {
+        ...(res?.authArtifacts?.sessionStorageItems || {}),
+        ...webStorage.sessionStorageFound
+      }
+    }, fallbackUrl);
+
+    if (!bundle.bearerToken && webStorage.candidateToken) {
+      bundle.bearerToken = webStorage.candidateToken;
+      bundle.bearerTokenPreview = maskTokenPreview(webStorage.candidateToken);
+      bundle.authorizationHeader = `Bearer ${webStorage.candidateToken}`;
+      bundle.jwtMeta = evaluateJwtMeta(webStorage.candidateToken);
+    }
+
+    const origin = getCanonicalOrigin(fallbackUrl) || bundle.origin;
+    if (origin) {
+      bundle.origin = origin;
+      saveToLocalAuthVault(origin, bundle);
+    }
+
+    if (res.authenticated && res.sessionId) {
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = res.sessionId;
+    }
+
+    state.activeAuthArtifacts = bundle;
+    renderRecordedSessionPreview(res);
+    renderAuthArtifactsCard(bundle, { sourceLabel: 'Harvested via Login Process' });
+    updateTopAuthActiveBadge({ applied: Boolean(res.authenticated) });
+    return bundle;
+  } catch (err) {
+    showTopAuthFeedback(`Token harvest failed: ${err.message}`, true);
+    const topCard = document.getElementById('top-auth-artifacts-card');
+    const topBody = document.getElementById('top-auth-artifacts-body');
+    const studioBody = document.getElementById('lsr-studio-token-vault-body');
+    const errHtml = `<div class="feedback-banner error">❌ Failed to fetch token/cookie: ${escapeHtml(err.message)}</div>`;
+    for (const c of [topBody, studioBody].filter(Boolean)) c.innerHTML = errHtml;
+    if (topCard) topCard.classList.remove('hidden');
+    return null;
+  } finally {
+    for (const b of btns) b.disabled = false;
+  }
+}
 
 const SYS_VAR_CATEGORIES = {
   username: { icon: '👤', label: 'Username / Email', isSecret: false },
@@ -4866,10 +5725,21 @@ function syncLsrConfigFromInputs() {
   if (typeof document === 'undefined') return;
   const seq = state.loginSequence;
 
-  const seqNameInput = document.getElementById('lsr-sequence-name');
-  if (seqNameInput && seqNameInput.value.trim()) {
-    const rawName = seqNameInput.value.trim();
-    seq.name = /\.[a-zA-Z0-9]+$/.test(rawName) ? rawName : `${rawName}.lsr`;
+  const backdrop = document.getElementById('lsr-recorder-backdrop');
+  const modalOpen = Boolean(backdrop && !backdrop.classList.contains('hidden'));
+  const modalNameInput = document.getElementById('lsr-sequence-name');
+  const studioNameInput = document.getElementById('studio-sequence-name-input');
+  const studioTargetUrlEl = document.getElementById('studio-target-url');
+
+  const rawNameSource = (!modalOpen && state.lsrDetailViewOpen && studioNameInput)
+    ? studioNameInput.value.trim()
+    : (modalNameInput?.value.trim() || studioNameInput?.value.trim() || '');
+  if (rawNameSource) {
+    seq.name = /\.[a-zA-Z0-9]+$/.test(rawNameSource) ? rawNameSource : `${rawNameSource}.lsr`;
+  }
+  if (!modalOpen && state.lsrDetailViewOpen && studioTargetUrlEl) {
+    const rawTarget = studioTargetUrlEl.value.trim();
+    seq.targetUrl = rawTarget ? normalizeTargetScheme(rawTarget) : '';
   }
 
   const otpSecretEl = document.getElementById('otp-secret-input');
@@ -4912,6 +5782,15 @@ function applyLsrStateToInputs() {
   const seqNameInput = document.getElementById('lsr-sequence-name');
   if (seqNameInput) seqNameInput.value = seq.name || 'WrapperSequence.lsr';
 
+  const studioSeqNameInput = document.getElementById('studio-sequence-name-input');
+  if (studioSeqNameInput) studioSeqNameInput.value = seq.name || '';
+
+  const firstNavUrl = (Array.isArray(seq.actions) ? seq.actions : []).find(a => a.type === 'navigate' && a.url)?.url || '';
+  const studioTargetUrlEl = document.getElementById('studio-target-url');
+  if (studioTargetUrlEl && (seq.targetUrl || firstNavUrl || state.lsrDetailViewOpen)) {
+    studioTargetUrlEl.value = seq.targetUrl || firstNavUrl || '';
+  }
+
   const otpSecretEl = document.getElementById('otp-secret-input');
   const otpDigitsEl = document.getElementById('otp-digits-select');
   const otpPeriodEl = document.getElementById('otp-period-input');
@@ -4949,6 +5828,7 @@ function applyLsrStateToInputs() {
   renderLsrSequenceCards();
   renderLsrRestrictionsList();
   renderLsrActionsList();
+  renderLsrInlineStepsSummary();
   renderLsrActionProperties();
 }
 
@@ -5033,21 +5913,38 @@ function getDisplayedSequenceCards() {
 }
 
 function renderLsrReuseSelect() {
-  const sel = document.getElementById('lsr-reuse-select');
-  if (!sel) return;
   const saved = getDisplayedSequenceCards();
   const activeId = state.loginSequence?.sequenceId || '';
   const activeName = state.loginSequence?.name || '';
 
-  const opts = ['<option value="">Select a saved .lsr sequence to reuse...</option>'];
-  saved.forEach((seq, idx) => {
+  const buildSequenceOptions = () => saved.map((seq, idx) => {
     const val = seq.sequenceId || `__idx_${idx}`;
     const stepCount = Array.isArray(seq.actions) ? seq.actions.length : 0;
-    const isMatch = (seq.sequenceId && seq.sequenceId === activeId) || (!activeId && seq.name === activeName && idx === 0);
+    const isMatch = !state.lsrDraftDismissed && (
+      (seq.sequenceId && seq.sequenceId === activeId) ||
+      (!activeId && seq.name === activeName && idx === 0)
+    );
     const label = `${seq.name || 'Sequence.lsr'} (${stepCount} step${stepCount === 1 ? '' : 's'})${seq.targetUrl ? ` — ${seq.targetUrl}` : ''}`;
-    opts.push(`<option value="${escapeHtml(val)}" ${isMatch ? 'selected' : ''}>${escapeHtml(label)}</option>`);
-  });
-  sel.innerHTML = opts.join('');
+    return `<option value="${escapeHtml(val)}" ${isMatch ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+
+  const studioSel = document.getElementById('lsr-reuse-select');
+  if (studioSel) {
+    studioSel.innerHTML = `<option value="">Select a saved .lsr sequence to reuse...</option>${buildSequenceOptions()}`;
+  }
+
+  for (const syncId of ['top-lsr-select', 'adv-lsr-select']) {
+    const el = document.getElementById(syncId);
+    if (!el) continue;
+    el.innerHTML = [
+      `<option value="" ${state.lsrDraftDismissed || saved.length === 0 ? 'selected' : ''}>No Login Sequence (Public / Unauthenticated)</option>`,
+      buildSequenceOptions(),
+      '<option value="__create_new__">🎬 + Create New .lsr Sequence...</option>'
+    ].join('');
+  }
+
+  updateTopAuthActiveBadge();
+  populateTsEditorLsrSelect();
 }
 
 function getSelectedReuseSequence() {
@@ -5062,6 +5959,102 @@ function getSelectedReuseSequence() {
   return cards.find(s => s.sequenceId === val) || (state.savedSequences || []).find(s => s.sequenceId === val) || null;
 }
 
+function preserveUnmaskedSecretsForSequence(seqObj) {
+  const normalized = normalizeClientLoginSequence(seqObj);
+  const existingMatch = (state.savedSequences || []).find(s => s.sequenceId && s.sequenceId === normalized.sequenceId) || state.loginSequence;
+  if (existingMatch && existingMatch.sequenceId === normalized.sequenceId) {
+    if (existingMatch.otpConfig?.secret && (!normalized.otpConfig?.secret || normalized.otpConfig.secret === '[SECRET]' || normalized.otpConfig.secret === '[REDACTED]')) {
+      normalized.otpConfig.secret = existingMatch.otpConfig.secret;
+    }
+    const secMap = new Map((existingMatch.secrets || []).map(s => [s.name, s.value]));
+    normalized.secrets = (normalized.secrets || []).map(s => ({
+      ...s,
+      value: (!s.value || s.value === '[SECRET]' || s.value === '[REDACTED]') ? (secMap.get(s.name) || s.value) : s.value
+    }));
+  }
+  return normalized;
+}
+
+export function renderLsrInlineStepsSummary() {
+  if (typeof document === 'undefined') return;
+  const listEl = document.getElementById('lsr-studio-inline-steps-list');
+  if (!listEl) return;
+  const actions = Array.isArray(state.loginSequence?.actions) ? state.loginSequence.actions : [];
+  if (actions.length === 0) {
+    listEl.innerHTML = '<div class="empty-muted">No login steps recorded yet for this target. Click <strong>🎬 Record / Edit Steps in Visual Builder</strong> to inspect the login page and record steps, or configure credentials/tokens below.</div>';
+    return;
+  }
+  listEl.innerHTML = actions.map((action, idx) => `
+    <div class="lsr-inline-step-pill">
+      <span class="lsr-step-num">${escapeHtml(idx + 1)}</span>
+      <span class="lsr-step-icon">${getLsrStepIcon(action.type)}</span>
+      <span><strong>Step ${escapeHtml(idx + 1)}:</strong> ${escapeHtml(formatLsrStepLabel(action))}</span>
+    </div>
+  `).join('');
+}
+
+export async function openLsrStudioDetailView(seqToLoad = null, { isNew = false } = {}) {
+  state.lsrDetailViewOpen = true;
+  state.lsrDraftDismissed = false;
+
+  if (isNew) {
+    const fallbackUrl = document.getElementById('target-url')?.value.trim() || '';
+    const blank = createDefaultLoginSequence();
+    blank.name = '';
+    blank.targetUrl = fallbackUrl ? normalizeTargetScheme(fallbackUrl) : '';
+    blank.actions = [];
+    state.loginSequence = blank;
+    state.selectedLsrStepIndex = -1;
+    state.lastLsrPlayResult = null;
+    state.lastInspectedPage = null;
+  } else if (seqToLoad) {
+    const prevId = state.loginSequence?.sequenceId || '';
+    state.loginSequence = preserveUnmaskedSecretsForSequence(seqToLoad);
+    state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
+    if (state.loginSequence.sequenceId !== prevId) {
+      state.lastLsrPlayResult = null;
+    }
+  } else if (state.selectedLsrStepIndex < 0 && state.loginSequence.actions.length > 0) {
+    state.selectedLsrStepIndex = 0;
+  }
+
+  const modeBadgeEl = document.getElementById('lsr-studio-detail-mode-badge');
+  const titleEl = document.getElementById('lsr-studio-detail-title');
+  const firstNav = (state.loginSequence.actions || []).find(a => a.type === 'navigate' && a.url);
+  const resolvedTarget = state.loginSequence.targetUrl || firstNav?.url || '';
+
+  if (modeBadgeEl) {
+    modeBadgeEl.textContent = isNew ? '➕ Add New Target' : '✏️ Edit Target';
+  }
+  if (titleEl) {
+    titleEl.textContent = isNew
+      ? 'Configure New Target Login'
+      : (resolvedTarget || state.loginSequence.name || 'Target Login Configuration');
+  }
+
+  applyLsrStateToInputs();
+  renderLsrInlineStepsSummary();
+
+  const detailView = document.getElementById('lsr-studio-detail-config-view');
+  if (detailView) {
+    detailView.classList.remove('hidden');
+    detailView.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }
+
+  try {
+    await checkLocalStoreForTargetAuth({ targetUrlOverride: resolvedTarget });
+  } catch {
+    // Graceful no-op when local/remote session check fails
+  }
+}
+
+export function closeLsrStudioDetailView() {
+  state.lsrDetailViewOpen = false;
+  document.getElementById('lsr-studio-detail-config-view')?.classList.add('hidden');
+  document.getElementById('lsr-studio-targets-master-card')?.classList.remove('hidden');
+  renderLsrSequenceCards();
+}
+
 function renderLsrSequenceCards() {
   renderLsrReuseSelect();
   const listEl = document.getElementById('lsr-sequence-cards-list');
@@ -5069,7 +6062,7 @@ function renderLsrSequenceCards() {
 
   const cards = getDisplayedSequenceCards();
   if (cards.length === 0) {
-    listEl.innerHTML = '<div class="empty-muted">No login sequences configured. Click <strong>🎬 New sequence</strong> to record one or <strong>⚡ Load Working Example</strong> to load a ready-to-run 2FA sequence.</div>';
+    listEl.innerHTML = '<div class="empty-muted">No target login configurations yet. Click <strong>➕ Add Target Login</strong> above to configure a target, or <strong>⚡ Load Working Example</strong> to try a ready-to-run sequence.</div>';
     return;
   }
 
@@ -5084,22 +6077,50 @@ function renderLsrSequenceCards() {
       ((seq.sequenceId && seq.sequenceId === state.loginSequence.sequenceId) ||
        (!seq.sequenceId && !state.loginSequence.sequenceId && seq.name === state.loginSequence.name && idx === 0))
     );
+    const firstNavUrl = (Array.isArray(seq.actions) ? seq.actions : []).find(a => a.type === 'navigate' && a.url)?.url || '';
+    const primaryTargetUrl = seq.targetUrl || firstNavUrl || '';
+    const targetHostLabel = primaryTargetUrl || seq.name || 'Unconfigured Target';
+    const isBeingEdited = Boolean(state.lsrDetailViewOpen && isActive);
 
     return `
-      <div class="lsr-sequence-card ${isActive ? 'active' : ''}" data-lsr-seq-idx="${escapeHtml(idx)}">
+      <div class="lsr-sequence-card lsr-target-row-card ${isActive ? 'active' : ''} ${isBeingEdited ? 'editing' : ''}" data-lsr-seq-idx="${escapeHtml(idx)}">
         <div class="lsr-seq-card-info">
           <div class="lsr-seq-card-title-row">
-            <span class="lsr-seq-icon">🎬</span>
-            <strong class="lsr-seq-name">${escapeHtml(seq.name || 'WrapperSequence.lsr')}</strong>
+            <span class="lsr-seq-icon">🌐</span>
+            <strong class="lsr-target-primary-label">${escapeHtml(targetHostLabel)}</strong>
+            <code class="lsr-seq-name">${escapeHtml(seq.name || 'WrapperSequence.lsr')}</code>
             ${isActive ? '<span class="badge badge-primary">Active for Scan ✅</span>' : ''}
+            ${isBeingEdited ? '<span class="badge badge-primary">✏️ Editing</span>' : ''}
             <span class="badge badge-outline">${escapeHtml(stepCount)} step${stepCount === 1 ? '' : 's'}</span>
             ${secretCount > 0 ? `<span class="badge badge-outline">🗝️ ${escapeHtml(secretCount)}</span>` : ''}
             ${hasOtp ? '<span class="badge badge-outline">🔑 OTP</span>' : ''}
             ${!isSaved ? '<span class="badge">Draft</span>' : ''}
           </div>
-          <div class="lsr-seq-card-meta">Last updated: ${escapeHtml(updatedText)}${seq.targetUrl ? ` · Target: ${escapeHtml(seq.targetUrl)}` : ''}</div>
+          <div class="lsr-seq-card-meta">Sequence: ${escapeHtml(seq.name || 'WrapperSequence.lsr')} · Updated: ${escapeHtml(updatedText)}</div>
         </div>
         <div class="lsr-seq-card-actions">
+          <button
+            type="button"
+            ${idx === 0 ? 'id="btn-edit-lsr-sequence"' : ''}
+            class="btn-primary btn-small"
+            data-lsr-card-action="edit"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Open target login configuration detail view"
+          >✏️ Edit</button>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-lsr-card-action="visual"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Open Visual Step Recorder modal"
+          >🎬 Visual Builder</button>
+          <button
+            type="button"
+            class="btn-secondary btn-small"
+            data-lsr-card-action="play"
+            data-lsr-seq-idx="${escapeHtml(idx)}"
+            title="Play and verify this sequence now"
+          >▶️ Play</button>
           ${!isActive ? `
             <button
               type="button"
@@ -5109,21 +6130,6 @@ function renderLsrSequenceCards() {
               title="Use this saved sequence for upcoming scans"
             >✅ Use in Scan</button>
           ` : ''}
-          <button
-            type="button"
-            class="btn-secondary btn-small"
-            data-lsr-card-action="play"
-            data-lsr-seq-idx="${escapeHtml(idx)}"
-            title="Play and verify this sequence now"
-          >▶️ Play</button>
-          <button
-            type="button"
-            ${idx === 0 ? 'id="btn-edit-lsr-sequence"' : ''}
-            class="btn-secondary btn-small"
-            data-lsr-card-action="edit"
-            data-lsr-seq-idx="${escapeHtml(idx)}"
-            title="Edit sequence in Visual Login Sequence Recorder"
-          >✏️ Edit</button>
           <button
             type="button"
             class="btn-secondary btn-small"
@@ -5204,10 +6210,14 @@ function getPlayStepShortReason(st) {
 
 function renderLsrActionsList() {
   const listEl = document.getElementById('lsr-actions-list');
-  if (!listEl) return;
   const actions = state.loginSequence.actions || [];
+  if (!listEl) {
+    renderLsrInlineStepsSummary();
+    return;
+  }
   if (actions.length === 0) {
     listEl.innerHTML = '<div class="empty-muted">No login steps recorded yet. Use <strong>→ Load Page Forms</strong> on the left or the <strong>Quick Add</strong> buttons to build your login sequence.</div>';
+    renderLsrInlineStepsSummary();
     return;
   }
   if (state.selectedLsrStepIndex >= actions.length) {
@@ -5248,6 +6258,7 @@ function renderLsrActionsList() {
       </div>
     `;
   }).join('');
+  renderLsrInlineStepsSummary();
 }
 
 function renderLsrActionProperties() {
@@ -5372,6 +6383,8 @@ function renderLsrActionProperties() {
           <option value="header" ${action.source === 'header' ? 'selected' : ''}>Response header</option>
           <option value="cookie" ${action.source === 'cookie' ? 'selected' : ''}>Cookie</option>
           <option value="csrf" ${action.source === 'csrf' ? 'selected' : ''}>CSRF DOM token</option>
+          <option value="local_storage" ${action.source === 'local_storage' ? 'selected' : ''}>localStorage</option>
+          <option value="session_storage" ${action.source === 'session_storage' ? 'selected' : ''}>sessionStorage</option>
         </select>
       </div>
       <div class="form-group">
@@ -6449,20 +7462,7 @@ function initLoginSequenceRecorder() {
       renderLsrDiagnosticsBanner(null, { includeInline: false });
     } else if (seqToLoad) {
       const prevId = state.loginSequence?.sequenceId || '';
-      const normalized = normalizeClientLoginSequence(seqToLoad);
-      // Preserve any unmasked secrets from existing state
-      const existingMatch = (state.savedSequences || []).find(s => s.sequenceId && s.sequenceId === normalized.sequenceId) || state.loginSequence;
-      if (existingMatch && existingMatch.sequenceId === normalized.sequenceId) {
-        if (existingMatch.otpConfig?.secret && (!normalized.otpConfig?.secret || normalized.otpConfig.secret === '[SECRET]' || normalized.otpConfig.secret === '[REDACTED]')) {
-          normalized.otpConfig.secret = existingMatch.otpConfig.secret;
-        }
-        const secMap = new Map((existingMatch.secrets || []).map(s => [s.name, s.value]));
-        normalized.secrets = (normalized.secrets || []).map(s => ({
-          ...s,
-          value: (!s.value || s.value === '[SECRET]' || s.value === '[REDACTED]') ? (secMap.get(s.name) || s.value) : s.value
-        }));
-      }
-      state.loginSequence = normalized;
+      state.loginSequence = preserveUnmaskedSecretsForSequence(seqToLoad);
       state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
       if (state.loginSequence.sequenceId !== prevId) {
         state.lastLsrPlayResult = null;
@@ -6590,6 +7590,7 @@ function initLoginSequenceRecorder() {
       if (visualCanvas) {
         visualCanvas.innerHTML = '<div class="empty-muted">🗑️ Sequence deleted. Enter a Login URL above and click <strong>→ Load Page Forms</strong>, or click <strong>⚡ Load Working Example</strong> to create a new sequence.</div>';
       }
+      closeLsrStudioDetailView();
     } else if (wasActive) {
       state.lsrDraftDismissed = false;
       state.loginSequence = normalizeClientLoginSequence(state.savedSequences[0]);
@@ -7204,6 +8205,11 @@ function initLoginSequenceRecorder() {
       }
 
       if (action === 'edit') {
+        await openLsrStudioDetailView(targetSeq, { isNew: false });
+        return;
+      }
+
+      if (action === 'visual') {
         openLsrModal(targetSeq);
         return;
       }
@@ -7708,77 +8714,219 @@ function initLoginSequenceRecorder() {
     });
   }
 
-  // Save Sequence (POST/PUT /api/auth/sequences + localStorage persistence)
-  if (btnSave) {
-    btnSave.addEventListener('click', async () => {
-      const payload = buildLoginSequencePayload({ includeSecrets: true });
-      const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
-      const requestBody = {
-        ...payload,
-        allowPrivate,
-        systemVariables: state.systemVariables
-      };
+  function syncDetailViewTargetAndName({ deriveDefaultName = false, seedNavigateStep = false } = {}) {
+    const studioTargetEl = document.getElementById('studio-target-url');
+    const studioNameEl = document.getElementById('studio-sequence-name-input');
+    const prevTargetUrl = state.loginSequence.targetUrl || '';
+    const rawTarget = studioTargetEl ? studioTargetEl.value.trim() : prevTargetUrl;
+    const normalizedTarget = rawTarget ? normalizeTargetScheme(rawTarget) : '';
+    if (studioTargetEl && normalizedTarget) {
+      studioTargetEl.value = normalizedTarget;
+    }
+    state.loginSequence.targetUrl = normalizedTarget;
+
+    if (studioNameEl) {
+      let rawName = studioNameEl.value.trim();
+      if (!rawName && deriveDefaultName) {
+        try {
+          rawName = normalizedTarget ? `${new URL(normalizedTarget).hostname}.lsr` : 'TargetSequence.lsr';
+        } catch {
+          rawName = 'TargetSequence.lsr';
+        }
+      }
+      if (rawName) {
+        const finalName = /\.[a-zA-Z0-9]+$/.test(rawName) ? rawName : `${rawName}.lsr`;
+        state.loginSequence.name = finalName;
+        studioNameEl.value = finalName;
+        const modalNameEl = document.getElementById('lsr-sequence-name');
+        if (modalNameEl) modalNameEl.value = finalName;
+      }
+    }
+
+    if (normalizedTarget && Array.isArray(state.loginSequence.actions)) {
+      if (state.loginSequence.actions.length === 0 && seedNavigateStep) {
+        const navStep = { type: 'navigate', url: normalizedTarget, step: 1 };
+        navStep.label = formatLsrStepLabel(navStep);
+        state.loginSequence.actions.push(navStep);
+        state.selectedLsrStepIndex = 0;
+      } else if (
+        state.loginSequence.actions[0]?.type === 'navigate' &&
+        (!state.loginSequence.actions[0].url || state.loginSequence.actions[0].url === prevTargetUrl)
+      ) {
+        state.loginSequence.actions[0].url = normalizedTarget;
+        state.loginSequence.actions[0].label = formatLsrStepLabel(state.loginSequence.actions[0]);
+      }
+    }
+  }
+
+  async function saveCurrentLoginSequence({ closeDetailOnSuccess = false } = {}) {
+    if (closeDetailOnSuccess) {
+      syncDetailViewTargetAndName({ deriveDefaultName: true, seedNavigateStep: true });
+    }
+    const payload = buildLoginSequencePayload({ includeSecrets: true });
+    const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+    const requestBody = {
+      ...payload,
+      allowPrivate,
+      systemVariables: state.systemVariables
+    };
+    const saveDetailBtn = document.getElementById('btn-lsr-studio-save-detail');
+    if (btnSave) {
       btnSave.disabled = true;
       btnSave.textContent = 'Saving...';
-      try {
-        let res = null;
-        if (payload.sequenceId && !payload.sequenceId.startsWith('local-')) {
-          try {
-            const putResp = await fetch(`/api/auth/sequences/${encodeURIComponent(payload.sequenceId)}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-              body: JSON.stringify(requestBody)
-            });
-            if (putResp.ok) {
-              res = await putResp.json();
-            }
-          } catch {
-            res = null;
+    }
+    if (saveDetailBtn) {
+      saveDetailBtn.disabled = true;
+      saveDetailBtn.textContent = 'Saving...';
+    }
+    try {
+      let res = null;
+      if (payload.sequenceId && !payload.sequenceId.startsWith('local-')) {
+        try {
+          const putResp = await fetch(`/api/auth/sequences/${encodeURIComponent(payload.sequenceId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+          if (putResp.ok) {
+            res = await putResp.json();
           }
+        } catch {
+          res = null;
         }
-        if (!res) {
-          res = await apiPost('/api/auth/sequences', requestBody);
-        }
-        const saved = normalizeClientLoginSequence({
-          ...(res?.sequence || payload),
-          secrets: payload.secrets,
-          otpConfig: payload.otpConfig
-        });
-        state.lsrDraftDismissed = false;
-        state.loginSequence = saved;
-        const idx = state.savedSequences.findIndex(s =>
-          (s.sequenceId && s.sequenceId === saved.sequenceId) ||
-          (!s.sequenceId && s.name === saved.name)
-        );
-        if (idx >= 0) {
-          state.savedSequences[idx] = saved;
-        } else {
-          state.savedSequences.unshift(saved);
-        }
-        persistSequencesToLocal();
-        applyLsrStateToInputs();
-        const recIdEl = document.getElementById('adv-recorded-session-id');
-        if (recIdEl) recIdEl.value = '';
-        if (!state.lastLsrPlayResult) {
-          renderSequenceBlueprintCanvas(saved);
-        }
-        if (topDiagnosticsEl) {
-          topDiagnosticsEl.className = 'lsr-top-diagnostics-banner success';
-          topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)) — Ready to Play or Reuse in Scan.</div>`;
-          topDiagnosticsEl.classList.remove('hidden');
-        }
-        showLsrPlayOutput(`💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)).`, 'success');
-      } catch (err) {
-        if (topDiagnosticsEl) {
-          topDiagnosticsEl.className = 'lsr-top-diagnostics-banner error';
-          topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">❌ Could not save sequence: ${escapeHtml(err.message)}</div>`;
-          topDiagnosticsEl.classList.remove('hidden');
-        }
-        showLsrPlayOutput(`✕ Save failed: ${escapeHtml(err.message)}`, 'error');
-      } finally {
+      }
+      if (!res) {
+        res = await apiPost('/api/auth/sequences', requestBody);
+      }
+      const saved = normalizeClientLoginSequence({
+        ...(res?.sequence || payload),
+        secrets: payload.secrets,
+        otpConfig: payload.otpConfig
+      });
+      state.lsrDraftDismissed = false;
+      state.loginSequence = saved;
+      const idx = state.savedSequences.findIndex(s =>
+        (s.sequenceId && s.sequenceId === saved.sequenceId) ||
+        (!s.sequenceId && s.name === saved.name)
+      );
+      if (idx >= 0) {
+        state.savedSequences[idx] = saved;
+      } else {
+        state.savedSequences.unshift(saved);
+      }
+      persistSequencesToLocal();
+      applyLsrStateToInputs();
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
+      if (!state.lastLsrPlayResult) {
+        renderSequenceBlueprintCanvas(saved);
+      }
+      if (topDiagnosticsEl) {
+        topDiagnosticsEl.className = 'lsr-top-diagnostics-banner success';
+        topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)) — Ready to Play or Reuse in Scan.</div>`;
+        topDiagnosticsEl.classList.remove('hidden');
+      }
+      if (inlineDiagnosticsEl) {
+        inlineDiagnosticsEl.className = 'lsr-top-diagnostics-banner success';
+        inlineDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">💾 Saved target login configuration for <strong>${escapeHtml(saved.targetUrl || saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)).</div>`;
+        inlineDiagnosticsEl.classList.remove('hidden');
+      }
+      showLsrPlayOutput(`💾 Saved sequence <strong>${escapeHtml(saved.name)}</strong> (${escapeHtml(saved.actions.length)} step(s)).`, 'success');
+      if (closeDetailOnSuccess) {
+        closeLsrStudioDetailView();
+      }
+    } catch (err) {
+      if (topDiagnosticsEl) {
+        topDiagnosticsEl.className = 'lsr-top-diagnostics-banner error';
+        topDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">❌ Could not save sequence: ${escapeHtml(err.message)}</div>`;
+        topDiagnosticsEl.classList.remove('hidden');
+      }
+      if (inlineDiagnosticsEl) {
+        inlineDiagnosticsEl.className = 'lsr-top-diagnostics-banner error';
+        inlineDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">❌ Could not save target login configuration: ${escapeHtml(err.message)}</div>`;
+        inlineDiagnosticsEl.classList.remove('hidden');
+      }
+      showLsrPlayOutput(`✕ Save failed: ${escapeHtml(err.message)}`, 'error');
+    } finally {
+      if (btnSave) {
         btnSave.disabled = false;
         btnSave.textContent = '💾 Save';
       }
+      if (saveDetailBtn) {
+        saveDetailBtn.disabled = false;
+        saveDetailBtn.textContent = '💾 Save Target Configuration';
+      }
+    }
+  }
+
+  // Save Sequence (POST/PUT /api/auth/sequences + localStorage persistence)
+  if (btnSave) {
+    btnSave.addEventListener('click', () => saveCurrentLoginSequence({ closeDetailOnSuccess: false }));
+  }
+
+  // Login & LSR Studio Master-Detail View Handlers
+  const btnStudioAddTarget = document.getElementById('btn-lsr-studio-add-target');
+  const btnStudioBackToTargets = document.getElementById('btn-lsr-studio-back-to-targets');
+  const btnStudioOpenVisualBuilder = document.getElementById('btn-lsr-studio-open-visual-builder');
+  const btnStudioLaunchStepEditor = document.getElementById('btn-lsr-studio-launch-step-editor');
+  const btnStudioPlayDetail = document.getElementById('btn-lsr-studio-play-detail');
+  const btnStudioSaveDetail = document.getElementById('btn-lsr-studio-save-detail');
+  const studioTargetUrlEl = document.getElementById('studio-target-url');
+  const studioSeqNameEl = document.getElementById('studio-sequence-name-input');
+
+  if (btnStudioAddTarget) {
+    btnStudioAddTarget.addEventListener('click', async () => {
+      await openLsrStudioDetailView(null, { isNew: true });
+      document.getElementById('studio-target-url')?.focus();
+    });
+  }
+  if (btnStudioBackToTargets) {
+    btnStudioBackToTargets.addEventListener('click', () => closeLsrStudioDetailView());
+  }
+  for (const vbBtn of [btnStudioOpenVisualBuilder, btnStudioLaunchStepEditor].filter(Boolean)) {
+    vbBtn.addEventListener('click', () => {
+      syncDetailViewTargetAndName({ deriveDefaultName: false, seedNavigateStep: true });
+      openLsrModal(state.loginSequence);
+    });
+  }
+  if (btnStudioPlayDetail) {
+    btnStudioPlayDetail.addEventListener('click', async () => {
+      syncDetailViewTargetAndName({ deriveDefaultName: false, seedNavigateStep: false });
+      await executePlayLsrSequence({ openModalOnPlay: false });
+    });
+  }
+  if (btnStudioSaveDetail) {
+    btnStudioSaveDetail.addEventListener('click', () => saveCurrentLoginSequence({ closeDetailOnSuccess: true }));
+  }
+
+  if (studioTargetUrlEl) {
+    studioTargetUrlEl.addEventListener('input', () => {
+      const prevUrl = state.loginSequence.targetUrl || '';
+      const nextRaw = studioTargetUrlEl.value.trim();
+      state.loginSequence.targetUrl = nextRaw;
+      if (
+        Array.isArray(state.loginSequence.actions) &&
+        state.loginSequence.actions[0]?.type === 'navigate' &&
+        (!state.loginSequence.actions[0].url || state.loginSequence.actions[0].url === prevUrl)
+      ) {
+        state.loginSequence.actions[0].url = nextRaw;
+        state.loginSequence.actions[0].label = formatLsrStepLabel(state.loginSequence.actions[0]);
+        renderLsrInlineStepsSummary();
+        renderLsrActionsList();
+      }
+      const detailTitleEl = document.getElementById('lsr-studio-detail-title');
+      if (detailTitleEl && state.lsrDetailViewOpen) {
+        detailTitleEl.textContent = nextRaw || state.loginSequence.name || 'Configure New Target Login';
+      }
+    });
+  }
+
+  if (studioSeqNameEl) {
+    studioSeqNameEl.addEventListener('input', () => {
+      const nextName = studioSeqNameEl.value.trim();
+      state.loginSequence.name = nextName;
+      const modalNameEl = document.getElementById('lsr-sequence-name');
+      if (modalNameEl) modalNameEl.value = nextName || 'WrapperSequence.lsr';
     });
   }
 
@@ -7787,5 +8935,737 @@ function initLoginSequenceRecorder() {
     btnPlay.addEventListener('click', () => executePlayLsrSequence({ openModalOnPlay: false }));
   }
 
+  // Top Auth Bar, Compact Drawer & Login Studio Token Vault Handlers
+  wireAuthArtifactsContainer(document.getElementById('top-auth-artifacts-body'));
+  wireAuthArtifactsContainer(document.getElementById('lsr-studio-token-vault-body'));
+
+  const resolveSeqBySelectValue = val => {
+    const cards = getDisplayedSequenceCards();
+    if (!val) return null;
+    if (val.startsWith('__idx_')) {
+      const idx = parseInt(val.slice(6), 10);
+      return Number.isInteger(idx) ? (cards[idx] || null) : null;
+    }
+    return cards.find(s => s.sequenceId === val) || (state.savedSequences || []).find(s => s.sequenceId === val) || null;
+  };
+
+  for (const syncId of ['top-lsr-select', 'adv-lsr-select']) {
+    const selEl = document.getElementById(syncId);
+    if (!selEl) continue;
+    selEl.addEventListener('change', () => {
+      const val = selEl.value;
+      if (val === '__create_new__') {
+        renderLsrReuseSelect();
+        openLsrModal(null, { isNewBlank: true });
+        return;
+      }
+      if (!val) {
+        state.lsrDraftDismissed = true;
+        const recIdEl = document.getElementById('adv-recorded-session-id');
+        if (recIdEl) recIdEl.value = '';
+        renderLsrSequenceCards();
+        updateTopAuthActiveBadge({ applied: false });
+        return;
+      }
+      const seq = resolveSeqBySelectValue(val);
+      if (seq) activateSequenceForScan(seq);
+    });
+  }
+
+  for (const createId of ['btn-top-create-lsr', 'btn-adv-create-lsr']) {
+    const btn = document.getElementById(createId);
+    if (btn) btn.addEventListener('click', () => openLsrModal(null, { isNewBlank: true }));
+  }
+
+  for (const studioBtnId of ['btn-top-open-lsr-studio', 'btn-adv-open-lsr-studio']) {
+    const btn = document.getElementById(studioBtnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const targetEl = document.getElementById('target-url');
+        const studioTargetEl = document.getElementById('studio-target-url');
+        if (studioTargetEl && targetEl?.value.trim()) {
+          studioTargetEl.value = targetEl.value.trim();
+        }
+        switchTab('login-lsr');
+      });
+    }
+  }
+
+  for (const getTokId of ['btn-top-get-auth-token', 'btn-adv-get-token', 'btn-studio-get-token']) {
+    const btn = document.getElementById(getTokId);
+    if (btn) btn.addEventListener('click', () => harvestAuthTokensAndCookies());
+  }
+
+  for (const chkId of ['btn-top-check-local-store', 'btn-adv-check-local-store', 'btn-studio-check-local-store']) {
+    const btn = document.getElementById(chkId);
+    if (btn) btn.addEventListener('click', () => checkLocalStoreForTargetAuth());
+  }
+
+  const btnStudioClearStore = document.getElementById('btn-studio-clear-local-store');
+  if (btnStudioClearStore) {
+    btnStudioClearStore.addEventListener('click', () => {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(LSR_TOKEN_VAULT_STORAGE_KEY);
+        }
+      } catch {}
+      state.activeAuthArtifacts = null;
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
+      updateTopAuthActiveBadge({ applied: false });
+      renderAuthArtifactsCard(null);
+      showTopAuthFeedback('🗑️ Cleared Local Store auth artifact cache.', false);
+    });
+  }
+
+  const btnCloseTopArtifacts = document.getElementById('btn-close-top-auth-artifacts');
+  if (btnCloseTopArtifacts) {
+    btnCloseTopArtifacts.addEventListener('click', () => {
+      document.getElementById('top-auth-artifacts-card')?.classList.add('hidden');
+    });
+  }
+
   applyLsrStateToInputs();
+}
+
+// ── Saved Target Systems, Configuration Cloner & Scheduled Fix Verification ──
+function showTargetSystemsStatus(message, isError = false) {
+  const el = document.getElementById('target-systems-status-msg');
+  if (el) {
+    el.textContent = message;
+    el.className = `ts-status-msg ${isError ? 'error' : 'success'}`;
+    el.classList.remove('hidden');
+  }
+  showInlineBanner('url-validation-banner', message, isError);
+}
+
+function populateTsEditorLsrSelect(selectedSeqId = undefined) {
+  const sel = document.getElementById('ts-edit-lsr');
+  if (!sel) return;
+  const currentVal = selectedSeqId !== undefined ? String(selectedSeqId || '') : (sel.value || '');
+  const saved = Array.isArray(state.savedSequences) ? state.savedSequences : [];
+  const opts = ['<option value="">-- None (Unauthenticated / Custom Header) --</option>'];
+  for (const seq of saved) {
+    const val = seq.sequenceId || '';
+    if (!val) continue;
+    const stepsCount = Array.isArray(seq.actions) ? seq.actions.length : 0;
+    const isSel = val === currentVal ? 'selected' : '';
+    opts.push(
+      `<option value="${escapeHtml(val)}" ${isSel}>${escapeHtml(seq.name || val)} (${escapeHtml(stepsCount)} step${stepsCount === 1 ? '' : 's'})</option>`
+    );
+  }
+  sel.innerHTML = opts.join('');
+}
+
+export async function loadTargetSystems() {
+  if (typeof fetch !== 'function') return;
+  try {
+    const data = await apiGet('/api/target-systems');
+    state.targetSystems = Array.isArray(data?.systems) ? data.systems : [];
+    renderTargetSystemsUi();
+  } catch {
+    // Graceful no-op when server endpoint is unavailable
+  }
+}
+
+export function renderTargetSystemsUi(overrideSystems = null) {
+  if (Array.isArray(overrideSystems)) {
+    state.targetSystems = overrideSystems;
+  }
+  if (typeof document === 'undefined') return;
+  const systems = Array.isArray(state.targetSystems) ? state.targetSystems : [];
+
+  if (state.activeTargetSystemId && !systems.some(s => s.id === state.activeTargetSystemId)) {
+    state.activeTargetSystemId = '';
+  }
+
+  const selectEl = document.getElementById('target-system-select');
+  if (selectEl) {
+    const opts = ['<option value="">-- New / Ad-Hoc Target (Select saved system to load...) --</option>'];
+    for (const sys of systems) {
+      const openCount = Array.isArray(sys.lastScanSummary?.unfixedCheckIds)
+        ? sys.lastScanSummary.unfixedCheckIds.length
+        : 0;
+      const suffix = openCount > 0
+        ? ` (${openCount} open issues)`
+        : (sys.lastScanSummary ? ' (✅ Clean)' : '');
+      const isSelected = sys.id === state.activeTargetSystemId ? 'selected' : '';
+      opts.push(
+        `<option value="${escapeHtml(sys.id)}" ${isSelected}>${escapeHtml(sys.name)} [${escapeHtml(sys.environment || 'production')}] — ${escapeHtml(sys.targetUrl)}${escapeHtml(suffix)}</option>`
+      );
+    }
+    selectEl.innerHTML = opts.join('');
+  }
+
+  const scheduledCount = systems.filter(s => Boolean(s.schedule?.enabled)).length;
+  const totalOpenIssues = systems.reduce((sum, s) => {
+    const unfixed = Array.isArray(s.lastScanSummary?.unfixedCheckIds) ? s.lastScanSummary.unfixedCheckIds.length : 0;
+    return sum + unfixed;
+  }, 0);
+
+  const countBadgeEl = document.getElementById('target-systems-count-badge');
+  const totalPillEl = document.getElementById('ts-summary-total-pill');
+  const schedPillEl = document.getElementById('ts-summary-scheduled-pill');
+  const openPillEl = document.getElementById('ts-summary-open-issues-pill');
+  if (countBadgeEl) countBadgeEl.textContent = String(systems.length);
+  if (totalPillEl) totalPillEl.textContent = `${systems.length} System${systems.length === 1 ? '' : 's'}`;
+  if (schedPillEl) schedPillEl.textContent = `${scheduledCount} Scheduled`;
+  if (openPillEl) openPillEl.textContent = `${totalOpenIssues} Open Issue${totalOpenIssues === 1 ? '' : 's'} Tracked`;
+
+  populateTsEditorLsrSelect();
+
+  const listEl = document.getElementById('target-systems-list');
+  if (!listEl) return;
+  if (systems.length === 0) {
+    listEl.innerHTML = '<div class="ts-empty-state">No saved Target Systems yet. Enter a URL above and click <strong>💾 Save System</strong> to save your target, <code>.lsr</code> login sequence, and schedule.</div>';
+    return;
+  }
+
+  listEl.innerHTML = systems.map(sys => {
+    const env = String(sys.environment || 'production').toLowerCase();
+    const isScheduled = Boolean(sys.schedule?.enabled);
+    const intervalLabel = sys.schedule?.interval || 'daily';
+    const schedModeLabel = sys.schedule?.mode === 'full_profile' ? 'Full Profile' : 'Open Issues Only';
+    const nextRunText = sys.schedule?.nextRunAt
+      ? ` · Next: ${new Date(sys.schedule.nextRunAt).toLocaleString()}`
+      : '';
+    const schedulePillHtml = isScheduled
+      ? `<span class="ts-schedule-pill active">🗓️ ${escapeHtml(intervalLabel)} · ${escapeHtml(schedModeLabel)}${escapeHtml(nextRunText)}</span>`
+      : '<span class="ts-schedule-pill manual">⏸️ Manual</span>';
+
+    const summary = sys.lastScanSummary || null;
+    const unfixedIds = Array.isArray(summary?.unfixedCheckIds) ? summary.unfixedCheckIds : [];
+    let summaryHtml = '<span class="form-hint">No scans recorded yet</span>';
+    let unfixedListHtml = '';
+    if (summary) {
+      const gradeBadge = `<span class="badge badge-outline">Grade ${escapeHtml(summary.lastGrade || '—')}</span>`;
+      const openBadge = unfixedIds.length > 0
+        ? `<span class="ts-open-issues-badge has-issues">🎯 ${escapeHtml(unfixedIds.length)} Open Check(s): ${escapeHtml(unfixedIds.slice(0, 6).join(', '))}${unfixedIds.length > 6 ? '…' : ''}</span>`
+        : '<span class="ts-open-issues-badge clean">✅ All Verified Fixed (0 Open Issues)</span>';
+      const fixedBadge = Number(summary.fixedInLastRunCount) > 0
+        ? `<span class="ts-open-issues-badge clean">🎉 ${escapeHtml(summary.fixedInLastRunCount)} Fixed in Last Run!</span>`
+        : '';
+      summaryHtml = `${gradeBadge} ${openBadge} ${fixedBadge}`;
+      if (unfixedIds.length > 0) {
+        unfixedListHtml = `<div class="ts-card-unfixed-list"><strong>Tracked Open Checks:</strong> ${unfixedIds.slice(0, 10).map(id => `<code>${escapeHtml(id)}</code>`).join(' ')}${unfixedIds.length > 10 ? ` <span class="form-hint">+${escapeHtml(unfixedIds.length - 10)} more</span>` : ''}</div>`;
+      }
+    }
+
+    const lsrBadgeHtml = (sys.sequenceId || sys.sequenceName)
+      ? `<span class="badge badge-primary">🎬 ${escapeHtml(sys.sequenceName || sys.sequenceId)}</span>`
+      : '';
+
+    return `
+      <div class="target-system-card" data-ts-id="${escapeHtml(sys.id)}">
+        <div class="ts-card-header">
+          <div>
+            <strong>${escapeHtml(sys.name)}</strong>
+            <span class="ts-env-badge ${escapeHtml(env)}">${escapeHtml(env)}</span>
+          </div>
+          <span class="badge badge-outline">${escapeHtml(sys.profile || 'smart')}</span>
+        </div>
+        <div class="ts-card-meta">
+          <code>${escapeHtml(sys.targetUrl)}</code>
+          ${lsrBadgeHtml}
+          ${schedulePillHtml}
+        </div>
+        <div class="ts-card-meta">${summaryHtml}</div>
+        ${unfixedListHtml}
+        <div class="ts-card-actions">
+          <button type="button" class="btn-primary btn-small" data-ts-action="run-fixes" data-ts-id="${escapeHtml(sys.id)}">🎯 Verify Open Issues Only</button>
+          <button type="button" class="btn-secondary btn-small" data-ts-action="run-full" data-ts-id="${escapeHtml(sys.id)}">🚀 Run Full Profile</button>
+          <button type="button" class="btn-secondary btn-small" data-ts-action="load" data-ts-id="${escapeHtml(sys.id)}">📥 Load in Form</button>
+          <button type="button" class="btn-secondary btn-small" data-ts-action="clone" data-ts-id="${escapeHtml(sys.id)}">📋 Clone &amp; Tweak</button>
+          <button type="button" class="btn-secondary btn-small" data-ts-action="edit" data-ts-id="${escapeHtml(sys.id)}">✏️ Schedule / Edit</button>
+          <button type="button" class="btn-secondary btn-small" data-ts-action="delete" data-ts-id="${escapeHtml(sys.id)}">🗑️ Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function collectCurrentFormAsTargetSystemPayload(overrides = {}) {
+  const rawTarget = document.getElementById('target-url')?.value.trim() || '';
+  const targetUrl = rawTarget ? preserveBareIpOrNormalize(rawTarget) : '';
+  const name = document.getElementById('target-system-name')?.value.trim() || '';
+  const environment = document.getElementById('target-system-env')?.value || 'production';
+  const profile = state.selectedPreset || 'smart';
+  const maxDepth = parseInt(document.getElementById('adv-depth')?.value, 10);
+  const concurrency = parseInt(document.getElementById('adv-concurrency')?.value, 10) || 5;
+  const timeout = parseInt(document.getElementById('adv-timeout')?.value, 10) || 10000;
+  const noiseProfile = document.getElementById('opt-noise-profile')?.value || 'balanced';
+  const allowPrivate = Boolean(document.getElementById('allow-private-toggle')?.checked);
+  const deviceCategory = document.getElementById('opt-device-category')?.value || 'all';
+  const sourceIp = document.getElementById('adv-source-ip')?.value.trim() || null;
+  const techOverride = document.getElementById('adv-tech')?.value.trim() || null;
+  const forceAll = Boolean(document.getElementById('opt-force-all')?.checked);
+  const agentMode = Boolean(document.getElementById('opt-agent-mode')?.checked);
+  const goal = document.getElementById('opt-agent-goal')?.value.trim() || null;
+  const checksRaw = document.getElementById('adv-checks')?.value.trim() || '';
+  const checks = checksRaw ? checksRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const authHeader = document.getElementById('adv-auth')?.value.trim() || null;
+  const parsedHeaders = parseCustomHeadersInput(document.getElementById('custom-headers-input')?.value || '');
+  const customHeaders = parsedHeaders.valid && parsedHeaders.headers ? parsedHeaders.headers : {};
+
+  const topLsrVal = document.getElementById('top-lsr-select')?.value;
+  const advLsrVal = document.getElementById('adv-lsr-select')?.value;
+  const explicitNone = Boolean(
+    state.lsrDraftDismissed ||
+    (document.getElementById('top-lsr-select') && topLsrVal === '') ||
+    (document.getElementById('adv-lsr-select') && advLsrVal === '')
+  );
+  const sequenceId = !explicitNone ? (state.loginSequence?.sequenceId || '') : '';
+  const sequenceName = !explicitNone ? (state.loginSequence?.name || '') : '';
+
+  return {
+    ...(name ? { name } : {}),
+    environment,
+    targetUrl,
+    profile,
+    maxDepth: Number.isFinite(maxDepth) ? maxDepth : 3,
+    concurrency,
+    timeout,
+    noiseProfile,
+    allowPrivate,
+    deviceMode: profile === 'device',
+    deviceCategory,
+    sourceIp,
+    techOverride,
+    forceAll,
+    agentMode,
+    goal,
+    checks,
+    authHeader,
+    customHeaders,
+    sequenceId: sequenceId || null,
+    sequenceName: sequenceName || null,
+    ...overrides
+  };
+}
+
+function applyTargetSystemToForm(sys) {
+  if (!sys || typeof sys !== 'object') return;
+  state.activeTargetSystemId = sys.id || '';
+
+  const selectEl = document.getElementById('target-system-select');
+  const nameEl = document.getElementById('target-system-name');
+  const envEl = document.getElementById('target-system-env');
+  const urlEl = document.getElementById('target-url');
+  const depthEl = document.getElementById('adv-depth');
+  const concEl = document.getElementById('adv-concurrency');
+  const timeoutEl = document.getElementById('adv-timeout');
+  const noiseEl = document.getElementById('opt-noise-profile');
+  const allowPrivEl = document.getElementById('allow-private-toggle');
+  const devCatEl = document.getElementById('opt-device-category');
+  const sourceIpEl = document.getElementById('adv-source-ip');
+  const techEl = document.getElementById('adv-tech');
+  const forceAllEl = document.getElementById('opt-force-all');
+  const agentEl = document.getElementById('opt-agent-mode');
+  const goalEl = document.getElementById('opt-agent-goal');
+  const checksEl = document.getElementById('adv-checks');
+  const authEl = document.getElementById('adv-auth');
+  const headersEl = document.getElementById('custom-headers-input');
+
+  if (selectEl) selectEl.value = sys.id || '';
+  if (nameEl) nameEl.value = sys.name || '';
+  if (envEl) envEl.value = sys.environment || 'production';
+  if (urlEl) {
+    urlEl.value = sys.targetUrl || '';
+    validateInputUrl(urlEl.value.trim());
+  }
+
+  selectPreset(sys.profile || 'smart');
+  if (depthEl && sys.maxDepth !== undefined) depthEl.value = String(sys.maxDepth);
+  if (concEl && sys.concurrency !== undefined) concEl.value = String(sys.concurrency);
+  if (timeoutEl && sys.timeout !== undefined) timeoutEl.value = String(sys.timeout);
+  if (noiseEl && sys.noiseProfile) noiseEl.value = sys.noiseProfile;
+  if (allowPrivEl) allowPrivEl.checked = Boolean(sys.allowPrivate);
+  if (devCatEl && sys.deviceCategory) devCatEl.value = sys.deviceCategory;
+  if (sourceIpEl) sourceIpEl.value = sys.sourceIp || '';
+  if (techEl) {
+    techEl.value = Array.isArray(sys.techOverride) ? sys.techOverride.join(', ') : (sys.techOverride || '');
+  }
+  if (forceAllEl) forceAllEl.checked = Boolean(sys.forceAll);
+  if (agentEl) {
+    agentEl.checked = Boolean(sys.agentMode);
+    const goalWrap = document.getElementById('agent-goal-wrap');
+    if (goalWrap) goalWrap.classList.toggle('hidden', !sys.agentMode);
+  }
+  if (goalEl) goalEl.value = sys.goal || '';
+  if (checksEl) checksEl.value = Array.isArray(sys.checks) ? sys.checks.join(', ') : '';
+  if (authEl && sys.authHeader && sys.authHeader !== '[REDACTED]') {
+    authEl.value = sys.authHeader;
+  }
+  if (headersEl && sys.customHeaders && typeof sys.customHeaders === 'object') {
+    const hdrLines = Object.entries(sys.customHeaders)
+      .filter(([, v]) => v !== '[REDACTED]' && v !== '[SECRET]')
+      .map(([k, v]) => `${k}: ${v}`);
+    if (hdrLines.length > 0) headersEl.value = hdrLines.join('\n');
+  }
+
+  if (sys.sequenceId) {
+    const matchedSeq = (state.savedSequences || []).find(s => s.sequenceId === sys.sequenceId);
+    if (matchedSeq && typeof state.loginSequence === 'object') {
+      state.lsrDraftDismissed = false;
+      state.loginSequence = normalizeClientLoginSequence(matchedSeq);
+      persistSequencesToLocal();
+      applyLsrStateToInputs();
+    } else {
+      for (const syncId of ['top-lsr-select', 'adv-lsr-select']) {
+        const sEl = document.getElementById(syncId);
+        if (sEl) sEl.value = sys.sequenceId;
+      }
+    }
+  } else {
+    state.lsrDraftDismissed = true;
+    renderLsrReuseSelect();
+  }
+  updateTopAuthActiveBadge();
+}
+
+function populateTargetSystemEditor(sys = null, { mode = 'edit' } = {}) {
+  const mgrCard = document.getElementById('target-systems-manager-card');
+  const toggleBtn = document.getElementById('btn-toggle-target-systems-manager');
+  const editorPanel = document.getElementById('target-system-editor-panel');
+  if (mgrCard) mgrCard.classList.remove('hidden');
+  if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+  if (editorPanel) editorPanel.classList.remove('hidden');
+
+  const src = sys || collectCurrentFormAsTargetSystemPayload();
+  const editIdEl = document.getElementById('ts-edit-id');
+  const editNameEl = document.getElementById('ts-edit-name');
+  const editEnvEl = document.getElementById('ts-edit-env');
+  const editUrlEl = document.getElementById('ts-edit-url');
+  const editProfileEl = document.getElementById('ts-edit-profile');
+  const editIntervalEl = document.getElementById('ts-edit-schedule-interval');
+  const editModeEl = document.getElementById('ts-edit-schedule-mode');
+  const editChecksEl = document.getElementById('ts-edit-checks');
+  const titleEl = document.getElementById('ts-editor-title');
+  const modeBadgeEl = document.getElementById('ts-editor-mode-badge');
+
+  if (editIdEl) editIdEl.value = mode === 'create' ? '' : (src.id || '');
+  if (editNameEl) editNameEl.value = src.name || '';
+  if (editEnvEl) editEnvEl.value = src.environment || 'production';
+  if (editUrlEl) editUrlEl.value = src.targetUrl || '';
+  if (editProfileEl) editProfileEl.value = src.profile || 'smart';
+  populateTsEditorLsrSelect(src.sequenceId || '');
+  if (editIntervalEl) {
+    editIntervalEl.value = src.schedule?.enabled ? (src.schedule.interval || 'daily') : 'manual';
+  }
+  if (editModeEl) {
+    editModeEl.value = src.schedule?.mode || 'open_issues_only';
+  }
+  if (editChecksEl) {
+    const pinned = Array.isArray(src.checks) && src.checks.length > 0
+      ? src.checks
+      : (Array.isArray(src.lastScanSummary?.unfixedCheckIds) ? src.lastScanSummary.unfixedCheckIds : []);
+    editChecksEl.value = pinned.join(', ');
+  }
+  if (titleEl) {
+    titleEl.textContent = mode === 'clone'
+      ? '📋 Tweak Cloned Target System & Schedule'
+      : mode === 'create'
+        ? '➕ Create New Target System & Schedule'
+        : '✏️ Edit Target System & Recurring Schedule';
+  }
+  if (modeBadgeEl) {
+    modeBadgeEl.textContent = mode === 'clone' ? 'Cloned' : mode === 'create' ? 'New' : 'Editing';
+  }
+}
+
+async function handleSaveCurrentTargetSystem() {
+  const urlEl = document.getElementById('target-url');
+  const rawUrl = urlEl?.value.trim() || '';
+  if (!rawUrl) {
+    urlEl?.focus();
+    showTargetSystemsStatus('Enter a Target URL before saving a Target System.', true);
+    return null;
+  }
+
+  const normalizedUrl = preserveBareIpOrNormalize(rawUrl);
+  if (urlEl) urlEl.value = normalizedUrl;
+  const payload = collectCurrentFormAsTargetSystemPayload({ targetUrl: normalizedUrl });
+
+  try {
+    const hasExisting = Boolean(
+      state.activeTargetSystemId &&
+      state.targetSystems.some(s => s.id === state.activeTargetSystemId)
+    );
+    const data = hasExisting
+      ? await apiPut(`/api/target-systems/${encodeURIComponent(state.activeTargetSystemId)}`, payload)
+      : await apiPost('/api/target-systems', payload);
+    const saved = data?.system || null;
+    if (saved?.id) state.activeTargetSystemId = saved.id;
+    await loadTargetSystems();
+    if (saved) applyTargetSystemToForm(saved);
+    showTargetSystemsStatus(`💾 Saved Target System "${saved?.name || payload.targetUrl}".`, false);
+    return saved;
+  } catch (err) {
+    showTargetSystemsStatus(`Failed to save Target System: ${err.message}`, true);
+    return null;
+  }
+}
+
+async function handleCloneTargetSystem(sourceId) {
+  if (!sourceId) return null;
+  const source = state.targetSystems.find(s => s.id === sourceId) || null;
+  const quickName = document.getElementById('target-system-name')?.value.trim() || '';
+  const quickEnv = document.getElementById('target-system-env')?.value || '';
+  const overrides = {};
+  if (quickName && source && quickName !== source.name) overrides.name = quickName;
+  if (quickEnv && source && quickEnv !== source.environment) overrides.environment = quickEnv;
+
+  try {
+    const data = await apiPost(`/api/target-systems/${encodeURIComponent(sourceId)}/clone`, overrides);
+    const cloned = data?.system;
+    await loadTargetSystems();
+    if (cloned) {
+      applyTargetSystemToForm(cloned);
+      populateTargetSystemEditor(cloned, { mode: 'clone' });
+      showTargetSystemsStatus(`📋 Cloned "${source?.name || sourceId}" into "${cloned.name}". Tweak the URL, environment, or schedule and click Save Target System.`, false);
+    }
+    return cloned || null;
+  } catch (err) {
+    showTargetSystemsStatus(`Failed to clone Target System: ${err.message}`, true);
+    return null;
+  }
+}
+
+async function handleRunTargetSystem(systemId, mode = 'open_issues_only') {
+  if (!systemId) return;
+  const sys = state.targetSystems.find(s => s.id === systemId) || null;
+  try {
+    const launchData = await apiPost(`/api/target-systems/${encodeURIComponent(systemId)}/run`, { mode });
+    const runTarget = launchData.targets?.[0] || sys?.targetUrl || '';
+    const modeNote = launchData.fallbackToFullProfile
+      ? 'No open issues tracked yet — running full profile.'
+      : (mode === 'open_issues_only'
+          ? `Running ONLY ${launchData.checksCount || launchData.checks?.length || 0} open check(s) for fast fix verification.`
+          : 'Running full profile scan.');
+    showTargetSystemsStatus(`🚀 Launched "${launchData.targetSystemName || sys?.name || systemId}": ${modeNote}`, false);
+    await startScan({ target: runTarget, targetSystemId: systemId, mode }, launchData);
+  } catch (err) {
+    showTargetSystemsStatus(`Failed to launch Target System run: ${err.message}`, true);
+  }
+}
+
+function initTargetSystemsManager() {
+  if (typeof document === 'undefined') return;
+
+  const selectEl = document.getElementById('target-system-select');
+  const btnSave = document.getElementById('btn-save-target-system');
+  const btnClone = document.getElementById('btn-clone-target-system');
+  const btnRunFixes = document.getElementById('btn-run-target-system-fixes');
+  const btnToggleMgr = document.getElementById('btn-toggle-target-systems-manager');
+  const mgrCard = document.getElementById('target-systems-manager-card');
+
+  const btnNewEditor = document.getElementById('btn-new-target-system-editor');
+  const editorPanel = document.getElementById('target-system-editor-panel');
+  const btnEditorSave = document.getElementById('btn-ts-editor-save');
+  const btnEditorSaveClone = document.getElementById('btn-ts-editor-save-clone');
+  const btnEditorLoadFromForm = document.getElementById('btn-ts-editor-load-from-form');
+  const btnEditorCancel = document.getElementById('btn-ts-editor-cancel');
+  const listEl = document.getElementById('target-systems-list');
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const id = selectEl.value;
+      if (!id) {
+        state.activeTargetSystemId = '';
+        return;
+      }
+      const sys = state.targetSystems.find(s => s.id === id);
+      if (sys) {
+        applyTargetSystemToForm(sys);
+        showTargetSystemsStatus(`📥 Loaded Target System "${sys.name}" into scan form.`, false);
+      }
+    });
+  }
+
+  if (btnSave) {
+    btnSave.addEventListener('click', () => handleSaveCurrentTargetSystem());
+  }
+
+  if (btnClone) {
+    btnClone.addEventListener('click', async () => {
+      if (state.activeTargetSystemId) {
+        await handleCloneTargetSystem(state.activeTargetSystemId);
+        return;
+      }
+      const saved = await handleSaveCurrentTargetSystem();
+      if (saved?.id) {
+        populateTargetSystemEditor(saved, { mode: 'clone' });
+      }
+    });
+  }
+
+  if (btnRunFixes) {
+    btnRunFixes.addEventListener('click', async () => {
+      if (state.activeTargetSystemId) {
+        await handleRunTargetSystem(state.activeTargetSystemId, 'open_issues_only');
+        return;
+      }
+      const saved = await handleSaveCurrentTargetSystem();
+      if (saved?.id) {
+        await handleRunTargetSystem(saved.id, 'open_issues_only');
+      }
+    });
+  }
+
+  if (btnToggleMgr && mgrCard) {
+    btnToggleMgr.addEventListener('click', () => {
+      const willShow = mgrCard.classList.contains('hidden');
+      mgrCard.classList.toggle('hidden', !willShow);
+      btnToggleMgr.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+    });
+  }
+
+  if (btnNewEditor) {
+    btnNewEditor.addEventListener('click', () => {
+      const activeSys = state.activeTargetSystemId
+        ? state.targetSystems.find(s => s.id === state.activeTargetSystemId)
+        : null;
+      populateTargetSystemEditor(activeSys || null, { mode: activeSys ? 'edit' : 'create' });
+    });
+  }
+
+  const readEditorPayload = () => {
+    const name = document.getElementById('ts-edit-name')?.value.trim() || '';
+    const environment = document.getElementById('ts-edit-env')?.value || 'production';
+    const rawUrl = document.getElementById('ts-edit-url')?.value.trim() || '';
+    const targetUrl = rawUrl ? preserveBareIpOrNormalize(rawUrl) : '';
+    const profile = document.getElementById('ts-edit-profile')?.value || 'smart';
+    const sequenceId = document.getElementById('ts-edit-lsr')?.value.trim() || null;
+    const seqObj = sequenceId ? state.savedSequences.find(s => s.sequenceId === sequenceId) : null;
+    const interval = document.getElementById('ts-edit-schedule-interval')?.value || 'manual';
+    const mode = document.getElementById('ts-edit-schedule-mode')?.value || 'open_issues_only';
+    const checksRaw = document.getElementById('ts-edit-checks')?.value.trim() || '';
+    const checks = checksRaw ? checksRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
+    const formBase = collectCurrentFormAsTargetSystemPayload();
+    return {
+      ...formBase,
+      ...(name ? { name } : {}),
+      environment,
+      targetUrl,
+      profile,
+      sequenceId,
+      sequenceName: seqObj?.name || null,
+      checks,
+      schedule: {
+        enabled: interval !== 'manual',
+        interval,
+        mode
+      }
+    };
+  };
+
+  if (btnEditorSave) {
+    btnEditorSave.addEventListener('click', async () => {
+      const editId = document.getElementById('ts-edit-id')?.value.trim() || '';
+      const payload = readEditorPayload();
+      if (!payload.targetUrl) {
+        document.getElementById('ts-edit-url')?.focus();
+        showTargetSystemsStatus('Enter a Target URL in the editor before saving.', true);
+        return;
+      }
+      try {
+        const data = editId
+          ? await apiPut(`/api/target-systems/${encodeURIComponent(editId)}`, payload)
+          : await apiPost('/api/target-systems', payload);
+        const saved = data?.system || null;
+        if (saved?.id) state.activeTargetSystemId = saved.id;
+        await loadTargetSystems();
+        if (saved) applyTargetSystemToForm(saved);
+        editorPanel?.classList.add('hidden');
+        showTargetSystemsStatus(`💾 Saved Target System "${saved?.name || payload.targetUrl}"${payload.schedule?.enabled ? ` (Schedule: ${payload.schedule.interval})` : ''}.`, false);
+      } catch (err) {
+        showTargetSystemsStatus(`Failed to save Target System: ${err.message}`, true);
+      }
+    });
+  }
+
+  if (btnEditorSaveClone) {
+    btnEditorSaveClone.addEventListener('click', async () => {
+      const editId = document.getElementById('ts-edit-id')?.value.trim() || '';
+      const payload = readEditorPayload();
+      if (!payload.targetUrl) {
+        document.getElementById('ts-edit-url')?.focus();
+        showTargetSystemsStatus('Enter a Target URL before saving as a clone.', true);
+        return;
+      }
+      try {
+        const data = editId
+          ? await apiPost(`/api/target-systems/${encodeURIComponent(editId)}/clone`, payload)
+          : await apiPost('/api/target-systems', payload);
+        const cloned = data?.system || null;
+        if (cloned?.id) state.activeTargetSystemId = cloned.id;
+        await loadTargetSystems();
+        if (cloned) applyTargetSystemToForm(cloned);
+        editorPanel?.classList.add('hidden');
+        showTargetSystemsStatus(`📋 Created cloned Target System "${cloned?.name || payload.targetUrl}".`, false);
+      } catch (err) {
+        showTargetSystemsStatus(`Failed to save cloned Target System: ${err.message}`, true);
+      }
+    });
+  }
+
+  if (btnEditorLoadFromForm) {
+    btnEditorLoadFromForm.addEventListener('click', () => {
+      const editId = document.getElementById('ts-edit-id')?.value.trim() || '';
+      const pulled = collectCurrentFormAsTargetSystemPayload();
+      populateTargetSystemEditor({ ...pulled, id: editId }, { mode: editId ? 'edit' : 'create' });
+      showTargetSystemsStatus('📥 Pulled current scan form settings into the Target System editor.', false);
+    });
+  }
+
+  if (btnEditorCancel && editorPanel) {
+    btnEditorCancel.addEventListener('click', () => {
+      editorPanel.classList.add('hidden');
+    });
+  }
+
+  if (listEl) {
+    listEl.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-ts-action]');
+      if (!btn) return;
+      const action = btn.getAttribute('data-ts-action');
+      const id = btn.getAttribute('data-ts-id') || '';
+      const sys = state.targetSystems.find(s => s.id === id);
+      if (!id || !sys) return;
+
+      if (action === 'run-fixes') {
+        await handleRunTargetSystem(id, 'open_issues_only');
+        return;
+      }
+      if (action === 'run-full') {
+        await handleRunTargetSystem(id, 'full_profile');
+        return;
+      }
+      if (action === 'load') {
+        applyTargetSystemToForm(sys);
+        showTargetSystemsStatus(`📥 Loaded "${sys.name}" into the scan form.`, false);
+        return;
+      }
+      if (action === 'clone') {
+        await handleCloneTargetSystem(id);
+        return;
+      }
+      if (action === 'edit') {
+        populateTargetSystemEditor(sys, { mode: 'edit' });
+        return;
+      }
+      if (action === 'delete') {
+        try {
+          await apiDelete(`/api/target-systems/${encodeURIComponent(id)}`);
+          if (state.activeTargetSystemId === id) {
+            state.activeTargetSystemId = '';
+          }
+          await loadTargetSystems();
+          showTargetSystemsStatus(`🗑️ Deleted Target System "${sys.name}".`, false);
+        } catch (err) {
+          showTargetSystemsStatus(`Failed to delete Target System: ${err.message}`, true);
+        }
+      }
+    });
+  }
 }

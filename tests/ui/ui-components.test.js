@@ -20,7 +20,14 @@ import {
   normalizeStacksList,
   renderDeviceInfoHtml,
   renderMatchedEvidenceHtml,
-  renderScanResults
+  renderScanResults,
+  getCanonicalOrigin,
+  scanBrowserWebStorageForTokens,
+  renderAuthArtifactsCard,
+  renderTargetSystemsUi,
+  openLsrStudioDetailView,
+  closeLsrStudioDetailView,
+  renderLsrInlineStepsSummary
 } from '../../ui/app.js';
 import {
   renderCveCoveragePanel,
@@ -781,6 +788,281 @@ describe('UI Components, Accessibility, CSP Hygiene & CVE Coverage (M5)', () => 
       assert.equal(getEl('results-device-info').classList.hidden, false);
       assert.match(getEl('results-device-info').innerHTML, /Hikvision/);
       assert.match(getEl('results-device-info').innerHTML, /DS-2CD2043/);
+    } finally {
+      globalThis.document = prevDocument;
+    }
+  });
+
+  test('Dedicated Login & LSR Studio Tab (#tab-login-lsr), Compact Advanced LSR Selector, Top Token/Cookie Harvester Bar & renderAuthArtifactsCard XSS safety', () => {
+    const html = fs.readFileSync(path.join(UI_DIR, 'index.html'), 'utf8');
+
+    // 1. Verify dedicated Login & LSR Studio tab button and panel
+    assert.match(html, /id="tab-btn-login-lsr"/);
+    assert.match(html, /id="tab-login-lsr"[^>]*role="tabpanel"|role="tabpanel"[^>]*id="tab-login-lsr"/);
+    assert.match(html, /id="lsr-studio-token-vault-card"/);
+    assert.match(html, /id="lsr-studio-token-vault-body"/);
+
+    // 2. Verify Top-of-Scan Quick Auth, Token Harvester & Local Store Bar in #tab-new-scan
+    assert.match(html, /id="top-auth-token-bar"/);
+    assert.match(html, /id="top-lsr-select"/);
+    assert.match(html, /id="btn-top-get-auth-token"/);
+    assert.match(html, /id="btn-top-check-local-store"/);
+    assert.match(html, /id="btn-top-create-lsr"/);
+    assert.match(html, /id="btn-top-open-lsr-studio"/);
+    assert.match(html, /id="top-auth-artifacts-card"/);
+    assert.match(html, /id="top-auth-artifacts-body"/);
+
+    // 3. Verify compact Advanced Options LSR selector (#adv-lsr-select)
+    assert.match(html, /id="adv-lsr-select"/);
+    assert.match(html, /id="btn-adv-create-lsr"/);
+    assert.match(html, /id="btn-adv-open-lsr-studio"/);
+    assert.match(html, /id="btn-adv-get-token"/);
+    assert.match(html, /id="btn-adv-check-local-store"/);
+
+    // 4. Verify getCanonicalOrigin & renderAuthArtifactsCard escape untrusted values
+    assert.equal(getCanonicalOrigin('https://satprocess.com/broadbandAdmin/index.php/site/login'), 'https://satprocess.com');
+
+    const prevDocument = globalThis.document;
+    const makeEl = () => ({
+      classList: {
+        hidden: true,
+        add(c) { if (c === 'hidden') this.hidden = true; },
+        remove(c) { if (c === 'hidden') this.hidden = false; },
+        toggle(c, force) { if (c === 'hidden') this.hidden = Boolean(force); }
+      },
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      dataset: {},
+      addEventListener: () => {},
+      querySelectorAll: () => []
+    });
+    const elements = new Map();
+    const getEl = (id) => {
+      if (!elements.has(id)) elements.set(id, makeEl());
+      return elements.get(id);
+    };
+    globalThis.document = {
+      getElementById: getEl,
+      querySelectorAll: () => []
+    };
+
+    try {
+      renderAuthArtifactsCard(
+        {
+          origin: 'https://satprocess.com',
+          sequenceName: 'BroadbandAdmin.lsr <img src=x onerror=alert(1)>',
+          sessionId: 'sess_12345678',
+          hasToken: true,
+          bearerToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbDEzNDU2IiwiZXhwIjoxOTk5OTk5OTk5fQ.sig',
+          bearerTokenPreview: 'eyJhbGciOiJI...',
+          hasCookies: true,
+          cookieNames: ['PHPSESSID', 'YII_CSRF_TOKEN'],
+          cookieHeader: 'PHPSESSID=abc; YII_CSRF_TOKEN=xyz',
+          hasLocalStorage: true,
+          localStorageItems: { access_token: 'tok_123' },
+          sessionStorageItems: {}
+        },
+        { sourceLabel: 'Found in Local Store' }
+      );
+
+      const topBodyHtml = getEl('top-auth-artifacts-body').innerHTML;
+      assert.match(topBodyHtml, /https:\/\/satprocess\.com/);
+      assert.match(topBodyHtml, /PHPSESSID/);
+      assert.match(topBodyHtml, /access_token/);
+      assert.equal(topBodyHtml.includes('<img src=x'), false, 'Must escape XSS in sequenceName');
+    } finally {
+      globalThis.document = prevDocument;
+    }
+  });
+
+  test('Saved Target Systems Bar, 1-Click Clone, Fast Fix Verification & Schedule Manager UI + renderTargetSystemsUi XSS safety', () => {
+    const html = fs.readFileSync(path.join(UI_DIR, 'index.html'), 'utf8');
+
+    const requiredTargetSystemIds = [
+      'target-systems-quick-bar',
+      'target-system-select',
+      'target-system-name',
+      'target-system-env',
+      'btn-save-target-system',
+      'btn-clone-target-system',
+      'btn-run-target-system-fixes',
+      'btn-toggle-target-systems-manager',
+      'target-systems-manager-card',
+      'target-system-editor-panel',
+      'ts-edit-schedule-interval',
+      'ts-edit-schedule-mode',
+      'target-systems-list'
+    ];
+
+    for (const id of requiredTargetSystemIds) {
+      assert.match(
+        html,
+        new RegExp(`id="${id}"`),
+        `Expected id="${id}" in ui/index.html`
+      );
+    }
+
+    const prevDocument = globalThis.document;
+    const makeEl = () => ({
+      classList: {
+        hidden: false,
+        add(c) { if (c === 'hidden') this.hidden = true; },
+        remove(c) { if (c === 'hidden') this.hidden = false; },
+        toggle(c, force) { if (c === 'hidden') this.hidden = Boolean(force); }
+      },
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      value: '',
+      dataset: {},
+      addEventListener: () => {},
+      querySelectorAll: () => []
+    });
+    const elements = new Map();
+    const getEl = (id) => {
+      if (!elements.has(id)) elements.set(id, makeEl());
+      return elements.get(id);
+    };
+    globalThis.document = {
+      getElementById: getEl,
+      querySelectorAll: () => []
+    };
+
+    try {
+      renderTargetSystemsUi([
+        {
+          id: 'ts_prod_1',
+          name: 'Broadband Portal <script>alert(1)</script>',
+          environment: 'production',
+          targetUrl: 'https://satprocess.com/broadbandAdmin/index.php',
+          profile: 'smart',
+          sequenceId: 'seq_1',
+          sequenceName: 'BroadbandYii.lsr <img src=x onerror=alert(2)>',
+          schedule: {
+            enabled: true,
+            interval: 'daily',
+            mode: 'open_issues_only',
+            nextRunAt: '2026-11-27T00:00:00.000Z'
+          },
+          lastScanSummary: {
+            lastGrade: 'C',
+            fixedInLastRunCount: 2,
+            unfixedCheckIds: ['xss', 'sqli']
+          }
+        }
+      ]);
+
+      const selectHtml = getEl('target-system-select').innerHTML;
+      const listHtml = getEl('target-systems-list').innerHTML;
+
+      assert.equal(getEl('target-systems-count-badge').textContent, '1');
+      assert.match(getEl('ts-summary-scheduled-pill').textContent, /1 Scheduled/);
+      assert.match(getEl('ts-summary-open-issues-pill').textContent, /2 Open Issues Tracked/);
+
+      assert.match(selectHtml, /Broadband Portal &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+      assert.match(selectHtml, /2 open issues/);
+      assert.equal(selectHtml.includes('<script>alert(1)</script>'), false);
+
+      // Verify environment badge, schedule pill, open-issue delta badges, and action buttons
+      assert.match(listHtml, /ts-env-badge production/);
+      assert.match(listHtml, /ts-schedule-pill active/);
+      assert.match(listHtml, /daily · Open Issues Only/);
+      assert.match(listHtml, /2 Open Check\(s\): xss, sqli/);
+      assert.match(listHtml, /2 Fixed in Last Run!/);
+      assert.match(listHtml, /data-ts-action="run-fixes"/);
+      assert.match(listHtml, /data-ts-action="run-full"/);
+      assert.match(listHtml, /data-ts-action="load"/);
+      assert.match(listHtml, /data-ts-action="clone"/);
+      assert.match(listHtml, /data-ts-action="edit"/);
+      assert.match(listHtml, /data-ts-action="delete"/);
+      assert.equal(listHtml.includes('<script>alert(1)</script>'), false);
+      assert.equal(listHtml.includes('<img src=x'), false);
+    } finally {
+      globalThis.document = prevDocument;
+    }
+  });
+
+  test('Login & LSR Studio Master-Detail Targets View shows only targets by default and opens detail config on Edit or Add Target Login', () => {
+    const html = fs.readFileSync(path.join(UI_DIR, 'index.html'), 'utf8');
+
+    // Master view is visible by default; detail configuration view is hidden by default
+    assert.match(html, /id="lsr-studio-targets-master-card"[^>]*class="[^"]*lsr-studio-targets-master-card"/);
+    assert.match(html, /id="lsr-studio-detail-config-view"[^>]*class="[^"]*hidden"/);
+    assert.match(html, /id="btn-lsr-studio-add-target"/);
+    assert.match(html, /id="btn-lsr-studio-back-to-targets"/);
+    assert.match(html, /id="btn-lsr-studio-open-visual-builder"/);
+    assert.match(html, /id="btn-lsr-studio-save-detail"/);
+    assert.match(html, /id="studio-sequence-name-input"/);
+    assert.match(html, /id="lsr-studio-inline-steps-list"/);
+
+    const prevDocument = globalThis.document;
+    const makeEl = (initialHidden = false) => ({
+      classList: {
+        hidden: initialHidden,
+        add(c) { if (c === 'hidden') this.hidden = true; },
+        remove(c) { if (c === 'hidden') this.hidden = false; },
+        toggle(c, force) { if (c === 'hidden') this.hidden = Boolean(force); },
+        contains(c) { return c === 'hidden' ? this.hidden : false; }
+      },
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      value: '',
+      checked: false,
+      dataset: {},
+      focus: () => {},
+      scrollIntoView: () => {},
+      addEventListener: () => {},
+      querySelectorAll: () => []
+    });
+    const elements = new Map();
+    elements.set('lsr-studio-targets-master-card', makeEl(false));
+    elements.set('lsr-studio-detail-config-view', makeEl(true));
+    const getEl = (id) => {
+      if (!elements.has(id)) elements.set(id, makeEl(false));
+      return elements.get(id);
+    };
+    globalThis.document = {
+      getElementById: getEl,
+      querySelectorAll: () => []
+    };
+
+    try {
+      // 1. Default state: master card visible, detail config hidden
+      assert.equal(getEl('lsr-studio-targets-master-card').classList.hidden, false);
+      assert.equal(getEl('lsr-studio-detail-config-view').classList.hidden, true);
+
+      // 2. Click Edit on a target sequence -> reveals detail configuration view and populates fields & steps
+      openLsrStudioDetailView({
+        sequenceId: 'seq_fearless',
+        name: 'fearlessbull.lsr',
+        targetUrl: 'https://fearlessbull.com/login',
+        actions: [
+          { type: 'navigate', url: 'https://fearlessbull.com/login' },
+          { type: 'change_input', selectorType: 'id', selector: 'email', value: 'trader@example.com' },
+          { type: 'click_button', selectorType: 'text', selector: 'Log in' }
+        ]
+      }, { isNew: false });
+
+      assert.equal(getEl('lsr-studio-detail-config-view').classList.hidden, false);
+      assert.equal(getEl('studio-target-url').value, 'https://fearlessbull.com/login');
+      assert.equal(getEl('studio-sequence-name-input').value, 'fearlessbull.lsr');
+      assert.match(getEl('lsr-studio-detail-mode-badge').textContent, /Edit Target/);
+      assert.match(getEl('lsr-studio-inline-steps-list').innerHTML, /Step 1/);
+      assert.match(getEl('lsr-studio-inline-steps-list').innerHTML, /fearlessbull\.com\/login/);
+
+      // 3. Back to targets list -> hides detail configuration view and shows master targets list
+      closeLsrStudioDetailView();
+      assert.equal(getEl('lsr-studio-detail-config-view').classList.hidden, true);
+      assert.equal(getEl('lsr-studio-targets-master-card').classList.hidden, false);
+
+      // 4. Click + Add Target Login -> opens detail configuration view in Add mode
+      openLsrStudioDetailView(null, { isNew: true });
+      assert.equal(getEl('lsr-studio-detail-config-view').classList.hidden, false);
+      assert.match(getEl('lsr-studio-detail-mode-badge').textContent, /Add New Target/);
+      renderLsrInlineStepsSummary();
+      assert.match(getEl('lsr-studio-inline-steps-list').innerHTML, /No login steps recorded yet/);
     } finally {
       globalThis.document = prevDocument;
     }

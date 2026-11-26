@@ -11,7 +11,6 @@ import { PROFILES, DEVICE_PROFILE_ALIASES, getProfileChecks, selectScannersForSt
 import { validateTargets, resolveAndValidateTarget, normalizeTargetInput, resolveBareIpTargets } from './validator.js';
 import { listHistory, loadHistoryById, diffScans, saveHistory } from './history.js';
 import { generateHtmlReport, groupFindings, sanitizeApiCommunication } from './html-report.js';
-import { filterSafeSameOriginApiRoutes } from './api-discovery.js';
 import { saveAutoReports, generateReport, generateMarkdownReport, generateCsvReport, generateSarifReport, summarizeCveAudit, mergeApiCommunication } from './report.js';
 import { auditCveCoverage, confirmCveDatabaseCoverage, CVE_DB_PROVIDERS } from './cve-audit.js';
 import { CveCatalogError } from './cve-catalog.js';
@@ -31,8 +30,7 @@ import { validateCustomHeadersResult } from './headers.js';
 import { normalizeScopeRules } from '../scan.js';
 import { calculateRisk } from './severity.js';
 import { fingerprint } from './fingerprint.js';
-import { TaskQueue } from './queue.js';
-import { crawlPage, discoverApiRoutesFromPage, extractLinksAndFormsFromHtml } from './crawler.js';
+import { runTargetCrawlPipeline } from './crawler.js';
 import { fetchWithRetry as baseFetch, createGovernedFetch } from './fetch.js';
 import { GraphStore } from './graph-store.js';
 import { TrafficStore, analyzePassiveExchange } from './traffic.js';
@@ -64,8 +62,7 @@ import {
   parseLsrSequence,
   exportLsrSequence,
   normalizeSystemVariables,
-  exportSystemVariables,
-  buildAuthenticatedSeedUrls
+  exportSystemVariables
 } from './auth-session.js';
 import {
   detectRuntimeScaFindings,
@@ -73,8 +70,18 @@ import {
   sanitizeRuntimeSca,
   mergeRuntimeSca
 } from './runtime-sca.js';
+import { auditMenuAndFormAccessControl } from './rbac-matrix.js';
+import { buildSbomAndCveDriftReport } from './sbom-monitor.js';
 import { discoverWebsiteRealIp } from './real-ip-finder.js';
 import { DEVICE_CATEGORIES, DEVICE_CATEGORY_ALIASES, normalizeDeviceCategory } from './device-scanner.js';
+import {
+  computeNextScheduleRunAt,
+  mergeDeltaScanSummary,
+  normalizeTargetSystem,
+  cloneTargetSystemConfig,
+  resolveChecksForTargetSystemRun,
+  exportTargetSystem
+} from './target-systems.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,7 +118,26 @@ function normalizeJevAnswers(raw) {
 
 const MAX_RECORDED_SESSIONS = 50;
 const MAX_SAVED_SEQUENCES = 50;
+const MAX_TARGET_SYSTEMS = 200;
 export const MAX_SCAN_TARGETS = 200;
+
+/**
+ * Stores a Target System in the registry map while capping size at 200 (evicting oldest).
+ */
+function storeTargetSystem(targetSystemsMap, sys) {
+  if (!targetSystemsMap || typeof targetSystemsMap.set !== 'function' || !sys || !sys.id) {
+    return;
+  }
+  if (targetSystemsMap.has(sys.id)) {
+    targetSystemsMap.delete(sys.id);
+  }
+  targetSystemsMap.set(sys.id, sys);
+  while (targetSystemsMap.size > MAX_TARGET_SYSTEMS) {
+    const oldestKey = targetSystemsMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    targetSystemsMap.delete(oldestKey);
+  }
+}
 
 /**
  * Stores a recorded session in the registry map while capping size at 50 (evicting oldest).
@@ -137,6 +163,19 @@ function storeRecordedSession(sessionMap, session) {
 function storeSavedSequence(sequenceMap, seq) {
   if (!sequenceMap || typeof sequenceMap.set !== 'function' || !seq || !seq.sequenceId) {
     return;
+  }
+  const normName = String(seq.name || '').trim().toLowerCase();
+  const normTarget = String(seq.targetUrl || '').trim().toLowerCase();
+  if (normName) {
+    for (const [existingId, existingSeq] of sequenceMap.entries()) {
+      if (existingId === seq.sequenceId) continue;
+      const exName = String(existingSeq?.name || '').trim().toLowerCase();
+      const exTarget = String(existingSeq?.targetUrl || '').trim().toLowerCase();
+      if (exName === normName && exTarget === normTarget) {
+        mergeSavedSequenceSecrets(seq, existingSeq);
+        sequenceMap.delete(existingId);
+      }
+    }
   }
   if (sequenceMap.has(seq.sequenceId)) {
     sequenceMap.delete(seq.sequenceId);
@@ -281,6 +320,40 @@ function savePersistedSystemVariables(historyDir, systemVarsMap) {
   if (!historyDir || !systemVarsMap) return;
   const filePath = path.join(historyDir, 'system-variables.json');
   const list = exportSystemVariables(Array.from(systemVarsMap.values()), { includeSecrets: true });
+  writeJsonFileSecure(filePath, list);
+}
+
+function loadPersistedTargetSystems(historyDir, targetSystemsMap = null) {
+  try {
+    const filePath = path.join(historyDir, 'target-systems.json');
+    if (!fs.existsSync(filePath)) return [];
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const list = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.systems) ? raw.systems : []);
+    const loaded = [];
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      try {
+        const norm = normalizeTargetSystem(item);
+        loaded.push(norm);
+        if (targetSystemsMap) {
+          storeTargetSystem(targetSystemsMap, norm);
+        }
+      } catch {}
+    }
+    return loaded;
+  } catch {
+    return [];
+  }
+}
+
+function savePersistedTargetSystems(historyDir, targetSystemsMap) {
+  if (!historyDir || !targetSystemsMap) return;
+  const filePath = path.join(historyDir, 'target-systems.json');
+  const list = Array.from(targetSystemsMap.values()).map(s =>
+    exportTargetSystem(s, { includeSecrets: true })
+  );
   writeJsonFileSecure(filePath, list);
 }
 
@@ -927,6 +1000,7 @@ async function executeScanJob(job, ctx = {}) {
     const allDiscoveredMenus = [];
     const allDiscoveredForms = [];
     const allDiscoveredPages = [];
+    const allRbacMatrices = [];
     let totalPagesFound = 0;
 
     const targetLimit = pLimit(Math.max(1, Math.min(job.concurrency, 10)));
@@ -1072,174 +1146,71 @@ async function executeScanJob(job, ctx = {}) {
             : `Discovering pages on ${initialTarget} (max depth: ${job.maxDepth})...`
         });
 
-        const queue = new TaskQueue(initialTarget, {
-          shouldEnqueue: (candidateUrl) => !(activeAuthManager && activeAuthManager.isRestrictedUrl(candidateUrl))
-        });
-        const sharedRouteMap = new Map();
-        const seenAppScriptUrls = new Set();
-        const discoveredMenus = [];
-        const seenMenuKeys = new Set();
-        const recordDiscoveredMenus = (menusList) => {
-          if (!Array.isArray(menusList)) return;
-          for (const m of menusList) {
-            if (!m || !m.label) continue;
-            const key = `${(m.parentMenu || 'Main Menu').toLowerCase()}::${m.label.toLowerCase()}::${(m.url || m.routeKey || m.trigger || '').toLowerCase()}`;
-            if (seenMenuKeys.has(key)) continue;
-            seenMenuKeys.add(key);
-            discoveredMenus.push({
-              target: initialTarget,
-              ...m
-            });
-          }
-        };
-
-        const discoveredForms = [];
-        const seenFormKeys = new Set();
-        const recordDiscoveredForms = (formsList) => {
-          if (!Array.isArray(formsList)) return;
-          for (const form of formsList) {
-            if (!form || !form.actionUrl) continue;
-            const key = `${form.method || 'GET'}::${form.actionUrl}::${(form.fields || []).map(f => f.name).join(',')}`;
-            if (seenFormKeys.has(key)) continue;
-            seenFormKeys.add(key);
-            discoveredForms.push({
-              target: initialTarget,
-              ...form
-            });
-          }
-        };
-        if (activeAuthManager) {
-          const authSeeds = buildAuthenticatedSeedUrls(initialTarget, activeAuthManager);
-          queue.push(authSeeds, initialTarget);
-          if (activeAuthManager.postLoginHtml) {
-            const postLoginBase = activeAuthManager.postLoginUrl || initialTarget;
-            const extractedPostLogin = extractLinksAndFormsFromHtml(activeAuthManager.postLoginHtml, postLoginBase, {
-              routeMap: sharedRouteMap
-            });
-            queue.push(extractedPostLogin.links, postLoginBase);
-            recordDiscoveredMenus(extractedPostLogin.menus);
-            recordDiscoveredForms(extractedPostLogin.forms);
-          }
-        }
-        let depth = 0;
-        const MAX_API_ROUTES_PER_TARGET = 12;
-        let apiRoutesEnqueued = 0;
-        const enqueueApiRoutes = (routes) => {
-          if (apiRoutesEnqueued >= MAX_API_ROUTES_PER_TARGET) return;
-          const safeSlice = filterSafeSameOriginApiRoutes(
-            routes,
-            initialTarget,
-            MAX_API_ROUTES_PER_TARGET - apiRoutesEnqueued
-          );
-          if (safeSlice.length > 0) {
-            apiRoutesEnqueued += safeSlice.length;
-            queue.push(safeSlice, initialTarget);
-          }
-        };
-
         const normalizedInitialTarget = String(initialTarget || '').replace(/\/+$/, '');
-
-        while (!isDeviceBasePortClosed && depth < job.maxDepth && !queue.isEmpty()) {
-          const currentBatch = queue.pending.splice(0, queue.pending.length);
-          broadcastJobEvent(job, {
-            type: 'crawl_depth',
-            target: initialTarget,
-            depth,
-            pending: currentBatch.length,
-            pagesFound: queue.totalFound,
-            message: `Depth ${depth}: Analyzing ${currentBatch.length} pages for links, menus & forms...`
-          });
-
-          for (const p of currentBatch) {
-            try {
-              const isSeedPage = p.replace(/\/+$/, '') === normalizedInitialTarget;
-              if ((depth === 0 || isSeedPage) && fp?.apiCommunication?.sameOriginEndpoints?.length) {
-                enqueueApiRoutes(fp.apiCommunication.sameOriginEndpoints);
-              }
-              const crawlRes = await crawlPage(p, fetchWithRetry, {
-                includeResponse: true,
-                routeMap: sharedRouteMap,
-                seenAppScriptUrls,
-                discoverAppScripts: depth === 0 || isSeedPage
+        const { discoveredUrls, discoveredMenus, discoveredForms } = await runTargetCrawlPipeline(
+          initialTarget,
+          fetchWithRetry,
+          {
+            maxDepth: job.maxDepth,
+            authManager: activeAuthManager,
+            fp,
+            activeScanners,
+            activeFuzzingChecks: ACTIVE_FUZZING_CHECKS,
+            isDeviceBasePortClosed,
+            seenBundleUrls,
+            seenConfigUrls,
+            budgetState,
+            onCrawlDepth: ({ depth, pending, pagesFound }) => {
+              broadcastJobEvent(job, {
+                type: 'crawl_depth',
+                target: initialTarget,
+                depth,
+                pending,
+                pagesFound,
+                message: `Depth ${depth}: Analyzing ${pending} pages for links, menus & forms...`
               });
-              const pageBaseUrl = (typeof crawlRes.response?.url === 'string' && /^https?:\/\//i.test(crawlRes.response.url))
-                ? crawlRes.response.url
-                : p;
-              queue.push(crawlRes.links, pageBaseUrl);
-              recordDiscoveredMenus(crawlRes.menus);
-              recordDiscoveredForms(crawlRes.forms);
-              if (apiRoutesEnqueued < MAX_API_ROUTES_PER_TARGET && crawlRes.response?.status === 200) {
-                const apiRoutes = await discoverApiRoutesFromPage(p, crawlRes.response.text || '', fetchWithRetry, {
-                  rootResponse: crawlRes.response,
-                  maxRoutes: MAX_API_ROUTES_PER_TARGET - apiRoutesEnqueued,
-                  maxBundles: isSeedPage ? 2 : 1,
-                  maxConfigProbes: isSeedPage && !fp?.apiCommunication ? 2 : 0,
-                  seenBundleUrls,
-                  seenConfigUrls,
-                  budgetState
-                });
-                enqueueApiRoutes(apiRoutes);
-              }
-            } catch {
-              // Non-fatal crawl failure on single page
             }
           }
-          depth++;
-        }
+        );
 
-        // If maxDepth stopped before inspecting newly discovered menu/submenu views, sample up to 8 menu views for forms
-        if (!isDeviceBasePortClosed && discoveredMenus.length > 0 && queue.pending.length > 0) {
-          const menuViewSamples = queue.pending.splice(0, 8);
-          for (const viewUrl of menuViewSamples) {
-            try {
-              const viewRes = await crawlPage(viewUrl, fetchWithRetry, {
-                includeResponse: true,
-                routeMap: sharedRouteMap,
-                seenAppScriptUrls,
-                discoverAppScripts: false
-              });
-              const viewBaseUrl = (typeof viewRes.response?.url === 'string' && /^https?:\/\//i.test(viewRes.response.url))
-                ? viewRes.response.url
-                : viewUrl;
-              queue.push(viewRes.links, viewBaseUrl);
-              recordDiscoveredMenus(viewRes.menus);
-              recordDiscoveredForms(viewRes.forms);
-            } catch {}
-          }
-        }
-
-        const discoveredUrls = Array.from(queue.seen);
-        const discoveredUrlNormSet = new Set(discoveredUrls.map(u => String(u).replace(/\/+$/, '')));
-        const activeFuzzCheckNames = activeScanners
-          .filter(s => ACTIVE_FUZZING_CHECKS.has(s.name))
-          .map(s => s.name);
-
-        for (const m of discoveredMenus) {
-          m.auditStatus = m.kind === 'logout'
-            ? 'logout_protected'
-            : m.kind === 'external_app'
-              ? 'external_app'
-              : (m.url && discoveredUrlNormSet.has(String(m.url).replace(/\/+$/, '')))
-                ? 'crawled'
-                : 'discovered';
-          allDiscoveredMenus.push(m);
-        }
-
-        for (const f of discoveredForms) {
-          const checksForForm = [...activeFuzzCheckNames];
-          if (f.method === 'POST' && checksForForm.length > 0 && !checksForForm.includes('post-form-fuzz')) {
-            checksForForm.push('post-form-fuzz');
-          }
-          f.hiddenFieldNames = Object.keys(f.hiddenFields || {});
-          f.checksRun = checksForForm;
-          f.tested = true;
-          allDiscoveredForms.push(f);
-        }
-
+        allDiscoveredMenus.push(...discoveredMenus);
+        allDiscoveredForms.push(...discoveredForms);
         for (const u of discoveredUrls) {
           if (!allDiscoveredPages.includes(u)) allDiscoveredPages.push(u);
         }
         totalPagesFound += discoveredUrls.length;
+
+        let targetRbacFindings = [];
+        if (
+          activeAuthManager?.getRecordedSession()?.authenticated === true &&
+          (discoveredMenus.length > 0 || discoveredForms.length > 0)
+        ) {
+          try {
+            const targetRbac = await auditMenuAndFormAccessControl({
+              discoveredMenus,
+              discoveredForms,
+              unauthFetch: governedFetch,
+              authManager: activeAuthManager,
+              maxProbes: 12
+            });
+            allRbacMatrices.push(targetRbac);
+            if (Array.isArray(targetRbac.findings) && targetRbac.findings.length > 0) {
+              targetRbacFindings = targetRbac.findings.map(rf => {
+                const meta = getCheckMeta(rf.checkId || 'bola-mass-assignment');
+                return enrichEngine.enrichFinding(
+                  {
+                    target: rf.url || initialTarget,
+                    ...rf,
+                    meta
+                  },
+                  { allowPrivate }
+                );
+              });
+            }
+          } catch {
+            // Non-fatal RBAC matrix probe error
+          }
+        }
 
         broadcastJobEvent(job, {
           type: 'crawl_complete',
@@ -1306,6 +1277,7 @@ async function executeScanJob(job, ctx = {}) {
           ...(activeGovernor ? { governor: activeGovernor } : {}),
           ...(ctx.dnsResolver ? { dnsResolver: ctx.dnsResolver } : {}),
           ...(discoveredForms.length > 0 ? { discoveredForms } : {}),
+          ...(discoveredUrls.length > 0 ? { verificationUrls: discoveredUrls.slice(0, 3) } : {}),
           targetPinStore
         };
 
@@ -1445,12 +1417,41 @@ async function executeScanJob(job, ctx = {}) {
           )
         );
 
-        return pageResultsNested.flat();
+        return [...pageResultsNested.flat(), ...targetRbacFindings];
       })
     );
 
     const nestedResults = await Promise.all(targetPromises);
     nestedResults.forEach(list => allResults.push(...list));
+
+    const rbacMatrix = allRbacMatrices.length === 1
+      ? allRbacMatrices[0]
+      : allRbacMatrices.length > 1
+        ? {
+            summary: allRbacMatrices.reduce(
+              (acc, m) => {
+                acc.totalEvaluated += m.summary?.totalEvaluated || 0;
+                acc.enforcedCount += m.summary?.enforcedCount || 0;
+                acc.unauthenticatedBflaCount += m.summary?.unauthenticatedBflaCount || 0;
+                acc.lowPrivilegeBflaCount += m.summary?.lowPrivilegeBflaCount || 0;
+                acc.skippedCount += m.summary?.skippedCount || 0;
+                if (m.summary?.status === 'VULNERABLE') acc.status = 'VULNERABLE';
+                return acc;
+              },
+              {
+                totalEvaluated: 0,
+                enforcedCount: 0,
+                unauthenticatedBflaCount: 0,
+                lowPrivilegeBflaCount: 0,
+                skippedCount: 0,
+                status: 'SAFE'
+              }
+            ),
+            menuMatrix: allDiscoveredMenus,
+            formMatrix: allDiscoveredForms,
+            findings: allRbacMatrices.flatMap(m => m.findings || [])
+          }
+        : null;
 
     // 5. Finalizing results and calculating risk
     job.phase = 'finalizing';
@@ -1512,6 +1513,7 @@ async function executeScanJob(job, ctx = {}) {
           histRaw.discoveredForms = allDiscoveredForms;
           histRaw.discoveredPages = allDiscoveredPages;
           histRaw.pagesCount = totalPagesFound;
+          if (rbacMatrix) histRaw.rbacMatrix = rbacMatrix;
           fs.writeFileSync(historyFile, JSON.stringify(histRaw, null, 2));
         } catch {}
       }
@@ -1577,10 +1579,37 @@ async function executeScanJob(job, ctx = {}) {
       } catch {}
     }
 
+    const completedAtIso = new Date().toISOString();
+    let targetSystemSummary = null;
+    if (job.targetSystemId && ctx.targetSystems?.has(job.targetSystemId)) {
+      const sys = ctx.targetSystems.get(job.targetSystemId);
+      sys.lastScanSummary = mergeDeltaScanSummary(
+        sys.lastScanSummary,
+        {
+          scanId: job.id,
+          results: allResults,
+          risk,
+          historyFile,
+          completedAt: completedAtIso
+        },
+        job.scanMode || 'full_profile',
+        job.checks || []
+      );
+      sys.updatedAt = completedAtIso;
+      targetSystemSummary = sys.lastScanSummary;
+      if (!ctx.inMemory && ctx.historyDir) {
+        savePersistedTargetSystems(ctx.historyDir, ctx.targetSystems);
+      }
+    }
+
     job.status = 'completed';
     job.progress = 100;
     job.phase = 'completed';
     job.result = {
+      scanId: job.id,
+      targetSystemId: job.targetSystemId || null,
+      scanMode: job.scanMode || 'full_profile',
+      ...(targetSystemSummary ? { targetSystemSummary } : {}),
       results: allResults,
       groupedResults,
       risk,
@@ -1598,7 +1627,8 @@ async function executeScanJob(job, ctx = {}) {
       discoveredMenus: allDiscoveredMenus,
       discoveredForms: allDiscoveredForms,
       discoveredPages: allDiscoveredPages,
-      completedAt: new Date().toISOString()
+      ...(rbacMatrix ? { rbacMatrix } : {}),
+      completedAt: completedAtIso
     };
 
     broadcastJobEvent(job, {
@@ -1711,6 +1741,7 @@ export function createAppServer(options = {}) {
   const recordedSessions = new Map();
   const savedSequences = new Map();
   const systemVariables = new Map();
+  const targetSystems = new Map();
   let cveLabBenchmarkInFlight = false;
   let pcLocalAuditInFlight = false;
 
@@ -1720,6 +1751,7 @@ export function createAppServer(options = {}) {
   if (!useInMemory) {
     loadPersistedSequences(historyDir, savedSequences);
     loadPersistedSystemVariables(historyDir, systemVariables);
+    loadPersistedTargetSystems(historyDir, targetSystems);
   }
   if (Array.isArray(options.savedSequences)) {
     for (const item of options.savedSequences) {
@@ -1730,6 +1762,15 @@ export function createAppServer(options = {}) {
   }
   if (options.systemVariables) {
     storeSystemVariables(systemVariables, options.systemVariables);
+  }
+  if (Array.isArray(options.targetSystems)) {
+    for (const item of options.targetSystems) {
+      if (item && typeof item === 'object') {
+        try {
+          storeTargetSystem(targetSystems, normalizeTargetSystem(item));
+        } catch {}
+      }
+    }
   }
 
   const ownsGraphStore = !options.graphStore;
@@ -1798,6 +1839,222 @@ export function createAppServer(options = {}) {
       jobs.delete(id);
       if (jobs.size <= MAX_JOBS) return;
     }
+  }
+
+  function buildExecutionContext() {
+    return {
+      graphStore,
+      trafficStore,
+      evidenceStore,
+      agentEngine,
+      recordedSessions,
+      savedSequences,
+      systemVariables,
+      targetSystems,
+      historyDir,
+      inMemory: useInMemory,
+      setTaskAllowPrivate: (taskId, flag) => taskAllowPrivateMap.set(taskId, Boolean(flag)),
+      dnsResolver: options.dnsResolver ?? null,
+      fetcher: options.fetcher ?? null,
+      ...(typeof options.tcpProbe === 'function' ? { tcpProbe: options.tcpProbe } : {}),
+      ...(typeof options.portProbe === 'function' ? { portProbe: options.portProbe } : {}),
+      ...(typeof options.rtspProbe === 'function' ? { rtspProbe: options.rtspProbe } : {}),
+      ...(typeof options.udpProbe === 'function' ? { udpProbe: options.udpProbe } : {}),
+      ...(typeof options.tlsProbe === 'function' ? { tlsProbe: options.tlsProbe } : {}),
+      ...(typeof options.tlsConnect === 'function' ? { tlsConnect: options.tlsConnect } : {}),
+      ...(options.multiPort !== undefined ? { multiPort: options.multiPort } : {}),
+      getNoiseGovernor: () => noiseGovernor,
+      getScopeRules: () => scopeRules
+    };
+  }
+
+  async function validateTargetSystemUrls(sys, { checkDns = false } = {}) {
+    const allowPrivate = Boolean(sys.allowPrivate);
+    const dnsResolver = options.dnsResolver ?? options.retestOptions?.dnsResolver ?? null;
+    const rawTargets = Array.isArray(sys.targets) && sys.targets.length > 0 ? sys.targets : [sys.targetUrl];
+    const validatedTargets = [];
+    for (const rawT of rawTargets) {
+      const gated = validateAndGateUrl(rawT, {
+        allowPrivate,
+        scopeRules,
+        normalizeBare: true
+      });
+      if (!gated.ok) return gated;
+      if (checkDns) {
+        const dnsCheck = await prevalidateResolvedTarget(gated.url, {
+          allowPrivate,
+          scopeRules,
+          dnsResolver,
+          sourceIp: sys.sourceIp || null
+        });
+        if (!dnsCheck.ok) return dnsCheck;
+      }
+      if (!validatedTargets.includes(gated.url)) {
+        validatedTargets.push(gated.url);
+      }
+    }
+    sys.targets = validatedTargets;
+    sys.targetUrl = validatedTargets[0];
+
+    if (sys.loginUrl) {
+      const loginGated = validateAndGateUrl(sys.loginUrl, {
+        allowPrivate,
+        scopeRules,
+        normalizeBare: false
+      });
+      if (!loginGated.ok) return loginGated;
+      sys.loginUrl = loginGated.url;
+    }
+
+    const hdrValidation = validateCustomHeadersResult(sys.customHeaders);
+    if (!hdrValidation.valid) {
+      return {
+        ok: false,
+        status: 400,
+        payload: { error: hdrValidation.error }
+      };
+    }
+    sys.customHeaders = hdrValidation.headers;
+
+    if (sys.sequenceId && savedSequences.has(sys.sequenceId) && !sys.sequenceName) {
+      sys.sequenceName = savedSequences.get(sys.sequenceId)?.name || sys.sequenceId;
+    }
+
+    return { ok: true, system: sys };
+  }
+
+  async function launchTargetSystemScan(sys, { runMode = 'full_profile', checks = [] } = {}) {
+    const activeRunningJobs = Array.from(jobs.values()).filter(j => j.status === 'running');
+    if (activeRunningJobs.length >= 3) {
+      return {
+        ok: false,
+        status: 429,
+        payload: {
+          error: 'Maximum concurrent scans reached (3). Please wait for an existing scan to finish.'
+        }
+      };
+    }
+
+    const urlValidation = await validateTargetSystemUrls(sys, { checkDns: true });
+    if (!urlValidation.ok) return urlValidation;
+
+    let authSessionConfig = null;
+    const savedSeq = sys.sequenceId && savedSequences.has(sys.sequenceId)
+      ? normalizeLoginSequence(savedSequences.get(sys.sequenceId))
+      : null;
+    const hasAuthConfig = Boolean(
+      sys.sequenceId ||
+      savedSeq ||
+      sys.recordedSessionId ||
+      sys.loginUrl ||
+      sys.username
+    );
+    if (hasAuthConfig) {
+      const effectiveVars = Array.from(systemVariables.values());
+      authSessionConfig = {
+        targetUrl: sys.targetUrl,
+        ...(sys.recordedSessionId ? { recordedSessionId: sys.recordedSessionId } : {}),
+        ...(sys.sequenceId ? { sequenceId: sys.sequenceId } : {}),
+        ...(savedSeq ? { loginSequence: savedSeq } : {}),
+        ...(sys.loginUrl ? { loginUrl: sys.loginUrl } : {}),
+        ...(sys.username ? { username: sys.username } : {}),
+        ...(effectiveVars.length > 0 ? { systemVariables: effectiveVars } : {})
+      };
+    }
+
+    const effectiveProfile = typeof sys.profile === 'string' && sys.profile.trim() ? sys.profile.trim() : 'smart';
+    const isDeviceProfile = effectiveProfile.toLowerCase() === 'device' || DEVICE_PROFILE_ALIASES.has(effectiveProfile.toLowerCase());
+    const parsedCat = parseValidatedDeviceCategory(sys.deviceCategory || 'all');
+    const effectiveDeviceCat = parsedCat.valid ? parsedCat.category : 'all';
+    const effectiveDeviceMode = Boolean(sys.deviceMode) || isDeviceProfile || effectiveDeviceCat !== 'all';
+
+    const scanId = crypto.randomUUID();
+    const job = {
+      id: scanId,
+      status: 'running',
+      progress: 0,
+      phase: 'initializing',
+      targetSystemId: sys.id,
+      scanMode: runMode === 'open_issues_only' ? 'open_issues_only' : 'full_profile',
+      targets: [...sys.targets],
+      profile: effectiveProfile,
+      deviceMode: effectiveDeviceMode,
+      deviceCategory: effectiveDeviceCat,
+      forceAll: Boolean(sys.forceAll),
+      allowPrivate: Boolean(sys.allowPrivate),
+      noiseProfile: sys.noiseProfile && Object.hasOwn(NOISE_PROFILES, sys.noiseProfile) ? sys.noiseProfile : null,
+      agent: Boolean(sys.agentMode),
+      goal: sys.goal || null,
+      maxDepth: Number.isFinite(Number(sys.maxDepth)) ? Math.max(0, Math.min(Math.floor(Number(sys.maxDepth)), 5)) : 3,
+      concurrency: Math.max(1, Math.min(Number(sys.concurrency) || 5, 10)),
+      timeout: Math.max(1000, Math.min(Number(sys.timeout) || 10000, 60000)),
+      auth: sys.authHeader || null,
+      headers: sys.customHeaders || {},
+      techOverride: Array.isArray(sys.techOverride) ? [...sys.techOverride] : null,
+      noHistory: false,
+      sourceIp: sys.sourceIp || null,
+      sourceIpMap: null,
+      checks: Array.isArray(checks) && checks.length > 0 ? [...checks] : null,
+      authSessionConfig,
+      authSession: null,
+      createdAt: new Date().toISOString(),
+      events: [],
+      clients: new Set(),
+      result: null,
+      error: null
+    };
+
+    pruneJobs();
+    jobs.set(scanId, job);
+    executeScanJob(job, buildExecutionContext());
+
+    return { ok: true, job };
+  }
+
+  async function runDueScheduledTargetSystems() {
+    const triggered = [];
+    const nowMs = Date.now();
+    for (const sys of targetSystems.values()) {
+      if (!sys?.schedule?.enabled || !sys.schedule.nextRunAt) continue;
+      const dueMs = Date.parse(sys.schedule.nextRunAt);
+      if (Number.isNaN(dueMs) || dueMs > nowMs) continue;
+
+      const activeRunningCount = Array.from(jobs.values()).filter(j => j.status === 'running').length;
+      if (activeRunningCount >= 3) break;
+
+      const nowDate = new Date();
+      sys.schedule.lastTriggeredAt = nowDate.toISOString();
+      sys.schedule.nextRunAt = computeNextScheduleRunAt(sys.schedule, nowDate);
+      sys.updatedAt = nowDate.toISOString();
+      if (!useInMemory) {
+        savePersistedTargetSystems(historyDir, targetSystems);
+      }
+
+      const runMode = sys.schedule.mode === 'full_profile' ? 'full_profile' : 'open_issues_only';
+      const { checks, fallbackToFullProfile } = resolveChecksForTargetSystemRun(sys, runMode);
+      const launched = await launchTargetSystemScan(sys, { runMode, checks });
+      if (launched.ok) {
+        triggered.push({
+          scanId: launched.job.id,
+          targetSystemId: sys.id,
+          targetSystemName: sys.name,
+          mode: runMode,
+          checks,
+          fallbackToFullProfile
+        });
+      }
+    }
+    return triggered;
+  }
+
+  const scheduleIntervalMs = Math.max(1000, Number(options.schedulePollIntervalMs) || 15000);
+  const scheduleTimer = options.enableScheduler === false
+    ? null
+    : setInterval(() => {
+        runDueScheduledTargetSystems().catch(() => {});
+      }, scheduleIntervalMs);
+  if (scheduleTimer && typeof scheduleTimer.unref === 'function') {
+    scheduleTimer.unref();
   }
 
   const server = http.createServer(async (req, res) => {
@@ -2669,12 +2926,51 @@ export function createAppServer(options = {}) {
         return;
       }
 
+      let resolvedTargetSystemId = typeof body.targetSystemId === 'string' && body.targetSystemId.trim()
+        ? body.targetSystemId.trim()
+        : null;
+      const resolvedScanMode = body.scanMode === 'open_issues_only' ? 'open_issues_only' : 'full_profile';
+
+      if (body.saveAsTargetSystem && !resolvedTargetSystemId) {
+        try {
+          const saveOpts = typeof body.saveAsTargetSystem === 'object' && !Array.isArray(body.saveAsTargetSystem)
+            ? body.saveAsTargetSystem
+            : {};
+          const newSys = normalizeTargetSystem({
+            ...body,
+            ...saveOpts,
+            targetUrl: validation.targets[0],
+            targets: validation.targets,
+            profile: effectiveProfile,
+            deviceMode: effectiveDeviceMode,
+            deviceCategory: parsedCat.category,
+            allowPrivate,
+            noiseProfile: requestedNoiseProfile || 'balanced',
+            maxDepth: effectiveMaxDepth,
+            sequenceId: cleanSequenceId,
+            sequenceName: savedSeqForScan?.name || saveOpts.sequenceName || null,
+            recordedSessionId: cleanRecordedSessionId,
+            loginUrl: validatedLoginUrl,
+            username: username !== null && username !== undefined ? String(username) : null,
+            authHeader: typeof auth === 'string' && auth.trim() ? auth.trim() : null,
+            customHeaders: validatedCustomHeaders
+          });
+          storeTargetSystem(targetSystems, newSys);
+          if (!useInMemory) {
+            savePersistedTargetSystems(historyDir, targetSystems);
+          }
+          resolvedTargetSystemId = newSys.id;
+        } catch {}
+      }
+
       const scanId = crypto.randomUUID();
       const job = {
         id: scanId,
         status: 'running',
         progress: 0,
         phase: 'initializing',
+        targetSystemId: resolvedTargetSystemId,
+        scanMode: resolvedScanMode,
         targets: validation.targets,
         profile: effectiveProfile,
         deviceMode: effectiveDeviceMode,
@@ -2715,29 +3011,7 @@ export function createAppServer(options = {}) {
       jobs.set(scanId, job);
 
       // Launch async scan
-      executeScanJob(job, {
-        graphStore,
-        trafficStore,
-        evidenceStore,
-        agentEngine,
-        recordedSessions,
-        savedSequences,
-        systemVariables,
-        historyDir,
-        inMemory: useInMemory,
-        setTaskAllowPrivate: (taskId, flag) => taskAllowPrivateMap.set(taskId, Boolean(flag)),
-        dnsResolver: options.dnsResolver ?? null,
-        fetcher: options.fetcher ?? null,
-        ...(typeof options.tcpProbe === 'function' ? { tcpProbe: options.tcpProbe } : {}),
-        ...(typeof options.portProbe === 'function' ? { portProbe: options.portProbe } : {}),
-        ...(typeof options.rtspProbe === 'function' ? { rtspProbe: options.rtspProbe } : {}),
-        ...(typeof options.udpProbe === 'function' ? { udpProbe: options.udpProbe } : {}),
-        ...(typeof options.tlsProbe === 'function' ? { tlsProbe: options.tlsProbe } : {}),
-        ...(typeof options.tlsConnect === 'function' ? { tlsConnect: options.tlsConnect } : {}),
-        ...(options.multiPort !== undefined ? { multiPort: options.multiPort } : {}),
-        getNoiseGovernor: () => noiseGovernor,
-        getScopeRules: () => scopeRules
-      });
+      executeScanJob(job, buildExecutionContext());
 
       sendJson(res, 202, {
         scanId,
@@ -2745,7 +3019,9 @@ export function createAppServer(options = {}) {
         profile: job.profile,
         deviceMode: job.deviceMode,
         deviceCategory: job.deviceCategory,
-        allowPrivate
+        allowPrivate,
+        ...(resolvedTargetSystemId ? { targetSystemId: resolvedTargetSystemId } : {}),
+        scanMode: resolvedScanMode
       });
       return;
     }
@@ -4714,8 +4990,10 @@ export function createAppServer(options = {}) {
         return;
       }
 
+      const demoJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhdWRpdG9yQGluZnNhbGVzZ3JvdXAuY29tIiwiaXNzIjoic2Vjc2Nhbi1kZW1vIiwiZXhwIjoxOTk5OTk5OTk5fQ.demo_sig';
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
+        'X-Auth-Token': demoJwt,
         'Set-Cookie': [
           'SECSCAN_DEMO_SESSION=authenticated_demo_session_2026; Path=/; HttpOnly; SameSite=Lax',
           'XSRF-TOKEN=csrf_demo_enterprise_token_2026; Path=/'
@@ -4726,7 +5004,8 @@ export function createAppServer(options = {}) {
           ok: true,
           authenticated: true,
           user: emailVal || 'auditor@infsalesgroup.com',
-          access_token: 'eyJhbGciOiJIUzI1NiJ9.secscan_demo_mfa_session_2026.signature'
+          access_token: demoJwt,
+          initScript: `<script>localStorage.setItem('demo_access_token', '${demoJwt}');</script>`
         })
       );
       return;
@@ -5542,7 +5821,16 @@ export function createAppServer(options = {}) {
             savePersistedSequences(historyDir, savedSequences);
           }
         }
-        sendJson(res, 200, { ...outcome, ...mgr.getRecordedSession({ includeSecrets: false }) });
+        const safeSession = mgr.getRecordedSession({ includeSecrets: false });
+        const includeArtifactValues = body.includeArtifactValues === true;
+        const responsePayload = {
+          ...outcome,
+          ...safeSession,
+          ...(includeArtifactValues
+            ? { authArtifacts: mgr.getRecordedSession({ includeSecrets: true }).authArtifacts }
+            : {})
+        };
+        sendJson(res, 200, responsePayload);
       } catch (err) {
         const status = Boolean(
           err?.isGovernanceBlock ||
@@ -5630,11 +5918,211 @@ export function createAppServer(options = {}) {
       return;
     }
 
+    // ── API: GET /api/asm/sbom (Zero-Touch Runtime SCA SBOM & CVE Drift) ────
+    if (method === 'GET' && pathname === '/api/asm/sbom') {
+      try {
+        const records = [];
+        try {
+          const histList = listHistory();
+          if (Array.isArray(histList)) {
+            for (const item of histList) {
+              if (!item?.id) continue;
+              const rec = loadHistoryById(item.id);
+              if (rec) records.push(rec);
+            }
+          }
+        } catch {
+          // Ignore disk history errors in memory-only mode
+        }
+        for (const job of jobs.values()) {
+          if (job?.status === 'completed' && job.result) {
+            records.push({
+              id: job.id,
+              timestamp: job.result.completedAt || new Date().toISOString(),
+              targets: job.targets,
+              stacks: job.result.stacks,
+              runtimeSca: job.result.runtimeSca,
+              results: job.result.results
+            });
+          }
+        }
+        const report = buildSbomAndCveDriftReport(records);
+        sendJson(res, 200, report);
+      } catch (err) {
+        sendJson(res, 500, { error: `Failed to generate SBOM drift report: ${err.message}` });
+      }
+      return;
+    }
+
+    // ── API: POST /api/asm/rbac-audit (Multi-Role RBAC & BFLA Matrix Audit) ──
+    if (method === 'POST' && pathname === '/api/asm/rbac-audit') {
+      const body = await parseJsonBody(req, res);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        if (body !== null) sendJson(res, 400, { error: 'Request body must be a JSON object' });
+        return;
+      }
+      let governedFetch = null;
+      try {
+        const allowPrivate = body.allowPrivate !== undefined ? Boolean(body.allowPrivate) : defaultAllowPrivate;
+        let validatedSecondaryHeaders = null;
+        if (body.secondaryAuthHeaders !== undefined && body.secondaryAuthHeaders !== null) {
+          if (typeof body.secondaryAuthHeaders !== 'object' || Array.isArray(body.secondaryAuthHeaders)) {
+            sendJson(res, 400, { error: 'secondaryAuthHeaders must be a header object' });
+            return;
+          }
+          const hdrValidation = validateCustomHeadersResult(body.secondaryAuthHeaders);
+          if (!hdrValidation.valid) {
+            sendJson(res, 400, { error: hdrValidation.error });
+            return;
+          }
+          validatedSecondaryHeaders = hdrValidation.headers;
+        }
+
+        let menus = null;
+        let forms = null;
+
+        if (Array.isArray(body.discoveredMenus) || Array.isArray(body.discoveredForms)) {
+          menus = Array.isArray(body.discoveredMenus)
+            ? body.discoveredMenus.filter(m => m && typeof m === 'object').map(m => ({ ...m }))
+            : [];
+          forms = Array.isArray(body.discoveredForms)
+            ? body.discoveredForms.filter(f => f && typeof f === 'object').map(f => ({ ...f }))
+            : [];
+        } else if (typeof body.scanId === 'string' && body.scanId.trim()) {
+          const job = jobs.get(body.scanId.trim());
+          if (!job || !job.result) {
+            sendJson(res, 404, { error: 'Scan job not found or not yet completed' });
+            return;
+          }
+          menus = Array.isArray(job.result.discoveredMenus) ? job.result.discoveredMenus : [];
+          forms = Array.isArray(job.result.discoveredForms) ? job.result.discoveredForms : [];
+        } else if (typeof body.historyId === 'string' && body.historyId.trim()) {
+          const hid = body.historyId.trim();
+          if (!/^[a-zA-Z0-9._-]+\.json$/.test(hid)) {
+            sendJson(res, 400, { error: 'Invalid historyId format' });
+            return;
+          }
+          const record = loadHistoryById(hid);
+          if (!record) {
+            sendJson(res, 404, { error: 'History record not found' });
+            return;
+          }
+          menus = Array.isArray(record.discoveredMenus) ? record.discoveredMenus : [];
+          forms = Array.isArray(record.discoveredForms) ? record.discoveredForms : [];
+        } else {
+          sendJson(res, 400, {
+            error: 'Provide "discoveredMenus"/"discoveredForms", "scanId", or "historyId" for RBAC audit'
+          });
+          return;
+        }
+
+        const dnsResolver = options.dnsResolver ?? options.retestOptions?.dnsResolver ?? null;
+        const targetPinStore = new TargetPinStore({ allowPrivate });
+        const cleanSourceIp = typeof body.sourceIp === 'string' && body.sourceIp.trim() ? body.sourceIp.trim() : null;
+
+        const candidateUrls = new Set();
+        for (const m of menus) {
+          if (typeof m?.url === 'string' && m.url.trim()) candidateUrls.add(m.url.trim());
+        }
+        for (const f of forms) {
+          const u = typeof f?.actionUrl === 'string' && f.actionUrl.trim()
+            ? f.actionUrl.trim()
+            : (typeof f?.pageUrl === 'string' && f.pageUrl.trim() ? f.pageUrl.trim() : '');
+          if (u) candidateUrls.add(u);
+        }
+
+        for (const rawUrl of candidateUrls) {
+          const urlCheck = validateAndGateUrl(rawUrl, { allowPrivate, scopeRules, normalizeBare: false });
+          if (!urlCheck.ok) {
+            sendJson(res, urlCheck.status, urlCheck.payload);
+            return;
+          }
+          const dnsCheck = await prevalidateResolvedTarget(urlCheck.url, {
+            allowPrivate,
+            scopeRules,
+            dnsResolver,
+            targetPinStore,
+            sourceIp: cleanSourceIp
+          });
+          if (!dnsCheck.ok) {
+            sendJson(res, dnsCheck.status, dnsCheck.payload);
+            return;
+          }
+        }
+
+        governedFetch = options.fetcher || createGovernedFetch({
+          allowPrivate,
+          sourceIp: cleanSourceIp,
+          scopeRules,
+          trafficStore,
+          targetPinStore,
+          enforceDnsValidation: true,
+          ...(dnsResolver ? { dnsResolver } : {})
+        });
+
+        const maxProbes = Number.isFinite(Number(body.maxProbes))
+          ? Math.max(1, Math.min(50, Math.floor(Number(body.maxProbes))))
+          : 12;
+
+        const rbacMatrix = await auditMenuAndFormAccessControl({
+          discoveredMenus: menus,
+          discoveredForms: forms,
+          unauthFetch: governedFetch,
+          secondaryAuthHeaders: validatedSecondaryHeaders,
+          maxProbes
+        });
+
+        sendJson(res, 200, { rbacMatrix });
+      } catch (err) {
+        const status = Boolean(
+          err?.isGovernanceBlock ||
+          err?.code === 'SSRF_POLICY_BLOCKED' ||
+          err?.code === 'TARGET_RULE_BLOCKED' ||
+          err?.code === 'DNS_REBIND_OR_PRIVATE_IP'
+        ) ? 403 : 400;
+        sendJson(res, status, { error: err.message });
+      } finally {
+        try {
+          governedFetch?.destroyAgents?.();
+        } catch {}
+      }
+      return;
+    }
+
     // ── API: GET /api/auth/sessions (List Recorded Sessions) ────────────────
     if (method === 'GET' && pathname === '/api/auth/sessions') {
-      const sessions = Array.from(recordedSessions.values()).map(s =>
-        AuthSessionManager.fromRecordedSession(s).getRecordedSession({ includeSecrets: false })
-      );
+      const includeArtifactsParam = (parsedUrl.searchParams.get('includeArtifactValues') || '').trim().toLowerCase();
+      const includeArtifactValues = includeArtifactsParam === '1' || includeArtifactsParam === 'true';
+      const rawOriginFilter = (parsedUrl.searchParams.get('origin') || parsedUrl.searchParams.get('targetUrl') || '').trim();
+      let filterOrigin = '';
+      if (rawOriginFilter) {
+        try {
+          filterOrigin = new URL(rawOriginFilter).origin.toLowerCase();
+        } catch {
+          filterOrigin = rawOriginFilter.toLowerCase();
+        }
+      }
+
+      const sessions = [];
+      for (const s of recordedSessions.values()) {
+        const mgr = AuthSessionManager.fromRecordedSession(s);
+        const safeSession = mgr.getRecordedSession({ includeSecrets: false });
+        if (filterOrigin) {
+          const candidates = [safeSession.targetUrl, safeSession.loginUrl, safeSession.postLoginUrl].filter(Boolean);
+          const matchesOrigin = candidates.some(u => {
+            try {
+              return new URL(u).origin.toLowerCase() === filterOrigin;
+            } catch {
+              return String(u).toLowerCase().includes(filterOrigin);
+            }
+          });
+          if (!matchesOrigin) continue;
+        }
+        if (includeArtifactValues) {
+          safeSession.authArtifacts = mgr.getRecordedSession({ includeSecrets: true }).authArtifacts;
+        }
+        sessions.push(safeSession);
+      }
       sendJson(res, 200, { sessions });
       return;
     }
@@ -5658,6 +6146,196 @@ export function createAppServer(options = {}) {
       return;
     }
 
+    // ── API: Target Systems Registry, Clone & Delta Re-Scan ─────────────────
+    if (method === 'GET' && pathname === '/api/target-systems') {
+      const systems = Array.from(targetSystems.values()).map(s =>
+        exportTargetSystem(s, { includeSecrets: false })
+      );
+      sendJson(res, 200, { systems });
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/target-systems') {
+      const body = await parseJsonBody(req, res);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        if (body !== null) sendJson(res, 400, { error: 'Request body must be a JSON object' });
+        return;
+      }
+      try {
+        const allowPrivate = body.allowPrivate !== undefined ? Boolean(body.allowPrivate) : defaultAllowPrivate;
+        const sys = normalizeTargetSystem({ ...body, allowPrivate });
+        const validated = await validateTargetSystemUrls(sys, { checkDns: false });
+        if (!validated.ok) {
+          sendJson(res, validated.status, validated.payload);
+          return;
+        }
+        storeTargetSystem(targetSystems, sys);
+        if (!useInMemory) {
+          savePersistedTargetSystems(historyDir, targetSystems);
+        }
+        sendJson(res, 201, { system: exportTargetSystem(sys, { includeSecrets: false }) });
+      } catch (err) {
+        const status = err?.statusCode || (err?.isGovernanceBlock ? 403 : 400);
+        sendJson(res, status, { error: err.message });
+      }
+      return;
+    }
+
+    const targetSystemCloneMatch = pathname.match(/^\/api\/target-systems\/([^/]+)\/clone$/);
+    if (method === 'POST' && targetSystemCloneMatch) {
+      let sysId;
+      try {
+        sysId = decodeURIComponent(targetSystemCloneMatch[1]).trim();
+      } catch {
+        sendJson(res, 400, { error: 'Invalid target system ID' });
+        return;
+      }
+      if (!sysId || !targetSystems.has(sysId)) {
+        sendJson(res, 404, { error: 'Target system not found' });
+        return;
+      }
+      const body = await parseOptionalJsonBody(req, res);
+      if (!body) return;
+      if (typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'Request body must be a JSON object' });
+        return;
+      }
+      try {
+        const source = targetSystems.get(sysId);
+        const cloned = cloneTargetSystemConfig(source, body);
+        const validated = await validateTargetSystemUrls(cloned, { checkDns: false });
+        if (!validated.ok) {
+          sendJson(res, validated.status, validated.payload);
+          return;
+        }
+        storeTargetSystem(targetSystems, cloned);
+        if (!useInMemory) {
+          savePersistedTargetSystems(historyDir, targetSystems);
+        }
+        sendJson(res, 201, {
+          system: exportTargetSystem(cloned, { includeSecrets: false }),
+          clonedFromId: source.id
+        });
+      } catch (err) {
+        const status = err?.statusCode || (err?.isGovernanceBlock ? 403 : 400);
+        sendJson(res, status, { error: err.message });
+      }
+      return;
+    }
+
+    const targetSystemRunMatch = pathname.match(/^\/api\/target-systems\/([^/]+)\/run$/);
+    if (method === 'POST' && targetSystemRunMatch) {
+      let sysId;
+      try {
+        sysId = decodeURIComponent(targetSystemRunMatch[1]).trim();
+      } catch {
+        sendJson(res, 400, { error: 'Invalid target system ID' });
+        return;
+      }
+      if (!sysId || !targetSystems.has(sysId)) {
+        sendJson(res, 404, { error: 'Target system not found' });
+        return;
+      }
+      const body = await parseOptionalJsonBody(req, res);
+      if (!body) return;
+      if (typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'Request body must be a JSON object' });
+        return;
+      }
+      const sys = targetSystems.get(sysId);
+      const runMode = body.mode === 'open_issues_only' ? 'open_issues_only' : 'full_profile';
+      const { checks, fallbackToFullProfile } = resolveChecksForTargetSystemRun(sys, runMode, body.checks);
+
+      const launched = await launchTargetSystemScan(sys, { runMode, checks });
+      if (!launched.ok) {
+        sendJson(res, launched.status, launched.payload);
+        return;
+      }
+
+      const nowDate = new Date();
+      if (sys.schedule) {
+        sys.schedule.lastTriggeredAt = nowDate.toISOString();
+        if (sys.schedule.enabled) {
+          sys.schedule.nextRunAt = computeNextScheduleRunAt(sys.schedule, nowDate);
+        }
+      }
+      sys.updatedAt = nowDate.toISOString();
+      if (!useInMemory) {
+        savePersistedTargetSystems(historyDir, targetSystems);
+      }
+
+      sendJson(res, 202, {
+        scanId: launched.job.id,
+        status: 'running',
+        targetSystemId: sys.id,
+        targetSystemName: sys.name,
+        mode: runMode,
+        checks,
+        checksCount: checks.length,
+        fallbackToFullProfile,
+        targets: launched.job.targets
+      });
+      return;
+    }
+
+    const targetSystemItemMatch = pathname.match(/^\/api\/target-systems\/([^/]+)$/);
+    if (targetSystemItemMatch && (method === 'GET' || method === 'PUT' || method === 'DELETE')) {
+      let sysId;
+      try {
+        sysId = decodeURIComponent(targetSystemItemMatch[1]).trim();
+      } catch {
+        sendJson(res, 400, { error: 'Invalid target system ID' });
+        return;
+      }
+      if (!sysId || !targetSystems.has(sysId)) {
+        sendJson(res, 404, { error: 'Target system not found' });
+        return;
+      }
+
+      if (method === 'GET') {
+        sendJson(res, 200, { system: exportTargetSystem(targetSystems.get(sysId), { includeSecrets: false }) });
+        return;
+      }
+
+      if (method === 'PUT') {
+        const body = await parseJsonBody(req, res);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          if (body !== null) sendJson(res, 400, { error: 'Request body must be a JSON object' });
+          return;
+        }
+        try {
+          const existing = targetSystems.get(sysId);
+          const updated = normalizeTargetSystem(body, existing);
+          const validated = await validateTargetSystemUrls(updated, { checkDns: false });
+          if (!validated.ok) {
+            sendJson(res, validated.status, validated.payload);
+            return;
+          }
+          if (updated.sequenceId && savedSequences.has(updated.sequenceId) && (body.sequenceId !== undefined || !updated.sequenceName)) {
+            updated.sequenceName = savedSequences.get(updated.sequenceId)?.name || updated.sequenceName;
+          }
+          storeTargetSystem(targetSystems, updated);
+          if (!useInMemory) {
+            savePersistedTargetSystems(historyDir, targetSystems);
+          }
+          sendJson(res, 200, { system: exportTargetSystem(updated, { includeSecrets: false }) });
+        } catch (err) {
+          const status = err?.statusCode || (err?.isGovernanceBlock ? 403 : 400);
+          sendJson(res, status, { error: err.message });
+        }
+        return;
+      }
+
+      if (method === 'DELETE') {
+        targetSystems.delete(sysId);
+        if (!useInMemory) {
+          savePersistedTargetSystems(historyDir, targetSystems);
+        }
+        sendJson(res, 200, { deleted: true, id: sysId });
+        return;
+      }
+    }
+
     // ── Static Assets (UI) ──────────────────────────────────────────────────
     if (method === 'GET') {
       serveStaticFile(req, res, pathname);
@@ -5672,6 +6350,8 @@ export function createAppServer(options = {}) {
     recordedSessions,
     savedSequences,
     systemVariables,
+    targetSystems,
+    runDueScheduledTargetSystems,
     graphStore,
     trafficStore,
     evidenceStore,
@@ -5687,6 +6367,7 @@ export function createAppServer(options = {}) {
   };
 
   server.on('close', () => {
+    if (scheduleTimer) clearInterval(scheduleTimer);
     if (ownsEvidenceStore) evidenceStore.close();
     if (ownsTrafficStore) trafficStore.close();
     if (ownsGraphStore) graphStore.close();

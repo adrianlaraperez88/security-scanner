@@ -565,12 +565,13 @@ export const RUNTIME_SCA_CATALOG = {
     branches: {
       '7': { latest: '7.4.33', cvss: 9.8, eol: true },
       '8.0': { latest: '8.0.30', cvss: 9.8, eol: true },
-      '8.1': { latest: '8.1.31', cvss: 0.0 },
-      '8.2': { latest: '8.2.27', cvss: 0.0 },
-      '8.3': { latest: '8.3.17', cvss: 0.0 },
-      '8.4': { latest: '8.4.4', cvss: 0.0 }
+      '8.1': { latest: '8.1.32', cvss: 0.0 },
+      '8.2': { latest: '8.2.36', cvss: 0.0 },
+      '8.3': { latest: '8.3.37', cvss: 0.0 },
+      '8.4': { latest: '8.4.28', cvss: 0.0 },
+      '8.5': { latest: '8.5.13', cvss: 0.0 }
     },
-    overallLatestVersion: '8.4.4',
+    overallLatestVersion: '8.5.13',
     overallLatestCvss: 0.0,
     vulnerabilities: [
       {
@@ -595,6 +596,37 @@ export const RUNTIME_SCA_CATALOG = {
         cvss: 9.8,
         severity: 'CRITICAL',
         summary: 'PHP CGI Argument Injection Remote Code Execution (< 8.3.8)'
+      },
+      {
+        below: '8.1.32',
+        cve: 'CVE-2025-1217',
+        cvss: 5.3,
+        severity: 'MEDIUM',
+        summary: 'PHP HTTP Stream Wrapper Folded Header Misparsing (< 8.1.32)'
+      },
+      {
+        min: '8.2.0',
+        below: '8.2.28',
+        cve: 'CVE-2025-1217',
+        cvss: 5.3,
+        severity: 'MEDIUM',
+        summary: 'PHP HTTP Stream Wrapper Folded Header Misparsing (< 8.2.28)'
+      },
+      {
+        min: '8.3.0',
+        below: '8.3.19',
+        cve: 'CVE-2025-1217',
+        cvss: 5.3,
+        severity: 'MEDIUM',
+        summary: 'PHP HTTP Stream Wrapper Folded Header Misparsing (< 8.3.19)'
+      },
+      {
+        min: '8.4.0',
+        below: '8.4.5',
+        cve: 'CVE-2025-1217',
+        cvss: 5.3,
+        severity: 'MEDIUM',
+        summary: 'PHP HTTP Stream Wrapper Folded Header Misparsing (< 8.4.5)'
       }
     ]
   },

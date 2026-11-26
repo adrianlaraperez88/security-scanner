@@ -55,12 +55,12 @@ Scan Options:
   --ai-fix                  Generate AI / playbook fix solutions and audience summary
   --audience <beginner|pro> Target audience for --ai-fix guidance (default: pro)
   --output <stem>           Base name for reports            (default: report)
-  --profile <name>          Scan profile (21 profiles): smart (default)|device|quick|modern|cms|api|laravel|wordpress|apache|nginx|spring|full
+  --profile <name>          Scan profile (22 profiles): smart (default)|device|quick|modern|cms|api|laravel|yii|wordpress|apache|nginx|spring|full
   --device, --tv, --camera, --pc, --iot
                             Scan Smart TVs, IP Cameras/NVRs, PCs/Workstations/Servers, Routers, Printers, NAS or IoT devices
                             (sets --profile device --allow-private; --tv/--camera/--pc set category)
   --device-category <cat>   Filter device discovery/checks: all|smart_tv|ip_camera|pc_workstation (aliases: tv, camera, pc)
-  --profiles                List all 21 available profiles
+  --profiles                List all 22 available profiles
   --depth <n>               Crawl depth for discovery (0..5, default: 3)
   --tech <list>             Force tech tags, comma-separated (e.g. react,node,laravel)
   --concurrency <n>         Parallel targets                 (default: 5)
@@ -133,11 +133,13 @@ The local server binds strictly to `127.0.0.1` (`--port 4321`) with Host/Origin 
 
 | Method & Path | Purpose |
 |---|---|
-| `GET /api/meta` | Version, scan presets, 21 profiles, CVE coverage summary, and full 84-check catalog |
+| `GET /api/meta` | Version, scan presets, 22 profiles, CVE coverage summary, and full 85-check catalog |
 | `GET /api/system/doctor` | Local environment preflight, storage permissions, proxy, and LLM pool status check |
 | `POST /api/system/diagnose-target` | PC-vs-target preflight triage (DNS resolution, SSRF/scope gate, ping latency) |
 | `GET /api/system/pc-audit` | Run local host PC deep security auditor (`core/pc-local-auditor.js`) |
 | `POST /api/sca/analyze` | Run branch-aware Runtime SCA dependency & version vulnerability detection (`{ targetUrl }` or `{ html, headers }`) |
+| `GET /api/asm/sbom` | Zero-touch Runtime SCA Software Bill of Materials (SBOM) registry & instant in-memory CVE drift report across scan history (`zeroTouchMode: true`) |
+| `POST /api/asm/rbac-audit` | Automated multi-role RBAC & Broken Function Level Authorization (`CWE-285` BFLA) matrix audit across discovered menus, submenus, SPA views, and forms (`{ scanId, historyId, discoveredMenus, discoveredForms, secondaryAuthHeaders, allowPrivate }`) |
 | `GET\|POST /api/auth/variables`, `PUT\|DELETE /api/auth/variables/:name` | Manage shared **System Variables (`{{VAR:name}}`)** across `.lsr` sequences (secret categories masked on list) |
 | `POST /api/auth/inspect-page` | Governed login page DOM inspector returning sanitized forms, inputs, OTP candidates, buttons, and CSRF tokens |
 | `POST /api/auth/otp-preview` | Validate RFC 6238 TOTP MFA config (`SHA1`/`SHA256`/`SHA512`, `6`/`8` digits) and preview live code + remaining window |

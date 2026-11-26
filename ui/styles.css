@@ -5898,6 +5898,608 @@ body {
   color: var(--text-muted);
 }
 
+/* ============================================================================
+   Top-of-Scan Quick Auth Bar, Advanced Compact LSR Bar & Login/LSR Studio Tab
+   ============================================================================ */
+
+.top-auth-token-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.08), rgba(163, 113, 247, 0.06));
+  border: 1px solid rgba(88, 166, 255, 0.28);
+  border-radius: var(--radius-md);
+}
+
+.top-auth-select-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 320px;
+}
+
+.top-auth-select-group .form-select-compact {
+  min-width: 240px;
+  max-width: 380px;
+}
+
+.top-auth-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.badge-outline {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.lsr-adv-compact-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-top: 0.5rem;
+}
+
+.lsr-adv-compact-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 280px;
+}
+
+.lsr-adv-compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+#tab-login-lsr .lsr-studio-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.lsr-studio-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.lsr-studio-url-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-muted);
+}
+
+.lsr-studio-url-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1 1 340px;
+}
+
+.lsr-studio-url-input-wrap .form-input {
+  flex: 1;
+}
+
+.lsr-studio-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.lsr-studio-vault-card {
+  border-color: rgba(88, 166, 255, 0.35);
+}
+
+.lsr-studio-vault-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.auth-artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.auth-artifact-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.auth-artifact-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.auth-artifact-item-value {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--blue-hover);
+  word-break: break-all;
+}
+
+/* ============================================================================
+   Saved Target Systems Quick Selector Bar, Cloner & Schedule Manager Card
+   ============================================================================ */
+
+.target-systems-quick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  margin-bottom: 0.9rem;
+  background: linear-gradient(135deg, rgba(46, 160, 67, 0.08), rgba(88, 166, 255, 0.08));
+  border: 1px solid rgba(88, 166, 255, 0.28);
+  border-radius: var(--radius-md);
+}
+
+.ts-quick-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 460px;
+}
+
+.ts-quick-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--blue-subtle);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  color: var(--blue-hover);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ts-quick-select {
+  min-width: 220px;
+  max-width: 340px;
+  flex: 1 1 220px;
+}
+
+.ts-quick-name-input {
+  min-width: 170px;
+  max-width: 240px;
+  flex: 1 1 170px;
+}
+
+.ts-quick-env-select {
+  min-width: 130px;
+  max-width: 165px;
+}
+
+.ts-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ts-verify-btn {
+  border-color: rgba(46, 160, 67, 0.45);
+  color: var(--green-hover);
+}
+
+.ts-verify-btn:hover {
+  background: var(--green-subtle);
+  border-color: var(--green);
+}
+
+.target-systems-manager-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.25rem;
+  margin-top: 1rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+}
+
+.ts-manager-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.ts-manager-title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 0.25rem 0;
+}
+
+.ts-manager-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.ts-manager-summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ts-editor-panel {
+  background: var(--bg-app);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.95rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ts-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.ts-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.ts-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-muted);
+}
+
+.ts-status-msg {
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--blue-subtle);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  color: var(--text-main);
+  font-size: 0.82rem;
+}
+
+.target-systems-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 0.85rem;
+}
+
+.ts-empty-state {
+  padding: 1rem;
+  background: var(--bg-app);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+.target-system-card {
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  transition: border-color var(--transition), transform var(--transition);
+}
+
+.target-system-card:hover {
+  border-color: rgba(88, 166, 255, 0.45);
+}
+
+.ts-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ts-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.ts-card-unfixed-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+
+.ts-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-muted);
+}
+
+/* Environment Badges */
+.ts-env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.14rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ts-env-badge.production {
+  background: var(--red-subtle);
+  color: var(--red-hover);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+}
+
+.ts-env-badge.staging {
+  background: var(--yellow-subtle);
+  color: var(--yellow-hover);
+  border: 1px solid rgba(210, 153, 34, 0.45);
+}
+
+.ts-env-badge.development {
+  background: var(--blue-subtle);
+  color: var(--blue-hover);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+}
+
+.ts-env-badge.qa {
+  background: rgba(163, 113, 247, 0.15);
+  color: var(--purple);
+  border: 1px solid rgba(163, 113, 247, 0.4);
+}
+
+/* Schedule & Open Issues Delta Badges */
+.ts-schedule-pill,
+.ts-open-issues-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.14rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.ts-schedule-pill.active {
+  background: var(--blue-subtle);
+  color: var(--blue-hover);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+}
+
+.ts-schedule-pill.manual {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+}
+
+.ts-open-issues-badge.clean {
+  background: var(--green-subtle);
+  color: var(--green-hover);
+  border: 1px solid rgba(46, 160, 67, 0.4);
+}
+
+.ts-open-issues-badge.has-issues {
+  background: var(--yellow-subtle);
+  color: var(--yellow-hover);
+  border: 1px solid rgba(210, 153, 34, 0.45);
+}
+
+/* ============================================================================
+   Login & LSR Studio Master-Detail Target View & Detail Configuration Panel
+   ============================================================================ */
+
+.lsr-studio-targets-master-card {
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.lsr-studio-master-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.lsr-studio-detail-config-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lsr-detail-config-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(163, 113, 247, 0.08));
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  border-radius: var(--radius-lg);
+  position: sticky;
+  top: 0.5rem;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+}
+
+.lsr-detail-header-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.lsr-detail-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.lsr-detail-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-all;
+}
+
+.lsr-detail-target-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.85rem;
+}
+
+.lsr-target-row-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.9rem 1.05rem;
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.lsr-target-row-card:hover {
+  border-color: rgba(88, 166, 255, 0.5);
+  background: rgba(88, 166, 255, 0.03);
+}
+
+.lsr-target-row-card.is-selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.28);
+}
+
+.lsr-target-primary-url {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--blue-hover);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.lsr-target-submeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.lsr-studio-inline-steps-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.lsr-inline-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  font-size: 0.76rem;
+  color: var(--text-main);
+}
+
 @media (max-width: 960px) {
   .lsr-split-workspace {
     grid-template-columns: 1fr;
@@ -5906,7 +6508,20 @@ body {
   .lsr-sysvar-add-row,
   .lsr-modal-sysvar-quick-form,
   .lsr-inspect-bind-row,
-  .lsr-props-grid {
+  .lsr-props-grid,
+  .ts-editor-grid,
+  .target-systems-list,
+  .lsr-detail-target-grid {
     grid-template-columns: 1fr;
+  }
+  .top-auth-token-bar,
+  .lsr-adv-compact-bar,
+  .lsr-studio-url-toolbar,
+  .target-systems-quick-bar,
+  .ts-manager-header,
+  .lsr-studio-master-header,
+  .lsr-detail-config-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

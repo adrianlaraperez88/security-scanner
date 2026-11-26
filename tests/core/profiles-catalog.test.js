@@ -286,4 +286,11 @@ test('registry: getScanners() returns 85 deterministically sorted scanners with 
     assert.ok(Object.hasOwn(CWE_OWASP_MAP, s.name), `Expected CWE_OWASP_MAP entry for ${s.name}`);
     assert.ok(Object.hasOwn(CHECK_CATALOG, s.name), `Expected CHECK_CATALOG entry for ${s.name}`);
   }
+
+  // Verify cached getScanners() returns isolated cloned descriptors
+  scanners[0].tags.push('mutated-tag');
+  scanners[0].meta.cveIds.push('CVE-2099-99999');
+  const freshScanners = await getScanners();
+  assert.ok(!freshScanners[0].tags.includes('mutated-tag'));
+  assert.ok(!freshScanners[0].meta.cveIds.includes('CVE-2099-99999'));
 });

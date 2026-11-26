@@ -1823,11 +1823,13 @@ export const CWE_OWASP_MAP = {
     cwe: 'CWE-215',
     owasp: 'A05:2021-Security Misconfiguration',
     cvssScore: 9.8,
-    cveIds: ['CVE-2024-58136', 'CVE-2024-4991', 'CVE-2021-3692'],
+    cveIds: ['CVE-2024-58136', 'CVE-2024-4991', 'CVE-2023-47129', 'CVE-2021-3692'],
     references: [
       'https://www.yiiframework.com/doc/guide/2.0/en/security-best-practices',
       'https://nvd.nist.gov/vuln/detail/CVE-2024-58136',
       'https://nvd.nist.gov/vuln/detail/CVE-2024-4991',
+      'https://nvd.nist.gov/vuln/detail/CVE-2023-47129',
+      'https://nvd.nist.gov/vuln/detail/CVE-2021-3692',
       'https://cwe.mitre.org/data/definitions/215.html'
     ]
   },

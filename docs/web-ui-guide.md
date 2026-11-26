@@ -14,7 +14,7 @@ npm run ui
 The top header bar displays the active tab navigation, connection indicator (`#server-status-dot`), and **`🩺 System Doctor`** (`#btn-open-system-doctor`).
 
 Opening **`🩺 System Doctor`** (`#system-doctor-backdrop`) lets you:
-1. **Inspect Local Environment Readiness (`GET /api/system/doctor`)**: Checks Node.js runtime (`>= 22`), native `node:sqlite` `DatabaseSync` availability, write permissions for `.secscan-history/` and `reports/`, proxy configuration (with credentials masked), active Multi-LLM Pool profiles, and loaded check plugins (`84`).
+1. **Inspect Local Environment Readiness (`GET /api/system/doctor`)**: Checks Node.js runtime (`>= 22`), native `node:sqlite` `DatabaseSync` availability, write permissions for `.secscan-history/` and `reports/`, proxy configuration (with credentials masked), active Multi-LLM Pool profiles, and loaded check plugins (`85`).
 2. **Run PC-vs-Target Diagnostics (`POST /api/system/diagnose-target`)**: Enter any target URL (`#doctor-target-input`, optionally checking **Allow Authorized Internal / Private Targets**) to distinguish local network/DNS failures, SSRF/scope policy blocks, and remote website reachability errors before launching a scan.
 
 ---
@@ -34,12 +34,22 @@ Designed for both guided quick scans and deep technical configurations:
   - **`🤖 Enable Agentic Verification Mode (--agent)`** (`#opt-agent-mode`) + optional Goal (`#opt-agent-goal`).
   - **Noise Governor (`#opt-noise-profile`)**: `balanced` (default), `quiet`, `aggressive`, or `off`.
   - **`🏢 Allow Authorized Internal / Private Targets (--allow-private)`** (`#allow-private-toggle`), which reveals the **📺 Device Category** selector (`#opt-device-category`: `All Devices`, `Smart TV & Streaming Media`, `IP Camera / NVR / Surveillance`, `PC / Workstation / Local Server`).
+  - **Quick Auth Sequence Selector, Token Harvester & Local Store Bar (`#top-auth-token-bar`)**: Right below the Target URL bar, select a saved `.lsr` sequence (`#top-lsr-select`), click **`🎟️ Get Token / Cookie`** (`#btn-top-get-auth-token`) to run the login sequence and harvest any returned API/Bearer token, `Set-Cookie` session cookie, or `localStorage`/`sessionStorage` token into `#top-auth-artifacts-card`, click **`🔍 Check Local Store`** (`#btn-top-check-local-store`) to inspect origin-scoped cached tokens/cookies and JWT expiry (`exp`), or click **`🎬 + Create New .lsr`** (`#btn-top-create-lsr`) / **`🛠️ Open LSR Studio`** (`#btn-top-open-lsr-studio`).
 - **1-Click Scan Presets (`#preset-cards`)**: Fast profile selection populated from `/api/meta`.
 - **`⚙️ Advanced Options` Drawer (`#advanced-drawer`)**:
   - Max Crawl Depth (`1–5`), Concurrency Limit (`1–10`), Request Timeout (`5000–30000 ms`), Custom `Authorization` header (`#adv-auth`).
-  - **🔐 Website Authentication & Login Sequence Recorder**: System Variables (`{{VAR:name}}`), Secrets Vault (`{{SECRET:name}}`), TOTP MFA (`#btn-open-otp-config`), `.lsr` Sequence Reuse Bar (`#lsr-reuse-select`), Visual Recorder Modal (`#btn-new-lsr-sequence`), Standard Login Macro (`#adv-auth-username`, `#adv-auth-password`, `#adv-auth-login-url`, `#adv-auth-type`, `#btn-test-record-login`), and **`📋 Discover OpenAPI / Swagger Routes`** (`#btn-discover-openapi`). See [Authentication & LSR Guide](./authentication-and-lsr.md).
+  - **🔐 Compact Website Authentication & `.lsr` Selector (`.lsr-adv-compact-bar`)**: Cleanly choose the Authentication Method (`#adv-auth-method`), pick a saved `.lsr` sequence (`#adv-lsr-select`), or click **`🎬 + Create New .lsr`** (`#btn-adv-create-lsr`), **`🛠️ Manage in LSR Studio`** (`#btn-adv-open-lsr-studio`), **`🎟️ Get Token / Cookie`** (`#btn-adv-get-token`), or **`🔍 Check Local Store`** (`#btn-adv-check-local-store`).
   - **Tech Stack Override (`#adv-tech`)**, **Direct Source / Origin IP Pinning (`#adv-source-ip`)**, **Specific Check/CVE Filter (`#adv-checks`)**, **Custom HTTP Headers (`#custom-headers-input`)**, **`Force All Checks`** (`#opt-force-all`), and **Save to History** (`#adv-save-history`).
 - **Live SSE Progress (`#scan-progress-panel`)**: Real-time phase badge, percentage bar, detected tech chips, pages discovered, live Vulnerable/Suspicious/Safe counters, and streaming activity feed.
+
+---
+
+## Dedicated Section: `🔐 Login & LSR Studio` (`#tab-login-lsr`)
+
+Dedicated workspace for creating, testing, and managing Login Sequence Recorder (`.lsr`) flows, credentials, and harvested authentication artifacts:
+- **Harvested Auth Tokens, Cookies & Local Store Vault (`#lsr-studio-token-vault-card`)**: Enter a Target / Login URL (`#studio-target-url`), click **`🎟️ Get Token / Cookie from Login`** (`#btn-studio-get-token`) or **`🔍 Check Local Store`** (`#btn-studio-check-local-store`), inspect captured Bearer JWTs (with live `exp` TTL status), session & CSRF cookies (`Cookie: ...`), and `localStorage`/`sessionStorage` tokens, and apply them to scans in 1 click.
+- **Saved Login Sequences (`.lsr`) Reuse Bar & Cards Grid (`#lsr-reuse-select`, `#lsr-sequence-cards-list`)**: Launch **`🎬 New sequence / Open Visual Login Sequence Recorder`** (`#btn-new-lsr-sequence`), **`⚡ Load Working Example`**, **`📂 Import .lsr`**, or **`▶️ Quick Play / Verify`**.
+- **System Variables (`#sys-vars-panel`), Per-Sequence Secrets (`#lsr-secrets-chips`), TOTP MFA (`#lsr-otp-config-panel`), & Standard Login Macro (`#adv-standard-macro-box`)**. See [Authentication & LSR Guide](./authentication-and-lsr.md).
 
 ---
 
@@ -50,6 +60,11 @@ Inspect executive summaries, technical proofs, and export reports:
 - **Overall Health Card (`#health-card`)**: **A+ to F** Security Grade, risk pill (`LOW` / `MEDIUM` / `HIGH` / `CRITICAL`), score (`0–60+`), target metadata, and archive status.
 - **Detected Tech Stack & Audit Strategy (`#results-stack-card`)**: Shows executed vs. skipped framework checks.
 - **📦 Runtime SCA Findings Table (`#results-runtime-sca-card`)**: Invicti-style 6-column dependency table (`Name`, `Status`, `Identified Version (Highest CVSS)`, `Latest Branch Version`, `Overall Latest Version`, `Recommended Action`) with out-of-date/EOL KPIs.
+- **🧭 Discovered Menus, Submenus & Tested Forms (`#results-crawl-inventory-card`)**:
+  - **KPI Summary Bar (`#results-crawl-inventory-kpis`)**: Displays total **Pages Crawled**, **Top Menus**, **Dropdown Submenus**, **SPA Views (`$routeProvider`)**, **Forms Tested** (`POST`/`GET`/`JSON` + total input controls), **Menu/Submenu Tree Chips**, and **RBAC Enforced / BFLA Alert** counters.
+  - **Interactive Category Filter Bar (`#results-menus-filter-bar`)**: Filter discovered navigation items in one click across **`All`**, **`Submenus`**, **`Top Menus`**, **`SPA Views`**, **`External Apps`**, and **`Access Issues (BFLA)`**.
+  - **Navigation Menus & Dropdown Submenus Table (`#results-menus-tbody`)**: Shows `Parent Menu`, `Menu / Submenu Item`, `Type` (`Submenu`, `Top Menu`, `SPA View`, `External App`, `Logout`), `SPA Controller / Trigger` (`ng-click="selectPage(...)"` / `$routeProvider`), `Resolved URL`, `Status` (`Crawled`, `Logout Protected`, `External App (Skipped)`), and **`Access Control (RBAC)`** (`🔒 Auth Enforced`, `🚨 Unprotected (BFLA)`, `⚠️ Low-Priv Accessible`).
+  - **Tested Forms & Input Controls Table (`#results-forms-tbody`)**: Shows `Form Name / ID`, **`Method & Type`** (`HTML Form`, `JSON API`, `AJAX Endpoint`, `OpenAPI`, `SPA View Controls`), `Page / View URL`, `Action URL`, `Input Fields Tested` (including AngularJS `ng-model` bindings), `CSRF Token` (`YII_CSRF_TOKEN`, `_csrf`, `_token`), and **`Access Control`**.
 - **🔌 Discovered SPA & Backend API Communication (`#results-api-card`)**: Lists discovered REST/GraphQL/WebSocket routes, external API origins with 1-click external scan triggers, and **`🤖 Ask AI About APIs`**.
 - **🎯 Target CVE Advisory Coverage Banner (`#results-cve-coverage-banner`)**: Covered/Partial/Missing KPI pills and **`Open CVE Audit`** shortcut into Tab 7.
 - **🎯 Top Priority Action Plan & `🤖 AI Action Roadmap` (`#btn-generate-ai-summary`)**: Prioritized remediation roadmap tailored for `Regular Person View` (`beginner`) or `Developer View` (`pro`) via `#btn-toggle-view-mode`.
@@ -103,7 +118,7 @@ Full Burp-class interactive HTTP workbench (`ui/components/traffic-inspector.js`
 ## Tab 7: `🛠️ Checks & System Guardrails` (`#tab-catalog`)
 
 Switch between 4 specialized sub-views:
-1. **📚 Browse Catalog (`#catalog-browse-view`)**: Filter all **84 built-in checks** by 14 category pills or search text (`#catalog-search-input`).
+1. **📚 Browse Catalog (`#catalog-browse-view`)**: Filter all **85 built-in checks** by 14 category pills or search text (`#catalog-search-input`).
 2. **🎯 CVE Coverage Audit (`#catalog-cve-coverage-view`)**: Powered by `ui/components/cve-coverage.js`. Displays KPI cards across curated CVE advisories, ecosystem breakdown, status (`All` / `Missing` / `Partial` / `Covered`) and `?tech=` filters, external CVE database confirmation (`OSV.dev`, `NVD 2.0`, `GitHub GHSA`, `CISA KEV` via `POST /api/cves/confirm-db`), and custom JSON advisory catalog upload (`POST /api/cves/audit`).
 3. **✨ New Check Builder (`#catalog-builder-view`)**: Interactive scaffolder (`POST /api/checks/scaffold`) that validates IDs (`/^[a-z0-9-]{2,40}$/`), previews generated ESM check + unit test code, and writes `checks/<id>.js` and `tests/checks/<id>.test.js`.
 4. **🛡️ System Guardrails & Multi-LLM Pool (`#catalog-guardrails-view`)**: Powered by `ui/components/system-guardrails.js`. Manage Multi-LLM Pool profiles (`gemini`, `anthropic`, `openai`, `openai-responses`, `ollama`), inspect/reset circuit breakers, configure **Target Noise Governor** (`off`, `quiet`, `balanced`, `aggressive`) with per-host telemetry, edit **Scope/Deny Asset Gate** rules, and test the **8-Question Closed-World JEV Risk Evaluator**.

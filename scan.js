@@ -11,17 +11,13 @@ import { generateReport, saveReport,
          buildExecutiveResume,
          sanitizeApiCommunication,
          mergeApiCommunication }                from './core/report.js';
-import { filterSafeSameOriginApiRoutes }        from './core/api-discovery.js';
 import { sanitizeRuntimeSca,
          mergeRuntimeSca }                      from './core/runtime-sca.js';
 import { calculateRisk }                        from './core/severity.js';
 import { selectScannersForStack,
          getProfileChecks,
          ACTIVE_FUZZING_CHECKS }                from './core/profiles.js';
-import { TaskQueue }                            from './core/queue.js';
-import { crawlPage,
-         discoverApiRoutesFromPage,
-         extractLinksAndFormsFromHtml }         from './core/crawler.js';
+import { runTargetCrawlPipeline }               from './core/crawler.js';
 import { normalizeTargetInput, resolveBareIpTargets, validateTargets } from './core/validator.js';
 import { normalizeDeviceCategory }              from './core/device-scanner.js';
 import { getCheckInfo, getCheckMeta }           from './core/catalog.js';
@@ -33,8 +29,8 @@ import { evaluateAssetGate, TargetPinStore }    from './core/guard.js';
 import { discoverWebsiteRealIp }                from './core/real-ip-finder.js';
 import { AuthSessionManager,
          parseLoginFormHtml,
-         normalizeLoginSequence,
-         buildAuthenticatedSeedUrls }           from './core/auth-session.js';
+         normalizeLoginSequence }               from './core/auth-session.js';
+import { auditMenuAndFormAccessControl }        from './core/rbac-matrix.js';
 import pLimit                                   from 'p-limit';
 
 export { discoverWebsiteRealIp, AuthSessionManager, parseLoginFormHtml };
@@ -580,6 +576,10 @@ export async function runScanner(options = {}) {
 
   const allResults = [];
   const stacks = {};
+  const allDiscoveredMenus = [];
+  const allDiscoveredForms = [];
+  const allDiscoveredPages = [];
+  const allRbacMatrices = [];
   const limit = pLimit(concurrency);
 
   let totalPlannedChecks = 0;
@@ -777,114 +777,75 @@ export async function runScanner(options = {}) {
     });
 
     // 2. Discover URLs via Crawler
-    const queue = new TaskQueue(initialTarget, {
-      shouldEnqueue: (candidateUrl) => !(authManager && authManager.isRestrictedUrl(candidateUrl))
-    });
-    const sharedRouteMap = new Map();
-    const seenAppScriptUrls = new Set();
-    const discoveredMenus = [];
-    const seenMenuKeys = new Set();
-    const recordDiscoveredMenus = (menusList) => {
-      if (!Array.isArray(menusList)) return;
-      for (const m of menusList) {
-        if (!m || !m.label) continue;
-        const key = `${(m.parentMenu || 'Main Menu').toLowerCase()}::${m.label.toLowerCase()}::${(m.url || m.routeKey || m.trigger || '').toLowerCase()}`;
-        if (seenMenuKeys.has(key)) continue;
-        seenMenuKeys.add(key);
-        discoveredMenus.push({ target: initialTarget, ...m });
-      }
-    };
-    const discoveredForms = [];
-    const seenFormKeys = new Set();
-    const recordDiscoveredForms = (formsList) => {
-      if (!Array.isArray(formsList)) return;
-      for (const form of formsList) {
-        if (!form || !form.actionUrl) continue;
-        const key = `${form.method || 'GET'}::${form.actionUrl}::${(form.fields || []).map(f => f.name).join(',')}`;
-        if (seenFormKeys.has(key)) continue;
-        seenFormKeys.add(key);
-        discoveredForms.push(form);
-      }
-    };
-    if (authManager) {
-      const authSeeds = buildAuthenticatedSeedUrls(initialTarget, authManager);
-      queue.push(authSeeds, initialTarget);
-      if (authManager.postLoginHtml) {
-        const postLoginBase = authManager.postLoginUrl || initialTarget;
-        const extractedPostLogin = extractLinksAndFormsFromHtml(authManager.postLoginHtml, postLoginBase, {
-          routeMap: sharedRouteMap
-        });
-        queue.push(extractedPostLogin.links, postLoginBase);
-        recordDiscoveredMenus(extractedPostLogin.menus);
-        recordDiscoveredForms(extractedPostLogin.forms);
-      }
-    }
-    let depth = 0;
-    const MAX_API_ROUTES_PER_TARGET = 12;
-    let apiRoutesEnqueued = 0;
-    const enqueueApiRoutes = (routes) => {
-      if (apiRoutesEnqueued >= MAX_API_ROUTES_PER_TARGET) return;
-      const safeSlice = filterSafeSameOriginApiRoutes(
-        routes,
-        initialTarget,
-        MAX_API_ROUTES_PER_TARGET - apiRoutesEnqueued
-      );
-      if (safeSlice.length > 0) {
-        apiRoutesEnqueued += safeSlice.length;
-        queue.push(safeSlice, initialTarget);
-      }
-    };
-
     const normalizedInitialTarget = String(initialTarget || '').replace(/\/+$/, '');
-
-    while (!isDeviceBasePortClosed && !isBareIpHttpsSniRestricted && depth < maxDepth && !queue.isEmpty()) {
-      emit({
-        phase: 'crawl',
-        message: `Crawling depth ${depth + 1}/${maxDepth}...`,
-        percent: 25,
-        target: initialTarget,
-        pagesFound: queue.totalFound,
-      });
-      const topLevelPaths = queue.pending.splice(0, queue.pending.length);
-      log(`    🕸️   Depth ${depth}: Scanning ${topLevelPaths.length} pages for links, menus & forms...`);
-      
-      for (const p of topLevelPaths) {
-        const isSeedPage = p.replace(/\/+$/, '') === normalizedInitialTarget;
-        if ((depth === 0 || isSeedPage) && fp?.apiCommunication?.sameOriginEndpoints?.length) {
-          enqueueApiRoutes(fp.apiCommunication.sameOriginEndpoints);
-        }
-        const crawlRes = await crawlPage(p, fetchWithRetry, {
-          includeResponse: true,
-          routeMap: sharedRouteMap,
-          seenAppScriptUrls,
-          discoverAppScripts: depth === 0 || isSeedPage
+    const {
+      discoveredUrls: allDiscovered,
+      discoveredMenus,
+      discoveredForms
+    } = await runTargetCrawlPipeline(initialTarget, fetchWithRetry, {
+      maxDepth,
+      authManager,
+      fp,
+      activeScanners,
+      activeFuzzingChecks: ACTIVE_FUZZING_CHECKS,
+      isDeviceBasePortClosed,
+      isBareIpHttpsSniRestricted,
+      seenBundleUrls,
+      seenConfigUrls,
+      budgetState,
+      onCrawlDepth: ({ depth, pending, pagesFound }) => {
+        emit({
+          phase: 'crawl',
+          message: `Crawling depth ${depth + 1}/${maxDepth}...`,
+          percent: 25,
+          target: initialTarget,
+          pagesFound,
         });
-        const pageBaseUrl = (typeof crawlRes.response?.url === 'string' && /^https?:\/\//i.test(crawlRes.response.url))
-          ? crawlRes.response.url
-          : p;
-        queue.push(crawlRes.links, pageBaseUrl);
-        recordDiscoveredMenus(crawlRes.menus);
-        recordDiscoveredForms(crawlRes.forms);
-        if (apiRoutesEnqueued < MAX_API_ROUTES_PER_TARGET && crawlRes.response?.status === 200) {
-          const apiRoutes = await discoverApiRoutesFromPage(p, crawlRes.response.text || '', fetchWithRetry, {
-            rootResponse: crawlRes.response,
-            maxRoutes: MAX_API_ROUTES_PER_TARGET - apiRoutesEnqueued,
-            maxBundles: isSeedPage ? 2 : 1,
-            maxConfigProbes: isSeedPage && !fp?.apiCommunication ? 2 : 0,
-            seenBundleUrls,
-            seenConfigUrls,
-            budgetState
-          });
-          enqueueApiRoutes(apiRoutes);
-        }
+        log(`    🕸️   Depth ${depth}: Scanning ${pending} pages for links, menus & forms...`);
       }
-      depth++;
+    });
+
+    allDiscoveredMenus.push(...discoveredMenus);
+    allDiscoveredForms.push(...discoveredForms);
+    for (const u of allDiscovered) {
+      if (!allDiscoveredPages.includes(u)) allDiscoveredPages.push(u);
     }
 
-    log(`    🏁  Crawl complete: ${queue.totalFound} unique pages found.`);
+    let targetRbacFindings = [];
+    if (
+      authManager?.getRecordedSession()?.authenticated === true &&
+      (discoveredMenus.length > 0 || discoveredForms.length > 0)
+    ) {
+      try {
+        const targetRbac = await auditMenuAndFormAccessControl({
+          discoveredMenus,
+          discoveredForms,
+          unauthFetch: baseGovernedFetch,
+          authManager,
+          maxProbes: 12
+        });
+        allRbacMatrices.push(targetRbac);
+        if (Array.isArray(targetRbac.findings) && targetRbac.findings.length > 0) {
+          targetRbacFindings = targetRbac.findings.map(rf => {
+            const meta = getCheckMeta(rf.checkId || 'bola-mass-assignment');
+            return enrichEngine.enrichFinding(
+              {
+                target: rf.url || initialTarget,
+                ...rf,
+                meta
+              },
+              { allowPrivate }
+            );
+          });
+        }
+      } catch {
+        // Non-fatal RBAC matrix probe error
+      }
+    }
+
+    log(`    🏁  Crawl complete: ${allDiscovered.length} unique pages found.`);
 
     // 3. Scan all discovered URLs
-    const allDiscovered = Array.from(queue.seen);
 
     // Smart check execution:
     // Parameterized active fuzzing checks run on all discovered URLs;
@@ -942,6 +903,7 @@ export async function runScanner(options = {}) {
       ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
       ...(activeOastServer ? { oastServer: activeOastServer } : {}),
       ...(discoveredForms.length > 0 ? { discoveredForms } : {}),
+      ...(allDiscovered.length > 0 ? { verificationUrls: allDiscovered.slice(0, 3) } : {}),
       targetPinStore,
     };
 
@@ -1033,7 +995,7 @@ export async function runScanner(options = {}) {
       return pageResults;
     })));
 
-    const flatTargetResults = scanResults.flat();
+    const flatTargetResults = [...scanResults.flat(), ...targetRbacFindings];
 
     if (loadedDeclarativeTemplates.length > 0 && typeof runDeclarativeTemplateFn === 'function') {
       for (const tpl of loadedDeclarativeTemplates) {
@@ -1065,6 +1027,35 @@ export async function runScanner(options = {}) {
 
   const nested = await Promise.all(targetTasks);
   nested.forEach(r => allResults.push(...r));
+
+  const rbacMatrix = allRbacMatrices.length === 1
+    ? allRbacMatrices[0]
+    : allRbacMatrices.length > 1
+      ? {
+          summary: allRbacMatrices.reduce(
+            (acc, m) => {
+              acc.totalEvaluated += m.summary?.totalEvaluated || 0;
+              acc.enforcedCount += m.summary?.enforcedCount || 0;
+              acc.unauthenticatedBflaCount += m.summary?.unauthenticatedBflaCount || 0;
+              acc.lowPrivilegeBflaCount += m.summary?.lowPrivilegeBflaCount || 0;
+              acc.skippedCount += m.summary?.skippedCount || 0;
+              if (m.summary?.status === 'VULNERABLE') acc.status = 'VULNERABLE';
+              return acc;
+            },
+            {
+              totalEvaluated: 0,
+              enforcedCount: 0,
+              unauthenticatedBflaCount: 0,
+              lowPrivilegeBflaCount: 0,
+              skippedCount: 0,
+              status: 'SAFE'
+            }
+          ),
+          menuMatrix: allDiscoveredMenus,
+          formMatrix: allDiscoveredForms,
+          findings: allRbacMatrices.flatMap(m => m.findings || [])
+        }
+      : null;
 
   // ── Summary & CVE Coverage ───────────────────────────────────────────────
   const risk       = calculateRisk(allResults);
@@ -1280,6 +1271,20 @@ export async function runScanner(options = {}) {
   if (!noHistory) {
     if (!historyMod) historyMod = await import('./core/history.js');
     historyFile = historyMod.saveHistory(validatedTargets, allResults, risk, stacks);
+    if (historyFile && (apiCommunication || runtimeSca || cveCoverage || allDiscoveredMenus.length || allDiscoveredForms.length || allDiscoveredPages.length)) {
+      try {
+        const histRaw = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+        if (apiCommunication) histRaw.apiCommunication = apiCommunication;
+        if (runtimeSca) histRaw.runtimeSca = runtimeSca;
+        if (cveCoverage) histRaw.cveCoverage = cveCoverage;
+        histRaw.discoveredMenus = allDiscoveredMenus;
+        histRaw.discoveredForms = allDiscoveredForms;
+        histRaw.discoveredPages = allDiscoveredPages;
+        histRaw.pagesCount = allDiscoveredPages.length;
+        if (rbacMatrix) histRaw.rbacMatrix = rbacMatrix;
+        fs.writeFileSync(historyFile, JSON.stringify(histRaw, null, 2));
+      } catch {}
+    }
     autoReports = saveAutoReports(validatedTargets, allResults, risk, stacks, reportExtra);
     log(`\n📁  History saved     → ${historyFile}`);
     log(`🌐  HTML report saved → ${autoReports.htmlPath}`);
@@ -1483,6 +1488,10 @@ export async function runScanner(options = {}) {
       historyFile,
       stacks,
       executiveResume,
+      discoveredMenus: allDiscoveredMenus,
+      discoveredForms: allDiscoveredForms,
+      discoveredPages: allDiscoveredPages,
+      ...(rbacMatrix ? { rbacMatrix } : {}),
       ...(bareIpProbeSummary && bareIpProbeSummary.size > 0
         ? { bareIpProbeSummary: Object.fromEntries(bareIpProbeSummary) }
         : {}),

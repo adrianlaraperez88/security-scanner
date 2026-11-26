@@ -332,6 +332,268 @@ export function extractCsrfTokens(htmlText = '', headers = {}) {
   };
 }
 
+const CUSTOM_AUTH_RESPONSE_HEADERS = new Set([
+  'authorization',
+  'x-auth-token',
+  'x-access-token',
+  'x-api-token',
+  'x-session-token',
+  'x-jwt-token',
+  'x-api-key'
+]);
+
+const JSON_TOKEN_FIELD_NAMES = [
+  'access_token',
+  'accessToken',
+  'token',
+  'jwt',
+  'id_token',
+  'idToken',
+  'refresh_token',
+  'refreshToken',
+  'api_token',
+  'apiToken',
+  'api_key',
+  'apiKey',
+  'auth_token',
+  'authToken',
+  'session_token',
+  'sessionToken'
+];
+
+const JSON_TOKEN_CONTAINERS = [
+  'data',
+  'result',
+  'authentication',
+  'auth',
+  'session',
+  'payload'
+];
+
+const WEB_STORAGE_BUILTINS = new Set([
+  'setItem',
+  'getItem',
+  'removeItem',
+  'clear',
+  'key',
+  'length'
+]);
+
+const WEB_STORAGE_TOKEN_KEY_RE = /token|jwt|auth|access|session|api[_-]?key|bearer/i;
+const URL_TOKEN_PARAM_RE = /^(?:access_token|id_token|token|jwt|auth_token|api_token|session_token)$/i;
+
+/**
+ * Safely inspects whether `token` is a 3-part JWT (`header.payload.signature`)
+ * and decodes its header/payload metadata without executing code.
+ *
+ * @param {string} token
+ * @returns {{
+ *   isJwt: boolean,
+ *   alg: string | null,
+ *   subject: string | null,
+ *   issuer: string | null,
+ *   expiresAt: string | null,
+ *   isExpired: boolean,
+ *   remainingSeconds: number | null
+ * }}
+ */
+export function inspectExtractedJwtMeta(token) {
+  const empty = {
+    isJwt: false,
+    alg: null,
+    subject: null,
+    issuer: null,
+    expiresAt: null,
+    isExpired: false,
+    remainingSeconds: null
+  };
+  if (typeof token !== 'string' || !token.trim()) return empty;
+  const clean = token.trim().replace(/^Bearer\s+/i, '').trim();
+  const parts = clean.split('.');
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return empty;
+  if (!parts.every(p => /^[A-Za-z0-9_-]+$/.test(p))) return empty;
+
+  try {
+    const headerJson = Buffer.from(parts[0], 'base64url').toString('utf8');
+    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const header = JSON.parse(headerJson);
+    const payload = JSON.parse(payloadJson);
+    if (!header || typeof header !== 'object' || Array.isArray(header)) return empty;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return empty;
+
+    const rawExp = payload.exp;
+    const hasExp = rawExp !== undefined && rawExp !== null && rawExp !== '' && Number.isFinite(Number(rawExp));
+    const expMs = hasExp ? Number(rawExp) * 1000 : null;
+    const rawSub = payload.sub ?? payload.user ?? payload.username ?? payload.email ?? null;
+    const subject = rawSub !== null && rawSub !== undefined && String(rawSub).trim()
+      ? String(rawSub).trim()
+      : null;
+
+    return {
+      isJwt: true,
+      alg: typeof header.alg === 'string' && header.alg.trim() ? header.alg.trim() : null,
+      subject,
+      issuer: typeof payload.iss === 'string' && payload.iss.trim() ? payload.iss.trim() : null,
+      expiresAt: expMs !== null ? new Date(expMs).toISOString() : null,
+      isExpired: expMs !== null ? Date.now() >= expMs : false,
+      remainingSeconds: expMs !== null ? Math.max(0, Math.floor((expMs - Date.now()) / 1000)) : null
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * Harvests API tokens, custom auth response headers, `localStorage` / `sessionStorage` assignments,
+ * and URL query/fragment tokens from an HTTP response.
+ *
+ * @param {string} [text='']
+ * @param {Record<string, any>} [headers={}]
+ * @param {string} [responseUrl='']
+ * @returns {{
+ *   primaryToken: string | null,
+ *   extractedTokens: Array<{ source: string, key: string, value: string }>,
+ *   localStorageItems: Record<string, string>,
+ *   sessionStorageItems: Record<string, string>,
+ *   jwtMeta: object | null
+ * }}
+ */
+export function extractWebStorageAndTokensFromResponse(text = '', headers = {}, responseUrl = '') {
+  const safeText = String(text || '').slice(0, MAX_INSPECT_HTML_BYTES);
+  const extractedTokens = [];
+  const seenTokenKeys = new Set();
+  const localStorageItems = Object.create(null);
+  const sessionStorageItems = Object.create(null);
+
+  const addExtractedToken = (source, key, rawVal) => {
+    const cleanKey = String(key || '').trim();
+    if (!cleanKey || FORBIDDEN_KEYS.has(cleanKey) || FORBIDDEN_KEYS.has(cleanKey.toLowerCase())) return;
+    let val = typeof rawVal === 'string' ? rawVal.trim() : '';
+    if (!val || val === '[REDACTED]' || val === '[SECRET]' || val === '[CAPTURED]' || /[\r\n]/.test(val)) return;
+    if ((source === 'header' || /^Bearer\s+\S+/i.test(val)) && /^Bearer\s+/i.test(val)) {
+      val = val.replace(/^Bearer\s+/i, '').trim();
+    }
+    if (!val) return;
+    const dedup = `${source}::${cleanKey}::${val}`;
+    if (seenTokenKeys.has(dedup)) return;
+    seenTokenKeys.add(dedup);
+    extractedTokens.push({ source, key: cleanKey, value: val });
+  };
+
+  // 1) Custom Auth Response Headers
+  if (headers && typeof headers === 'object') {
+    for (const [rawK, rawV] of iterateHeaders(headers)) {
+      const lowerK = String(rawK || '').trim().toLowerCase();
+      if (!CUSTOM_AUTH_RESPONSE_HEADERS.has(lowerK)) continue;
+      const valStr = Array.isArray(rawV) ? rawV.join(', ').trim() : String(rawV ?? '').trim();
+      if (!valStr || /[\r\n]/.test(valStr)) continue;
+      if (lowerK === 'authorization') {
+        if (/^Bearer\s+\S+/i.test(valStr)) {
+          addExtractedToken('header', rawK, valStr.replace(/^Bearer\s+/i, '').trim());
+        }
+      } else {
+        addExtractedToken('header', rawK, valStr);
+      }
+    }
+  }
+
+  // 2) JSON Body Token Extraction
+  const trimmedText = safeText.trim();
+  if (trimmedText.startsWith('{')) {
+    try {
+      const json = JSON.parse(trimmedText);
+      if (json && typeof json === 'object' && !Array.isArray(json)) {
+        for (const fieldName of JSON_TOKEN_FIELD_NAMES) {
+          if (Object.hasOwn(json, fieldName) && typeof json[fieldName] === 'string' && json[fieldName].trim()) {
+            addExtractedToken('json', fieldName, json[fieldName]);
+          }
+        }
+        for (const containerName of JSON_TOKEN_CONTAINERS) {
+          const sub = Object.hasOwn(json, containerName) ? json[containerName] : null;
+          if (!sub || typeof sub !== 'object' || Array.isArray(sub)) continue;
+          for (const fieldName of JSON_TOKEN_FIELD_NAMES) {
+            if (Object.hasOwn(sub, fieldName) && typeof sub[fieldName] === 'string' && sub[fieldName].trim()) {
+              addExtractedToken('json', `${containerName}.${fieldName}`, sub[fieldName]);
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-JSON or partial body
+    }
+  }
+
+  // 3) Web Storage (localStorage / sessionStorage) Extraction
+  const recordStorageItem = (storageType, rawKey, rawVal) => {
+    const key = String(rawKey || '').trim();
+    const val = typeof rawVal === 'string' ? rawVal : '';
+    if (!key || FORBIDDEN_KEYS.has(key) || FORBIDDEN_KEYS.has(key.toLowerCase())) return;
+    if (!val || /[\r\n]/.test(val)) return;
+    const isLocal = String(storageType) === 'localStorage';
+    const targetObj = isLocal ? localStorageItems : sessionStorageItems;
+    targetObj[key] = val;
+    if (WEB_STORAGE_TOKEN_KEY_RE.test(key) || inspectExtractedJwtMeta(val).isJwt) {
+      addExtractedToken(isLocal ? 'local_storage' : 'session_storage', key, val);
+    }
+  };
+
+  const setItemRe = /(?:window\.)?(localStorage|sessionStorage)\.setItem\(\s*['"]([^'"]{1,80})['"]\s*,\s*['"]([^'"]{1,4096})['"]\s*\)/g;
+  let sm;
+  while ((sm = setItemRe.exec(safeText)) !== null) {
+    recordStorageItem(sm[1], sm[2], sm[3]);
+  }
+
+  const bracketRe = /(?:window\.)?(localStorage|sessionStorage)\[\s*['"]([^'"]{1,80})['"]\s*\]\s*=\s*['"]([^'"]{1,4096})['"]/g;
+  while ((sm = bracketRe.exec(safeText)) !== null) {
+    recordStorageItem(sm[1], sm[2], sm[3]);
+  }
+
+  const dotPropRe = /(?:window\.)?(localStorage|sessionStorage)\.([a-zA-Z0-9_$]{1,80})\s*=\s*['"]([^'"]{1,4096})['"]/g;
+  while ((sm = dotPropRe.exec(safeText)) !== null) {
+    if (WEB_STORAGE_BUILTINS.has(sm[2])) continue;
+    recordStorageItem(sm[1], sm[2], sm[3]);
+  }
+
+  // 4) URL Fragment / Query Token Extraction
+  const urlStr = typeof responseUrl === 'string' ? responseUrl.trim().slice(0, 4096) : '';
+  if (urlStr && (urlStr.includes('?') || urlStr.includes('#'))) {
+    const inspectParamsStr = (paramStr) => {
+      if (!paramStr) return;
+      try {
+        const sp = new URLSearchParams(paramStr.replace(/^[?#]+/, ''));
+        for (const [k, v] of sp.entries()) {
+          if (URL_TOKEN_PARAM_RE.test(k) && v && v.trim()) {
+            addExtractedToken('url', k, v.trim());
+          }
+        }
+      } catch {}
+    };
+    const hashIdx = urlStr.indexOf('#');
+    if (hashIdx !== -1) {
+      inspectParamsStr(urlStr.slice(hashIdx + 1));
+    }
+    const qIdx = urlStr.indexOf('?');
+    if (qIdx !== -1) {
+      const qEnd = hashIdx !== -1 && hashIdx > qIdx ? hashIdx : urlStr.length;
+      inspectParamsStr(urlStr.slice(qIdx + 1, qEnd));
+    }
+  }
+
+  const primaryEntry =
+    extractedTokens.find(t => !/refresh/i.test(t.key)) ||
+    extractedTokens[0] ||
+    null;
+  const primaryToken = primaryEntry ? primaryEntry.value : null;
+
+  return {
+    primaryToken,
+    extractedTokens,
+    localStorageItems,
+    sessionStorageItems,
+    jwtMeta: primaryToken ? inspectExtractedJwtMeta(primaryToken) : null
+  };
+}
+
 function decodeBasicHtmlEntities(str = '') {
   return String(str)
     .replace(/&amp;/gi, '&')
@@ -1643,7 +1905,9 @@ function normalizeSequenceAction(raw = {}, index = 0) {
     };
   } else if (type === 'extract_token') {
     const rawSource = String(raw.source || 'json').trim().toLowerCase();
-    const source = ['json', 'header', 'cookie', 'csrf'].includes(rawSource) ? rawSource : 'json';
+    const source = ['json', 'header', 'cookie', 'csrf', 'local_storage', 'session_storage'].includes(rawSource)
+      ? rawSource
+      : 'json';
     const key = String(raw.key || '').trim();
     const tokenJsonPath = String(raw.tokenJsonPath || (source === 'json' ? key : '') || '').trim();
     normalized = {
@@ -2102,6 +2366,9 @@ export class AuthSessionManager {
     }
 
     this.cookies = new Map(); // cookieName -> cookieValue
+    this.localStorageItems = new Map(); // storageKey -> storageValue
+    this.sessionStorageItems = new Map(); // storageKey -> storageValue
+    this.extractedTokens = []; // Array<{ source, key, value }>
     this.bearerToken = null;
     this.csrfHeaderName = null;
     this.csrfHeaderValue = null;
@@ -2165,6 +2432,33 @@ export class AuthSessionManager {
       }
     }
 
+    const hydrateStorageMap = (srcObj, dstMap) => {
+      if (!srcObj || typeof srcObj !== 'object') return;
+      const entries = srcObj instanceof Map ? Array.from(srcObj.entries()) : Object.entries(srcObj);
+      for (const [k, v] of entries) {
+        if (typeof k !== 'string' || !k.trim() || FORBIDDEN_KEYS.has(k) || FORBIDDEN_KEYS.has(k.toLowerCase())) continue;
+        if (typeof v === 'string' && v && v !== '[CAPTURED]' && v !== '[REDACTED]' && v !== '[SECRET]' && !/[\r\n]/.test(v)) {
+          dstMap.set(k.trim(), v);
+        }
+      }
+    };
+    hydrateStorageMap(data.localStorageItems || data.authArtifacts?.localStorageItems, mgr.localStorageItems);
+    hydrateStorageMap(data.sessionStorageItems || data.authArtifacts?.sessionStorageItems, mgr.sessionStorageItems);
+
+    if (Array.isArray(data.extractedTokens)) {
+      for (const item of data.extractedTokens) {
+        if (item && typeof item.source === 'string' && typeof item.key === 'string' && typeof item.value === 'string') {
+          if (!FORBIDDEN_KEYS.has(item.key) && item.value !== '[CAPTURED]' && !/[\r\n]/.test(item.value)) {
+            mgr.extractedTokens.push({
+              source: item.source,
+              key: item.key,
+              value: item.value
+            });
+          }
+        }
+      }
+    }
+
     if (typeof data.bearerToken === 'string' && data.bearerToken.trim() && !/[\r\n]/.test(data.bearerToken)) {
       mgr.bearerToken = data.bearerToken.trim();
     }
@@ -2176,6 +2470,9 @@ export class AuthSessionManager {
     }
     if (typeof data.csrfFormField === 'string' && data.csrfFormField.trim()) {
       mgr.csrfFormField = data.csrfFormField.trim();
+    }
+    if (typeof data.csrfFormValue === 'string' && data.csrfFormValue && !/[\r\n]/.test(data.csrfFormValue)) {
+      mgr.csrfFormValue = data.csrfFormValue;
     }
     if (Number.isFinite(Number(data.reauthCount)) && Number(data.reauthCount) >= 0) {
       mgr.reauthCount = Number(data.reauthCount);
@@ -2495,11 +2792,47 @@ export class AuthSessionManager {
   }
 
   /**
-   * Extracts CSRF tokens/cookies from a preflight GET response and updates session state.
+   * Harvests tokens and `localStorage` / `sessionStorage` assignments from a response
+   * into `this.localStorageItems`, `this.sessionStorageItems`, and `this.extractedTokens`.
+   * @private
+   */
+  _ingestWebStorageAndTokens(res, responseUrl = '') {
+    const effectiveUrl = responseUrl || (typeof res?.url === 'string' ? res.url : '') || '';
+    const extracted = extractWebStorageAndTokensFromResponse(res?.text || '', res?.headers || {}, effectiveUrl);
+
+    for (const [k, v] of Object.entries(extracted.localStorageItems)) {
+      if (!FORBIDDEN_KEYS.has(k) && (this.localStorageItems.has(k) || this.localStorageItems.size < 50)) {
+        this.localStorageItems.set(k, v);
+      }
+    }
+    for (const [k, v] of Object.entries(extracted.sessionStorageItems)) {
+      if (!FORBIDDEN_KEYS.has(k) && (this.sessionStorageItems.has(k) || this.sessionStorageItems.size < 50)) {
+        this.sessionStorageItems.set(k, v);
+      }
+    }
+
+    const existingTokenKeys = new Set(this.extractedTokens.map(t => `${t.source}::${t.key}::${t.value}`));
+    for (const tok of extracted.extractedTokens) {
+      const dedup = `${tok.source}::${tok.key}::${tok.value}`;
+      if (!existingTokenKeys.has(dedup) && this.extractedTokens.length < 50) {
+        existingTokenKeys.add(dedup);
+        this.extractedTokens.push({ ...tok });
+      }
+    }
+
+    return extracted;
+  }
+
+  /**
+   * Extracts CSRF tokens/cookies/storage from a preflight GET response and updates session state.
    * @private
    */
   _ingestPreflightResponse(res, pageUrl) {
     const cookiesHarvested = this.ingestResponseHeaders(res?.headers);
+    const extractedStorage = this._ingestWebStorageAndTokens(res, pageUrl);
+    if (!this.bearerToken && extractedStorage.primaryToken) {
+      this.bearerToken = extractedStorage.primaryToken;
+    }
     const csrf = extractCsrfTokens(res?.text || '', res?.headers);
     if (csrf.headerName && csrf.headerValue && !/[\r\n]/.test(csrf.headerValue)) {
       this.csrfHeaderName = csrf.headerName;
@@ -2519,52 +2852,33 @@ export class AuthSessionManager {
   }
 
   /**
-   * Extracts `Set-Cookie` and JSON Bearer JWT tokens from a login submission response.
+   * Extracts `Set-Cookie`, custom auth headers, JSON Bearer JWT tokens, and web storage tokens
+   * from a login submission response.
    * @private
    */
-  _ingestLoginResponse(loginRes) {
+  _ingestLoginResponse(loginRes, responseUrl = '') {
     const cookiesHarvested = this.ingestResponseHeaders(loginRes?.headers || {});
     let tokenExtracted = false;
 
-    const hdrs = loginRes?.headers;
-    if (hdrs && typeof hdrs === 'object') {
-      for (const [k, v] of iterateHeaders(hdrs)) {
-        if (String(k).toLowerCase() === 'authorization' && typeof v === 'string' && /^Bearer\s+\S+/i.test(v)) {
-          const tok = v.replace(/^Bearer\s+/i, '').trim();
-          if (tok && !/[\r\n]/.test(tok)) {
-            this.bearerToken = tok;
-            tokenExtracted = true;
-          }
-        }
-      }
-    }
+    const extracted = this._ingestWebStorageAndTokens(loginRes, responseUrl);
 
     const text = String(loginRes?.text || '').trim();
-    if (text.startsWith('{')) {
+    if (this.tokenJsonPath && text.startsWith('{')) {
       try {
         const json = JSON.parse(text);
-        const tokenCandidate =
-          (this.tokenJsonPath ? resolveJsonPath(json, this.tokenJsonPath) : null) ||
-          json.access_token ||
-          json.accessToken ||
-          json.token ||
-          json.jwt ||
-          json.id_token ||
-          json.data?.access_token ||
-          json.data?.accessToken ||
-          json.data?.token ||
-          json.data?.jwt ||
-          json.authentication?.token ||
-          json.result?.token ||
-          json.result?.access_token ||
-          null;
-        if (typeof tokenCandidate === 'string' && tokenCandidate.trim() && !/[\r\n]/.test(tokenCandidate)) {
-          this.bearerToken = tokenCandidate.trim();
+        const customCandidate = resolveJsonPath(json, this.tokenJsonPath);
+        if (typeof customCandidate === 'string' && customCandidate.trim() && !/[\r\n]/.test(customCandidate)) {
+          this.bearerToken = customCandidate.trim();
           tokenExtracted = true;
         }
       } catch {
         // non-JSON response
       }
+    }
+
+    if (!tokenExtracted && extracted.primaryToken) {
+      this.bearerToken = extracted.primaryToken;
+      tokenExtracted = true;
     }
 
     return { cookiesHarvested, tokenExtracted };
@@ -4058,6 +4372,28 @@ export class AuthSessionManager {
               extracted = true;
             }
           }
+        } else if (step.source === 'local_storage' || step.source === 'session_storage') {
+          const storeMap = step.source === 'local_storage' ? this.localStorageItems : this.sessionStorageItems;
+          const requestedKey = String(step.key || '').trim();
+          let candidateVal = '';
+          if (requestedKey && requestedKey !== 'auto' && storeMap.has(requestedKey)) {
+            candidateVal = storeMap.get(requestedKey) || '';
+          } else if (!requestedKey || requestedKey === 'auto') {
+            for (const [k, v] of storeMap.entries()) {
+              if (WEB_STORAGE_TOKEN_KEY_RE.test(k) && v) {
+                candidateVal = v;
+                break;
+              }
+            }
+            if (!candidateVal && storeMap.size > 0) {
+              candidateVal = storeMap.values().next().value || '';
+            }
+          }
+          if (candidateVal && !/[\r\n]/.test(candidateVal)) {
+            this.bearerToken = candidateVal.trim();
+            extracted = Boolean(this.bearerToken);
+            if (extracted) gotSubmitAuthArtifact = true;
+          }
         }
 
         const stepRecord = {
@@ -4342,6 +4678,7 @@ export class AuthSessionManager {
     }
 
     this.reauthCount += 1;
+    const summarySnapshot = this.getRecordedSession({ includeSecrets: false });
     return {
       authenticated,
       authMethod: 'login_sequence',
@@ -4353,6 +4690,14 @@ export class AuthSessionManager {
       cookieCount: this.cookies.size,
       cookieNames: Array.from(this.cookies.keys()),
       hasBearerToken: Boolean(this.bearerToken),
+      bearerTokenPreview: summarySnapshot.bearerTokenPreview,
+      jwtMeta: summarySnapshot.jwtMeta,
+      localStorageKeys: summarySnapshot.localStorageKeys,
+      sessionStorageKeys: summarySnapshot.sessionStorageKeys,
+      localStorageItems: summarySnapshot.localStorageItems,
+      sessionStorageItems: summarySnapshot.sessionStorageItems,
+      extractedTokenSources: summarySnapshot.extractedTokenSources,
+      authArtifacts: summarySnapshot.authArtifacts,
       csrfHeaderName: this.csrfHeaderName,
       reauthCount: this.reauthCount,
       stepsExecuted: sequenceStepResults.length,
@@ -4627,6 +4972,7 @@ export class AuthSessionManager {
     }
 
     this.reauthCount += 1;
+    const summarySnapshot = this.getRecordedSession({ includeSecrets: false });
     return {
       authenticated,
       status: loginStatus,
@@ -4637,6 +4983,14 @@ export class AuthSessionManager {
       cookieCount: this.cookies.size,
       cookieNames: Array.from(this.cookies.keys()),
       hasBearerToken: Boolean(this.bearerToken),
+      bearerTokenPreview: summarySnapshot.bearerTokenPreview,
+      jwtMeta: summarySnapshot.jwtMeta,
+      localStorageKeys: summarySnapshot.localStorageKeys,
+      sessionStorageKeys: summarySnapshot.sessionStorageKeys,
+      localStorageItems: summarySnapshot.localStorageItems,
+      sessionStorageItems: summarySnapshot.sessionStorageItems,
+      extractedTokenSources: summarySnapshot.extractedTokenSources,
+      authArtifacts: summarySnapshot.authArtifacts,
       csrfHeaderName: this.csrfHeaderName,
       reauthCount: this.reauthCount
     };
@@ -4660,6 +5014,57 @@ export class AuthSessionManager {
       : null;
 
     const hasSequence = Boolean(this.loginSequence && Array.isArray(this.loginSequence.actions) && this.loginSequence.actions.length > 0);
+    const jwtMeta = this.bearerToken ? inspectExtractedJwtMeta(this.bearerToken) : null;
+    const localStorageKeys = Array.from(this.localStorageItems.keys());
+    const sessionStorageKeys = Array.from(this.sessionStorageItems.keys());
+    const localStorageItems = includeSecrets
+      ? Object.fromEntries(this.localStorageItems.entries())
+      : Object.fromEntries(localStorageKeys.map(k => [k, '[CAPTURED]']));
+    const sessionStorageItems = includeSecrets
+      ? Object.fromEntries(this.sessionStorageItems.entries())
+      : Object.fromEntries(sessionStorageKeys.map(k => [k, '[CAPTURED]']));
+    const extractedTokenSources = this.extractedTokens.map(t => ({
+      source: t.source,
+      key: t.key,
+      preview: t.value && t.value.length > 10 ? `${t.value.slice(0, 10)}...` : '[CAPTURED]'
+    }));
+
+    const authArtifacts = {
+      hasToken: Boolean(this.bearerToken),
+      hasCookies: this.cookies.size > 0,
+      hasLocalStorage: this.localStorageItems.size > 0 || this.sessionStorageItems.size > 0,
+      bearerTokenPreview,
+      ...(includeSecrets && this.bearerToken
+        ? {
+            bearerToken: this.bearerToken,
+            authorizationHeader: this.bearerToken.startsWith('Bearer ')
+              ? this.bearerToken
+              : `Bearer ${this.bearerToken}`
+          }
+        : {}),
+      cookieNames: Array.from(this.cookies.keys()),
+      ...(includeSecrets && this.cookies.size > 0
+        ? {
+            cookieHeader: Array.from(this.cookies.entries())
+              .map(([k, v]) => `${k}=${v}`)
+              .join('; '),
+            cookies: Object.fromEntries(this.cookies.entries())
+          }
+        : {}),
+      csrfHeaderName: this.csrfHeaderName,
+      ...(includeSecrets && this.csrfHeaderValue ? { csrfHeaderValue: this.csrfHeaderValue } : {}),
+      csrfFormField: this.csrfFormField,
+      ...(includeSecrets && this.csrfFormValue ? { csrfFormValue: this.csrfFormValue } : {}),
+      localStorageKeys,
+      sessionStorageKeys,
+      ...(includeSecrets
+        ? {
+            localStorageItems: Object.fromEntries(this.localStorageItems.entries()),
+            sessionStorageItems: Object.fromEntries(this.sessionStorageItems.entries())
+          }
+        : {}),
+      jwtMeta
+    };
 
     return {
       sessionId: this.sessionId,
@@ -4681,9 +5086,18 @@ export class AuthSessionManager {
       hasBearerToken: Boolean(this.bearerToken),
       bearerTokenPreview,
       ...(includeSecrets && this.bearerToken ? { bearerToken: this.bearerToken } : {}),
+      jwtMeta,
+      localStorageKeys,
+      sessionStorageKeys,
+      localStorageItems,
+      sessionStorageItems,
+      extractedTokenSources,
+      ...(includeSecrets ? { extractedTokens: this.extractedTokens.map(t => ({ ...t })) } : {}),
+      authArtifacts,
       csrfHeaderName: this.csrfHeaderName,
       ...(includeSecrets && this.csrfHeaderValue ? { csrfHeaderValue: this.csrfHeaderValue } : {}),
       csrfFormField: this.csrfFormField,
+      ...(includeSecrets && this.csrfFormValue ? { csrfFormValue: this.csrfFormValue } : {}),
       reauthCount: this.reauthCount,
       authMethod: hasSequence ? 'login_sequence' : 'macro',
       loginSequence: this.loginSequence ? exportLsrSequence(this.loginSequence, { includeSecrets }) : null,
