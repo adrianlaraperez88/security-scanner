@@ -185,9 +185,44 @@ export const PROFILES = {
       'http-redirect',
       'rate-limit',
       'symfony-checks',
+      'yii-checks',
       'codeigniter-checks',
       'drupal-checks',
       'magento-checks',
+    ]
+  },
+
+  yii: {
+    description: 'Yii 1.x & Yii 2.x framework security audit — Gii, Debug toolbar, CVE-2024-58136 & config exposure',
+    checks: [
+      'ssl-tls',
+      'yii-checks',
+      'php-version',
+      'phpunit-rce',
+      'php-backup',
+      'php-config',
+      'php-lfi',
+      'php-errors',
+      'php-info',
+      'php-cgi-exposure',
+      'php-session-upload-progress',
+      'cve-2024-4577',
+      'cve-php-ecosystem',
+      'env',
+      'sensitive-files',
+      'security-headers',
+      'cors',
+      'cookie-security',
+      'clickjacking',
+      'sql-errors',
+      'sqli',
+      'xss',
+      'admin-panels',
+      'robots-sitemap',
+      'server-disclosure',
+      'http-redirect',
+      'rate-limit',
+      'runtime-sca',
     ]
   },
 
@@ -523,6 +558,7 @@ export const PROFILES = {
       'laravel-telescope',
       'ignition',
       'symfony-checks',
+      'yii-checks',
       'php-version',
       'php-config',
       'php-backup',
@@ -574,13 +610,22 @@ export const DEVICE_PROFILE_ALIASES = new Set([
   'lan'
 ]);
 
+export const YII_PROFILE_ALIASES = new Set([
+  'yii1',
+  'yii2',
+  'yii-1',
+  'yii-2'
+]);
+
 /**
  * Returns the array of allowed check names for a profile,
  * or null if all checks should run (full profile).
  */
 export function getProfileChecks(profileName) {
   const norm = profileName?.toLowerCase();
-  const resolvedName = DEVICE_PROFILE_ALIASES.has(norm) ? 'device' : norm;
+  const resolvedName = DEVICE_PROFILE_ALIASES.has(norm)
+    ? 'device'
+    : (YII_PROFILE_ALIASES.has(norm) ? 'yii' : norm);
   const profile = PROFILES[resolvedName];
   if (!profile) {
     console.warn(`⚠️  Unknown profile "${profileName}" — defaulting to full`);

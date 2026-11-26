@@ -4,22 +4,22 @@ import { getScanners } from '../../core/registry.js';
 import { PROFILES, listProfiles, validateProfiles } from '../../core/profiles.js';
 import { PRESETS, CHECK_CATALOG, CWE_OWASP_MAP, getCheckInfo, getCheckMeta } from '../../core/catalog.js';
 
-test('profiles: validateProfiles() passes with 0 errors and 0 unprofiled checks across all 84 scanners', async () => {
+test('profiles: validateProfiles() passes with 0 errors and 0 unprofiled checks across all 85 scanners', async () => {
   const scanners = await getScanners();
-  assert.equal(scanners.length, 84);
+  assert.equal(scanners.length, 85);
 
   const report = validateProfiles(scanners);
   assert.equal(report.valid, true, `Expected valid profiles, got errors: ${report.errors.join('; ')}`);
   assert.deepEqual(report.errors, []);
   assert.deepEqual(report.unprofiledChecks, []);
-  assert.equal(report.stats.totalProfiles, 21);
-  assert.equal(report.stats.explicitProfiles, 19);
-  assert.equal(report.stats.totalKnownChecks, 84);
+  assert.equal(report.stats.totalProfiles, 22);
+  assert.equal(report.stats.explicitProfiles, 20);
+  assert.equal(report.stats.totalKnownChecks, 85);
 
   // Also verify no-args validateProfiles() reads checks/ synchronously
   const syncReport = validateProfiles();
   assert.equal(syncReport.valid, true);
-  assert.equal(syncReport.stats.totalKnownChecks, 84);
+  assert.equal(syncReport.stats.totalKnownChecks, 85);
 
   // Verify listProfiles() includes all 20 profiles including apache and ops
   const listed = listProfiles();
@@ -233,6 +233,8 @@ test('catalog: getCheckInfo(res.name) resolves 100% of all 68 check return name 
     ['system-health', 'system-health'],
     ['system-health', 'system & operational health exposure'],
     ['symfony-checks', 'symfony misconfiguration'],
+    ['yii-checks', 'yii-checks'],
+    ['yii-checks', 'yii misconfiguration'],
     ['wp-checks', 'wordpress checks'],
     ['xss', 'reflected xss']
   ];
@@ -267,9 +269,9 @@ test('catalog: resolveCweOwaspFallback uses generic CWE-94 with cveIds: [] for u
   assert.deepEqual(getCheckInfo('cve-2024-4577').cveIds, ['CVE-2024-4577']);
 });
 
-test('registry: getScanners() returns 84 deterministically sorted scanners with normalized tags and meta', async () => {
+test('registry: getScanners() returns 85 deterministically sorted scanners with normalized tags and meta', async () => {
   const scanners = await getScanners();
-  assert.equal(scanners.length, 84);
+  assert.equal(scanners.length, 85);
 
   const names = scanners.map(s => s.name);
   const sorted = [...names].sort();

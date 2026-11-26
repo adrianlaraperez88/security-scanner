@@ -29,6 +29,32 @@ const SQL_ERRORS = [
   'unclosed quotation mark'
 ];
 
+const FORBIDDEN_FORM_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function normalizeUrlForFormMatch(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl ?? '').trim());
+    const cleanPath = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+    return `${parsed.origin}${cleanPath}`;
+  } catch {
+    return '';
+  }
+}
+
+function getDefaultFormFieldValue(field) {
+  const existing = typeof field?.value === 'string' ? field.value.trim() : '';
+  if (existing) return existing;
+  const name = String(field?.name || '');
+  const type = String(field?.type || '').toLowerCase();
+  if (type === 'number' || /id|num|count|page|status|type/i.test(name)) {
+    return '1';
+  }
+  if (type === 'email') {
+    return 'test@example.com';
+  }
+  return 'test';
+}
+
 function getHeader(headers, name) {
   if (!headers || typeof headers !== 'object') return '';
   const targetLower = String(name).toLowerCase();
@@ -61,7 +87,32 @@ export class Fuzzer {
     const params = Array.from(url.searchParams.keys());
     const findings = [];
 
-    if (params.length === 0) {
+    const normTarget = normalizeUrlForFormMatch(url.href);
+    const rawForms = Array.isArray(options?.discoveredForms) ? options.discoveredForms : [];
+    const matchingPostForms = [];
+    const seenFormKeys = new Set();
+
+    for (const f of rawForms) {
+      if (!f || typeof f !== 'object') continue;
+      if (String(f.method || '').toUpperCase() !== 'POST') continue;
+      if (!Array.isArray(f.fields) || f.fields.length === 0) continue;
+      const normAction = normalizeUrlForFormMatch(f.actionUrl);
+      if (!normAction) continue;
+      const normPage = normalizeUrlForFormMatch(f.pageUrl);
+      if (normTarget && (normAction === normTarget || normPage === normTarget)) {
+        const fieldNames = f.fields
+          .map(field => (typeof field?.name === 'string' ? field.name.trim() : ''))
+          .filter(Boolean);
+        if (fieldNames.length === 0) continue;
+        const dedupKey = `${f.actionUrl}::${fieldNames.join(',')}`;
+        if (!seenFormKeys.has(dedupKey)) {
+          seenFormKeys.add(dedupKey);
+          matchingPostForms.push(f);
+        }
+      }
+    }
+
+    if (params.length === 0 && matchingPostForms.length === 0) {
       return {
         findings,
         attempted: 0,
@@ -82,7 +133,7 @@ export class Fuzzer {
     let lastError = null;
     let baselineMs = null;
 
-    if (signatureType === 'SQLI_TIME') {
+    if (params.length > 0 && signatureType === 'SQLI_TIME') {
       attempted += 1;
       const bStart = Date.now();
       try {
@@ -199,6 +250,159 @@ export class Fuzzer {
         if (isGovernanceBlockError(err)) {
           governanceError = err;
           break;
+        }
+      }
+    }
+
+    if (!governanceError && matchingPostForms.length > 0) {
+      for (const form of matchingPostForms.slice(0, 5)) {
+        if (governanceError) break;
+        const defaultFormParams = Object.create(null);
+        if (form.hiddenFields && typeof form.hiddenFields === 'object') {
+          for (const [k, v] of Object.entries(form.hiddenFields)) {
+            const key = String(k || '').trim();
+            if (!key || FORBIDDEN_FORM_KEYS.has(key)) continue;
+            defaultFormParams[key] = String(v ?? '');
+          }
+        }
+        for (const f of form.fields) {
+          const fName = typeof f?.name === 'string' ? f.name.trim() : '';
+          if (!fName || FORBIDDEN_FORM_KEYS.has(fName)) continue;
+          defaultFormParams[fName] = getDefaultFormFieldValue(f);
+        }
+
+        const defaultBodyStr = new URLSearchParams(
+          Object.entries(defaultFormParams).map(([k, v]) => [k, String(v ?? '')])
+        ).toString();
+
+        let formBaselineMs = baselineMs;
+        if (signatureType === 'SQLI_TIME') {
+          attempted += 1;
+          const bStart = Date.now();
+          try {
+            const bRes = await this.fetch(form.actionUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: defaultBodyStr
+            });
+            if (bRes?.isGovernanceBlock) {
+              const gErr = new Error(bRes.reason || bRes.error || 'Blocked by governance policy');
+              gErr.isGovernanceBlock = true;
+              governanceError = gErr;
+              lastError = gErr;
+              break;
+            }
+            formBaselineMs = Math.max(0, Date.now() - bStart);
+            if (baselineMs === null) baselineMs = formBaselineMs;
+            networkSuccess = true;
+          } catch (err) {
+            lastError = err;
+            if (isGovernanceBlockError(err)) {
+              governanceError = err;
+              break;
+            }
+          }
+        }
+
+        let postSqliErrorBaselineFetched = false;
+        let postSqliErrorBaselineRes = null;
+
+        for (const field of form.fields.slice(0, 10)) {
+          const fieldName = typeof field?.name === 'string' ? field.name.trim() : '';
+          if (!fieldName || FORBIDDEN_FORM_KEYS.has(fieldName)) continue;
+
+          const formParams = { ...defaultFormParams, [fieldName]: payload };
+          const bodyStr = new URLSearchParams(
+            Object.entries(formParams).map(([k, v]) => [k, String(v ?? '')])
+          ).toString();
+
+          attempted += 1;
+          const startTime = Date.now();
+          try {
+            const res = await this.fetch(form.actionUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: bodyStr
+            });
+            if (res?.isGovernanceBlock) {
+              const gErr = new Error(res.reason || res.error || 'Blocked by governance policy');
+              gErr.isGovernanceBlock = true;
+              governanceError = gErr;
+              lastError = gErr;
+              break;
+            }
+            networkSuccess = true;
+            const duration = Math.max(0, Date.now() - startTime);
+
+            if (this.isVulnerable(res, payload, signatureType, duration, { baselineMs: formBaselineMs, delayThresholdMs })) {
+              let isBaselineFalsePositive = false;
+              if (
+                signatureType === 'SQLI_ERROR' &&
+                Number(res?.status ?? 200) === 200 &&
+                bodyStr !== defaultBodyStr
+              ) {
+                if (!postSqliErrorBaselineFetched) {
+                  postSqliErrorBaselineFetched = true;
+                  try {
+                    const bRes = await this.fetch(form.actionUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: defaultBodyStr
+                    });
+                    if (bRes?.isGovernanceBlock) {
+                      const gErr = new Error(bRes.reason || bRes.error || 'Blocked by governance policy');
+                      gErr.isGovernanceBlock = true;
+                      governanceError = gErr;
+                      lastError = gErr;
+                      break;
+                    }
+                    postSqliErrorBaselineRes = bRes;
+                  } catch (bErr) {
+                    if (isGovernanceBlockError(bErr)) {
+                      governanceError = bErr;
+                      lastError = bErr;
+                      break;
+                    }
+                  }
+                }
+
+                if (
+                  postSqliErrorBaselineRes &&
+                  Number(postSqliErrorBaselineRes.status ?? 200) === 200 &&
+                  typeof postSqliErrorBaselineRes.text === 'string' &&
+                  typeof res.text === 'string'
+                ) {
+                  if (postSqliErrorBaselineRes.text === res.text) {
+                    isBaselineFalsePositive = true;
+                  } else {
+                    const lowProbe = res.text.toLowerCase();
+                    const lowBase = postSqliErrorBaselineRes.text.toLowerCase();
+                    const matchedInProbe = SQL_ERRORS.filter(sig => lowProbe.includes(sig));
+                    if (matchedInProbe.length > 0 && matchedInProbe.every(sig => lowBase.includes(sig))) {
+                      isBaselineFalsePositive = true;
+                    }
+                  }
+                }
+              }
+
+              if (!isBaselineFalsePositive) {
+                findings.push({
+                  parameter: fieldName,
+                  payload,
+                  type: signatureType,
+                  url: form.actionUrl,
+                  method: 'POST',
+                  ...(res?.trafficId !== undefined ? { trafficId: res.trafficId } : {})
+                });
+              }
+            }
+          } catch (err) {
+            lastError = err;
+            if (isGovernanceBlockError(err)) {
+              governanceError = err;
+              break;
+            }
+          }
         }
       }
     }

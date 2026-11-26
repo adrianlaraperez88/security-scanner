@@ -49,7 +49,8 @@ const state = {
   systemVariables: [],
   selectedLsrStepIndex: -1,
   lastInspectedPage: null,
-  lastLsrPlayResult: null
+  lastLsrPlayResult: null,
+  lsrDraftDismissed: false
 };
 
 function createDefaultLoginSequence() {
@@ -2792,9 +2793,166 @@ export function renderScanResults(resultData) {
     || null;
   renderRuntimeScaTable(runtimeSca);
 
+  renderCrawlInventorySection(resultData);
   renderResultsCveCoverageBanner(resultData.cveCoverage);
   renderPriorityActionPlan(vulns, suspicious);
   filterAndRenderFindings();
+}
+
+export function renderCrawlInventorySection(resultData) {
+  const card = document.getElementById('results-crawl-inventory-card');
+  if (!card) return;
+
+  const menus = Array.isArray(resultData?.discoveredMenus) ? resultData.discoveredMenus : [];
+  const forms = Array.isArray(resultData?.discoveredForms) ? resultData.discoveredForms : [];
+  const rawPages = Array.isArray(resultData?.discoveredPages) && resultData.discoveredPages.length > 0
+    ? resultData.discoveredPages
+    : Array.from(new Set((Array.isArray(resultData?.results) ? resultData.results : []).map(r => r?.target).filter(Boolean)));
+
+  if (menus.length === 0 && forms.length === 0 && rawPages.length <= 1) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  const menusCountEl = document.getElementById('results-menus-count');
+  const formsCountEl = document.getElementById('results-forms-count');
+  const summaryEl = document.getElementById('results-crawl-inventory-summary');
+  const kpisEl = document.getElementById('results-crawl-inventory-kpis');
+  const groupsSummaryEl = document.getElementById('results-menus-groups-summary');
+  const menusWrapEl = document.getElementById('results-menus-table-wrap');
+  const menusTbody = document.getElementById('results-menus-tbody');
+  const formsWrapEl = document.getElementById('results-forms-table-wrap');
+  const formsTbody = document.getElementById('results-forms-tbody');
+  const crawledCountEl = document.getElementById('results-crawled-urls-count');
+  const crawledListEl = document.getElementById('results-crawled-urls-list');
+
+  if (menusCountEl) menusCountEl.textContent = String(menus.length);
+  if (formsCountEl) formsCountEl.textContent = String(forms.length);
+  if (crawledCountEl) crawledCountEl.textContent = String(rawPages.length);
+
+  // Group menus by parentMenu
+  const groupCounts = new Map();
+  for (const m of menus) {
+    const g = String(m?.parentMenu || 'Main Menu').trim();
+    groupCounts.set(g, (groupCounts.get(g) || 0) + 1);
+  }
+
+  if (summaryEl) {
+    summaryEl.textContent = `Discovered ${menus.length} menu/submenu item(s) across ${groupCounts.size} navigation group(s), tested ${forms.length} form(s), and audited ${rawPages.length} unique URL(s).`;
+  }
+
+  const crawledMenusCount = menus.filter(m => m?.auditStatus === 'crawled' || m?.kind === 'submenu' || m?.kind === 'menu' || m?.kind === 'spa_route').length;
+  if (kpisEl) {
+    kpisEl.innerHTML = `
+      <span class="ev-pill">Menu Groups: <strong>${groupCounts.size}</strong></span>
+      <span class="ev-pill">Submenus &amp; Views: <strong>${menus.length}</strong></span>
+      <span class="ev-pill">Forms Tested: <strong>${forms.length}</strong></span>
+      <span class="ev-pill">Pages Audited: <strong>${rawPages.length}</strong></span>
+    `;
+  }
+
+  if (groupsSummaryEl) {
+    if (groupCounts.size > 0) {
+      groupsSummaryEl.innerHTML = Array.from(groupCounts.entries())
+        .map(([gName, count]) => `<span class="ev-pill">📂 <strong>${escapeHtml(gName)}</strong> (${count} item${count === 1 ? '' : 's'})</span>`)
+        .join(' ');
+      groupsSummaryEl.classList.remove('hidden');
+    } else {
+      groupsSummaryEl.innerHTML = '';
+      groupsSummaryEl.classList.add('hidden');
+    }
+  }
+
+  if (menusWrapEl && menusTbody) {
+    if (menus.length > 0) {
+      menusWrapEl.classList.remove('hidden');
+      menusTbody.innerHTML = menus.map(m => {
+        const parentMenu = escapeHtml(m.parentMenu || 'Main Menu');
+        const label = escapeHtml(m.label || 'Menu Item');
+        const kind = String(m.kind || 'menu');
+        const kindBadge = kind === 'submenu'
+          ? '<span class="ev-pill">Submenu</span>'
+          : kind === 'spa_route'
+            ? '<span class="ev-pill">SPA View</span>'
+            : kind === 'external_app'
+              ? '<span class="ev-pill">External App</span>'
+              : kind === 'logout'
+                ? '<span class="ev-pill">Logout Link</span>'
+                : '<span class="ev-pill">Top Menu</span>';
+        const ctrlText = m.controller ? ` · <code>${escapeHtml(m.controller)}</code>` : '';
+        const triggerText = m.trigger ? `<div class="form-hint"><code>${escapeHtml(m.trigger)}</code>${ctrlText}</div>` : ctrlText;
+        const urlHtml = m.url ? `<code>${escapeHtml(m.url)}</code>` : '<span class="form-hint">Client-side action</span>';
+
+        const status = m.auditStatus || (kind === 'logout' ? 'logout_protected' : kind === 'external_app' ? 'external_app' : 'crawled');
+        const statusBadge = status === 'logout_protected'
+          ? '<span class="finding-status-badge safe" title="Skipped to preserve authenticated session">🛡️ Protected (Logout Guard)</span>'
+          : status === 'external_app'
+            ? '<span class="ev-pill" title="Points to a different application outside target subpath">↗ External App Link</span>'
+            : '<span class="finding-status-badge safe">✓ Crawled &amp; Audited</span>';
+
+        return `
+          <tr>
+            <td><strong>${parentMenu}</strong></td>
+            <td><strong>${label}</strong></td>
+            <td>${kindBadge}${triggerText}</td>
+            <td>${urlHtml}</td>
+            <td>${statusBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      menusTbody.innerHTML = '<tr><td colspan="5" class="empty-muted">No navigation menu or dropdown submenu blocks detected on crawled pages.</td></tr>';
+    }
+  }
+
+  if (formsWrapEl && formsTbody) {
+    if (forms.length > 0) {
+      formsWrapEl.classList.remove('hidden');
+      formsTbody.innerHTML = forms.map(f => {
+        const formName = escapeHtml(f.formName || f.formId || 'HTML Form');
+        const method = escapeHtml(String(f.method || 'GET').toUpperCase());
+        const methodBadge = method === 'POST'
+          ? '<span class="finding-status-badge suspicious">POST</span>'
+          : '<span class="ev-pill">GET</span>';
+        const typeLabel = f.formType === 'spa_view_controls' ? '<div class="form-hint">SPA View Controls</div>' : '';
+        const pageUrl = escapeHtml(f.pageUrl || '');
+        const actionUrl = escapeHtml(f.actionUrl || f.pageUrl || '');
+        const fields = Array.isArray(f.fields) ? f.fields : [];
+        const fieldsHtml = fields.length > 0
+          ? fields.map(fld => `<span class="ev-pill"><code>${escapeHtml(fld.name)}</code> <small>(${escapeHtml(fld.type || 'text')})</small></span>`).join(' ')
+          : '<span class="form-hint">No editable inputs</span>';
+        const csrfHtml = f.csrfField
+          ? `<span class="finding-status-badge safe">🔒 ${escapeHtml(f.csrfField)}</span>`
+          : '<span class="form-hint">None</span>';
+        const checks = Array.isArray(f.checksRun) && f.checksRun.length > 0
+          ? f.checksRun
+          : ['sqli', 'xss', 'open-redirect', 'php-lfi'];
+        const checksHtml = checks.map(c => `<span class="enrich-badge enrich-cwe">${escapeHtml(c)}</span>`).join(' ');
+
+        return `
+          <tr>
+            <td><strong>${formName}</strong>${typeLabel}</td>
+            <td>${methodBadge}</td>
+            <td>
+              <div><small>Page:</small> <code>${pageUrl}</code></div>
+              ${actionUrl !== pageUrl ? `<div><small>Action:</small> <code>${actionUrl}</code></div>` : ''}
+            </td>
+            <td>${fieldsHtml}</td>
+            <td>${csrfHtml}</td>
+            <td>${checksHtml}</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      formsTbody.innerHTML = '<tr><td colspan="6" class="empty-muted">No interactive HTML or SPA forms found on crawled pages.</td></tr>';
+    }
+  }
+
+  if (crawledListEl) {
+    crawledListEl.innerHTML = rawPages.map(u => `<div class="evidence-file-row"><code>${escapeHtml(u)}</code></div>`).join('');
+  }
+
+  card.classList.remove('hidden');
 }
 
 function buildCompactSummaryPayload(sr) {
@@ -4845,10 +5003,39 @@ function renderLsrSecretsChips() {
   `).join('');
 }
 
+function getDisplayedSequenceCards() {
+  const saved = Array.isArray(state.savedSequences) ? state.savedSequences : [];
+  const active = state.loginSequence;
+  const activeHasContent = Boolean(
+    active &&
+    ((Array.isArray(active.actions) && active.actions.length > 0) ||
+     (Array.isArray(active.secrets) && active.secrets.length > 0) ||
+     active.otpConfig?.secret ||
+     active.targetUrl)
+  );
+  if (saved.length > 0) {
+    const activeInSaved = Boolean(
+      active &&
+      saved.some(s =>
+        (s.sequenceId && active.sequenceId && s.sequenceId === active.sequenceId) ||
+        (!active.sequenceId && s.name === active.name)
+      )
+    );
+    if (activeHasContent && !activeInSaved && !state.lsrDraftDismissed) {
+      return [active, ...saved];
+    }
+    return saved;
+  }
+  if (state.lsrDraftDismissed) {
+    return [];
+  }
+  return active ? [active] : [];
+}
+
 function renderLsrReuseSelect() {
   const sel = document.getElementById('lsr-reuse-select');
   if (!sel) return;
-  const saved = state.savedSequences || [];
+  const saved = getDisplayedSequenceCards();
   const activeId = state.loginSequence?.sequenceId || '';
   const activeName = state.loginSequence?.name || '';
 
@@ -4866,12 +5053,13 @@ function renderLsrReuseSelect() {
 function getSelectedReuseSequence() {
   const sel = document.getElementById('lsr-reuse-select');
   const val = sel?.value || '';
-  if (!val) return null;
+  const cards = getDisplayedSequenceCards();
+  if (!val) return cards[0] || null;
   if (val.startsWith('__idx_')) {
     const idx = parseInt(val.slice(6), 10);
-    return Number.isInteger(idx) ? (state.savedSequences[idx] || null) : null;
+    return Number.isInteger(idx) ? (cards[idx] || null) : null;
   }
-  return (state.savedSequences || []).find(s => s.sequenceId === val) || null;
+  return cards.find(s => s.sequenceId === val) || (state.savedSequences || []).find(s => s.sequenceId === val) || null;
 }
 
 function renderLsrSequenceCards() {
@@ -4879,19 +5067,22 @@ function renderLsrSequenceCards() {
   const listEl = document.getElementById('lsr-sequence-cards-list');
   if (!listEl) return;
 
-  const cards = state.savedSequences.length > 0
-    ? state.savedSequences
-    : [state.loginSequence];
+  const cards = getDisplayedSequenceCards();
+  if (cards.length === 0) {
+    listEl.innerHTML = '<div class="empty-muted">No login sequences configured. Click <strong>🎬 New sequence</strong> to record one or <strong>⚡ Load Working Example</strong> to load a ready-to-run 2FA sequence.</div>';
+    return;
+  }
 
   listEl.innerHTML = cards.map((seq, idx) => {
-    const isSaved = Boolean(seq.sequenceId && state.savedSequences.length > 0);
+    const isSaved = Boolean(seq.sequenceId && state.savedSequences.some(s => s.sequenceId === seq.sequenceId));
     const stepCount = Array.isArray(seq.actions) ? seq.actions.length : 0;
     const secretCount = Array.isArray(seq.secrets) ? seq.secrets.length : 0;
     const hasOtp = Boolean(seq.otpConfig?.enabled || seq.otpConfig?.secret);
     const updatedText = seq.updatedAt ? new Date(seq.updatedAt).toLocaleString() : 'Draft';
     const isActive = Boolean(
-      (seq.sequenceId && seq.sequenceId === state.loginSequence.sequenceId) ||
-      (!seq.sequenceId && !state.loginSequence.sequenceId && idx === 0)
+      !state.lsrDraftDismissed &&
+      ((seq.sequenceId && seq.sequenceId === state.loginSequence.sequenceId) ||
+       (!seq.sequenceId && !state.loginSequence.sequenceId && seq.name === state.loginSequence.name && idx === 0))
     );
 
     return `
@@ -5048,12 +5239,13 @@ function renderLsrActionsList() {
     }
 
     return `
-      <button type="button" class="lsr-action-item ${isSelected ? 'active' : ''} ${statusRowClass}" data-lsr-step-idx="${escapeHtml(idx)}">
+      <div class="lsr-action-item ${isSelected ? 'active' : ''} ${statusRowClass}" data-lsr-step-idx="${escapeHtml(idx)}" role="button" tabindex="0">
         <span class="lsr-step-num">${escapeHtml(idx + 1)}</span>
         <span class="lsr-step-icon">${icon}</span>
         <span class="lsr-step-label">${escapeHtml(label)}</span>
         ${statusBadgeHtml}
-      </button>
+        <button type="button" class="lsr-chip-remove" data-lsr-delete-step="${escapeHtml(idx)}" title="Delete Step ${escapeHtml(idx + 1)}" aria-label="Delete Step ${escapeHtml(idx + 1)}">✕</button>
+      </div>
     `;
   }).join('');
 }
@@ -5302,11 +5494,41 @@ function renderInspectedPageCanvas(data) {
   const sysVars = state.systemVariables || [];
 
   const csrfText = csrf.formField
-    ? `CSRF Field: ${csrf.formField}`
-    : (csrf.headerName ? `CSRF Header: ${csrf.headerName}` : 'No CSRF token detected');
+    ? `CSRF Auto-Handled: ${csrf.formField} (Dynamic per session)`
+    : (csrf.headerName ? `CSRF Header Auto-Handled: ${csrf.headerName}` : 'No CSRF token detected');
 
-  const inputsHtml = inputs.length > 0
-    ? inputs.map((inp, idx) => {
+  // Sort visible interactive inputs first, and place hidden inputs (like YII_CSRF_TOKEN) after with an Auto-Handled note
+  const indexedInputs = inputs.map((inp, idx) => ({ inp, idx }));
+  indexedInputs.sort((a, b) => {
+    const aHidden = a.inp.type === 'hidden' ? 1 : 0;
+    const bHidden = b.inp.type === 'hidden' ? 1 : 0;
+    return aHidden - bHidden;
+  });
+
+  const inputsHtml = indexedInputs.length > 0
+    ? indexedInputs.map(({ inp, idx }) => {
+        const isHidden = inp.type === 'hidden';
+        const isCsrfInput = Boolean(
+          (csrf.formField && (inp.name === csrf.formField || inp.id === csrf.formField)) ||
+          /csrf|xsrf|requestverificationtoken|authenticity_token/i.test(`${inp.name || ''} ${inp.id || ''}`)
+        );
+        if (isHidden) {
+          return `
+            <div class="lsr-inspect-field-card" data-lsr-input-card="${escapeHtml(idx)}">
+              <div class="lsr-inspect-field-head">
+                <div>
+                  <strong>${escapeHtml(inp.displayLabel || inp.name || inp.id || 'hidden')}</strong>
+                  <span class="badge">hidden</span>
+                  ${isCsrfInput ? '<span class="badge badge-primary">🛡️ Dynamic CSRF Token (Auto-Harvested)</span>' : '<span class="badge badge-outline">Auto-Included Hidden Field</span>'}
+                </div>
+              </div>
+              <div class="form-hint">
+                ✅ <strong>Handled automatically:</strong> You do <em>not</em> need to record a step for <code>${escapeHtml(inp.name || inp.id || 'hidden')}</code>. The scanner automatically extracts a fresh token on every <code>Navigate</code> step and submits it with the form.
+              </div>
+            </div>
+          `;
+        }
+
         let defaultBinding = '';
         if (inp.isPassword) {
           const matchingVar = sysVars.find(v => v.category === 'password' || /pass|pwd|secret/i.test(v.name));
@@ -5702,14 +5924,15 @@ function renderVisualPlaySnapshot(playRes, selectedStepIdx = -1) {
     const st = rawSteps[i];
     if (!st) continue;
     if (st.type === 'change_input' || st.action === 'change_input' || st.type === 'fill_otp' || st.action === 'fill_otp') {
-      const key = String(st.fieldName || st.selector || '').replace(/^#/, '').trim().toLowerCase();
-      if (key) {
-        const seqAct = (state.loginSequence?.actions || [])[i];
-        const rawBinding = seqAct?.value && /^\{\{VAR:[^}]+\}\}$/i.test(seqAct.value)
-          ? (st.isSecret ? `•••••••• (${seqAct.value})` : (st.value && st.value !== '[REDACTED]' ? `${st.value} (${seqAct.value})` : seqAct.value))
-          : (st.type === 'fill_otp' ? '•••••• (TOTP)' : (st.isSecret ? '••••••••' : (st.value || seqAct?.value || '')));
-        filledMap.set(key, { stepNum: st.sequenceStep || st.step || i + 1, masked: rawBinding });
-      }
+      const selKey = String(st.selector || '').replace(/^#/, '').trim().toLowerCase();
+      const fieldKey = String(st.fieldName || '').replace(/^#/, '').trim().toLowerCase();
+      const seqAct = (state.loginSequence?.actions || [])[i];
+      const rawBinding = seqAct?.value && /^\{\{VAR:[^}]+\}\}$/i.test(seqAct.value)
+        ? (st.isSecret ? `•••••••• (${seqAct.value})` : (st.value && st.value !== '[REDACTED]' ? `${st.value} (${seqAct.value})` : seqAct.value))
+        : (st.type === 'fill_otp' || st.action === 'fill_otp' ? '•••••• (TOTP)' : (st.isSecret ? '••••••••' : (st.value || seqAct?.value || '')));
+      const entry = { stepNum: st.sequenceStep || st.step || i + 1, masked: rawBinding };
+      if (selKey) filledMap.set(selKey, entry);
+      if (fieldKey) filledMap.set(fieldKey, entry);
     }
     if (st.type === 'click_button' || st.action === 'click_button') {
       const key = String(st.selector || '').replace(/^#/, '').trim().toLowerCase();
@@ -5717,43 +5940,119 @@ function renderVisualPlaySnapshot(playRes, selectedStepIdx = -1) {
     }
   }
 
-  const displayInputs = snapInputs.length > 0
-    ? snapInputs
-    : rawSteps
-        .slice(0, activeIdx + 1)
-        .filter(st => st.type === 'change_input' || st.type === 'fill_otp')
-        .map(st => ({
-          label: st.fieldName || st.selector || 'input',
-          selector: st.selector || st.fieldName || 'input',
-          id: st.selectorType === 'id' ? String(st.selector || '').replace(/^#/, '') : '',
-          name: st.fieldName || '',
-          type: st.isSecret ? 'password' : 'text',
-          isPassword: Boolean(st.isSecret),
-          isOtpCandidate: st.type === 'fill_otp'
-        }));
+  // Build complete merged list of all inputs from:
+  // 1) Current step's domSnapshot (snapInputs)
+  // 2) Other steps' domSnapshots in playRes
+  // 3) Live inspected page (state.lastInspectedPage.inputs) if available
+  // 4) All change_input / fill_otp actions in the sequence (so every input in the sequence is always visible on every step)
+  const mergedInputs = [];
+  const seenInputKeys = new Set();
+  const registerInputCandidate = (candidate) => {
+    if (!candidate || typeof candidate !== 'object') return;
+    const rawId = String(candidate.id || (candidate.selectorType === 'id' ? candidate.selectorValue || candidate.selector : '') || '').replace(/^#/, '').trim();
+    const rawName = String(candidate.name || candidate.fieldName || '').trim();
+    const rawSel = String(candidate.selectorValue || candidate.selector || rawId || rawName || '').replace(/^#/, '').trim();
+    const keys = [rawId.toLowerCase(), rawName.toLowerCase(), rawSel.toLowerCase()].filter(Boolean);
+    if (keys.length === 0) return;
+    if (keys.some(k => seenInputKeys.has(k))) return;
+    keys.forEach(k => seenInputKeys.add(k));
+    mergedInputs.push({
+      ...candidate,
+      id: rawId,
+      name: rawName || rawSel,
+      selectorType: candidate.selectorType || (rawId ? 'id' : 'name'),
+      selectorValue: candidate.selectorValue || candidate.selector || rawId || rawName
+    });
+  };
+
+  for (const inp of snapInputs) registerInputCandidate(inp);
+  for (const st of rawSteps) {
+    if (Array.isArray(st?.domSnapshot?.inputs)) {
+      for (const inp of st.domSnapshot.inputs) registerInputCandidate(inp);
+    }
+  }
+  if (Array.isArray(state.lastInspectedPage?.inputs)) {
+    const inspectedUrl = String(state.lastInspectedPage.pageUrl || '').split('?')[0];
+    const currentBaseUrl = String(pageUrl || '').split('?')[0];
+    if (!inspectedUrl || !currentBaseUrl || inspectedUrl === currentBaseUrl) {
+      for (const inp of state.lastInspectedPage.inputs) registerInputCandidate(inp);
+    }
+  }
+  for (const st of rawSteps) {
+    if (st && (st.type === 'change_input' || st.action === 'change_input' || st.type === 'fill_otp' || st.action === 'fill_otp')) {
+      const cleanSel = String(st.selector || st.fieldName || 'input').replace(/^#/, '').trim() || 'input';
+      registerInputCandidate({
+        id: st.selectorType === 'id' ? cleanSel : '',
+        name: st.fieldName || cleanSel,
+        label: st.fieldName && st.fieldName !== cleanSel ? `${cleanSel} (${st.fieldName})` : cleanSel,
+        displayLabel: st.fieldName && st.fieldName !== cleanSel ? `${cleanSel} (${st.fieldName})` : cleanSel,
+        selectorType: st.selectorType || 'id',
+        selectorValue: st.selector || cleanSel,
+        type: (st.type === 'fill_otp' || st.action === 'fill_otp') ? 'text' : (st.isSecret ? 'password' : 'text'),
+        isPassword: Boolean(st.isSecret),
+        isOtpCandidate: st.type === 'fill_otp' || st.action === 'fill_otp'
+      });
+    }
+  }
+  for (const act of (state.loginSequence?.actions || [])) {
+    if (act && (act.type === 'change_input' || act.type === 'fill_otp')) {
+      const cleanSel = String(act.selector || act.fieldName || 'input').replace(/^#/, '').trim() || 'input';
+      registerInputCandidate({
+        id: act.selectorType === 'id' ? cleanSel : '',
+        name: act.fieldName || cleanSel,
+        label: act.fieldName && act.fieldName !== cleanSel ? `${cleanSel} (${act.fieldName})` : cleanSel,
+        displayLabel: act.fieldName && act.fieldName !== cleanSel ? `${cleanSel} (${act.fieldName})` : cleanSel,
+        selectorType: act.selectorType || 'id',
+        selectorValue: act.selector || cleanSel,
+        type: act.type === 'fill_otp' ? 'text' : (act.isSecret ? 'password' : 'text'),
+        isPassword: Boolean(act.isSecret),
+        isOtpCandidate: act.type === 'fill_otp'
+      });
+    }
+  }
+
+  // Sort visible interactive inputs first, followed by hidden/CSRF fields
+  mergedInputs.sort((a, b) => {
+    const aHidden = a.type === 'hidden' || a.isHidden ? 1 : 0;
+    const bHidden = b.type === 'hidden' || b.isHidden ? 1 : 0;
+    return aHidden - bHidden;
+  });
+  const displayInputs = mergedInputs;
 
   const inputsPreviewHtml = displayInputs.length > 0
     ? displayInputs.map(inp => {
+        const isHidden = inp.type === 'hidden' || Boolean(inp.isHidden);
+        const isCsrf = Boolean(
+          inp.isCsrf ||
+          (snap?.csrfField && (inp.name === snap.csrfField || inp.id === snap.csrfField)) ||
+          /csrf|xsrf|requestverificationtoken|authenticity_token|^_token$/i.test(`${inp.name || ''} ${inp.id || ''}`)
+        );
         const label = inp.displayLabel || inp.label || inp.name || inp.id || inp.type || 'input';
         const selectorDisp = inp.selector || (inp.id ? `#${inp.id}` : (inp.name ? `[name="${inp.name}"]` : inp.type || 'input'));
         const isTarget = stepTargetsInput(activeStep, inp);
         const matchKey = getInputMatchKey(inp);
         const filledInfo = filledMap.get(String(inp.id || '').toLowerCase())
           || filledMap.get(String(inp.name || '').toLowerCase())
+          || filledMap.get(String(inp.selectorValue || '').replace(/^#/, '').toLowerCase())
           || filledMap.get(matchKey);
 
-        const filledVal = inp.filledValueMasked !== undefined && inp.filledValueMasked !== ''
-          ? inp.filledValueMasked
-          : (filledInfo?.masked || '');
-        const isFilled = Boolean(inp.status === 'filled' || filledVal || filledInfo);
+        const filledVal = filledInfo?.masked
+          ? filledInfo.masked
+          : (isHidden
+              ? (inp.filledValueMasked || (inp.value ? `${String(inp.value).slice(0, 18)}… (Auto-Harvested)` : 'Auto-Harvested on Navigate'))
+              : '');
+        const isFilled = Boolean(filledInfo || (isHidden && filledVal));
 
         let statusPillHtml = '<span class="lsr-sim-status-pill untouched">⚪ Untouched</span>';
         let cardCls = 'untouched';
         if (isTarget) {
           statusPillHtml = '<span class="lsr-sim-status-pill target">🎯 Active Step Target</span>';
           cardCls = isFilled ? 'target filled' : 'target';
+        } else if (isHidden) {
+          statusPillHtml = `<span class="lsr-sim-status-pill filled">🛡️ ${isCsrf ? 'Auto-CSRF Token' : 'Auto-Hidden Field'}</span>`;
+          cardCls = 'filled';
         } else if (isFilled) {
-          statusPillHtml = '<span class="lsr-sim-status-pill filled">✅ Filled</span>';
+          statusPillHtml = `<span class="lsr-sim-status-pill filled">✅ Filled${filledInfo?.stepNum ? ` (Step ${escapeHtml(filledInfo.stepNum)})` : ''}</span>`;
           cardCls = 'filled';
         }
 
@@ -5763,26 +6062,64 @@ function renderVisualPlaySnapshot(playRes, selectedStepIdx = -1) {
               <div>
                 <strong>${escapeHtml(label)}</strong>
                 <code class="lsr-sim-selector-tag">${escapeHtml(selectorDisp)}</code>
+                ${inp.isPassword ? '<span class="badge badge-warning">password</span>' : ''}
+                ${inp.isOtpCandidate ? '<span class="badge badge-primary">🔑 OTP</span>' : ''}
+                ${isHidden ? '<span class="badge badge-outline">hidden</span>' : ''}
               </div>
               ${statusPillHtml}
             </div>
             <div class="lsr-sim-input-box ${isFilled ? 'has-value' : ''}">
-              ${filledVal ? `<code>${escapeHtml(filledVal)}</code>` : '<span class="form-hint">(empty)</span>'}
+              ${filledVal ? `<code>${escapeHtml(filledVal)}</code>` : '<span class="form-hint">(waiting for step to fill)</span>'}
             </div>
           </div>
         `;
       }).join('')
     : '<div class="empty-muted">No form inputs rendered on this step snapshot.</div>';
 
-  const displayButtons = snapButtons.length > 0
-    ? snapButtons
-    : rawSteps
-        .slice(0, activeIdx + 1)
-        .filter(st => st.type === 'click_button')
-        .map(st => ({
-          text: st.selector || 'Submit',
-          selector: st.selector || 'Submit'
-        }));
+  // Merge all buttons from snapshot, other step snapshots, and sequence click_button actions
+  const mergedButtons = [];
+  const seenBtnKeys = new Set();
+  const registerButtonCandidate = (btn) => {
+    if (!btn || typeof btn !== 'object') return;
+    const rawId = String(btn.id || (btn.selectorType === 'id' ? btn.selectorValue || btn.selector : '') || '').replace(/^#/, '').trim();
+    const rawName = String(btn.name || (btn.selectorType === 'name' ? btn.selectorValue || btn.selector : '') || '').trim();
+    const rawText = String(btn.text || btn.displayLabel || btn.selectorValue || btn.selector || 'Submit').trim();
+    const key = (rawId || rawName || rawText).toLowerCase();
+    if (!key || seenBtnKeys.has(key)) return;
+    seenBtnKeys.add(key);
+    mergedButtons.push({
+      ...btn,
+      id: rawId,
+      name: rawName,
+      text: rawText,
+      displayLabel: btn.displayLabel || rawText
+    });
+  };
+  for (const b of snapButtons) registerButtonCandidate(b);
+  for (const st of rawSteps) {
+    if (Array.isArray(st?.domSnapshot?.buttons)) {
+      for (const b of st.domSnapshot.buttons) registerButtonCandidate(b);
+    }
+  }
+  for (const st of rawSteps) {
+    if (st && (st.type === 'click_button' || st.action === 'click_button')) {
+      registerButtonCandidate({
+        selectorType: st.selectorType || 'text',
+        selector: st.selector || 'Submit',
+        text: st.selector || 'Submit'
+      });
+    }
+  }
+  for (const act of (state.loginSequence?.actions || [])) {
+    if (act && act.type === 'click_button') {
+      registerButtonCandidate({
+        selectorType: act.selectorType || 'text',
+        selector: act.selector || 'Submit',
+        text: act.selector || 'Submit'
+      });
+    }
+  }
+  const displayButtons = mergedButtons;
 
   const buttonsPreviewHtml = displayButtons.length > 0
     ? displayButtons.map(btn => {
@@ -5827,7 +6164,7 @@ function renderVisualPlaySnapshot(playRes, selectedStepIdx = -1) {
         <code class="lsr-sim-page-url">${escapeHtml(pageUrl || '(target URL)')}</code>
       </div>
       <div class="lsr-sim-browser-body">
-        ${snap?.pageErrorBanner ? `<div class="lsr-sim-page-error">🚨 <strong>Page Error Banner Detected:</strong> "${escapeHtml(snap.pageErrorBanner)}"</div>` : ''}
+        ${snap?.pageErrorBanner && !/fetch failed|operation was aborted|timed?\s*out/i.test(String(snap.pageErrorBanner)) ? `<div class="lsr-sim-page-error">🚨 <strong>Page Error Banner Detected:</strong> "${escapeHtml(snap.pageErrorBanner)}"</div>` : ''}
         ${selectorCalloutHtml}
         ${otherIssuesHtml}
         <div class="lsr-inspect-section">
@@ -5889,7 +6226,7 @@ function buildSyntheticPlayResultFromSequence(seq, { errorText = '', markFirstSt
     title: `${s.name || 'WrapperSequence.lsr'} (Visual Sequence Preview)`,
     httpStatus: markFirstStepFailed ? 0 : 200,
     csrfDetected: true,
-    pageErrorBanner: errorText || null,
+    pageErrorBanner: null,
     inputs: synthInputs,
     buttons: synthButtons
   };
@@ -5908,7 +6245,22 @@ function buildSyntheticPlayResultFromSequence(seq, { errorText = '', markFirstSt
     url: act.url || act.submitUrl || pageUrl,
     status: markFirstStepFailed && idx === 0 ? 0 : 200,
     stepStatus: markFirstStepFailed && idx === 0 ? 'error' : 'ok',
-    ...(markFirstStepFailed && idx === 0 && errorText ? { error: errorText } : {}),
+    ...(markFirstStepFailed && idx === 0 && errorText
+      ? {
+          error: errorText,
+          issues: [
+            {
+              step: 1,
+              sequenceStep: 1,
+              severity: 'error',
+              code: /aborted|timed?\s*out|ETIMEDOUT/i.test(errorText) ? 'NETWORK_TIMEOUT_OR_ABORT' : 'NAVIGATION_HTTP_ERROR',
+              title: `Step 1 (${act.type === 'navigate' ? 'Navigate' : act.type}): ${errorText}`,
+              detail: errorText,
+              fixSuggestion: 'Check that the Login URL in Step 1 is reachable, or click "→ Load Page Forms" on your target login URL.'
+            }
+          ]
+        }
+      : {}),
     domSnapshot: baseSnap
   }));
 
@@ -6040,6 +6392,7 @@ function initLoginSequenceRecorder() {
   const btnUseSelectedLsr = document.getElementById('btn-use-selected-lsr');
   const btnPlaySelectedLsr = document.getElementById('btn-play-selected-lsr');
   const btnDuplicateSelectedLsr = document.getElementById('btn-duplicate-selected-lsr');
+  const btnDeleteSelectedLsr = document.getElementById('btn-delete-selected-lsr');
   const btnRefreshLsrList = document.getElementById('btn-refresh-lsr-list');
 
   const topDiagnosticsEl = document.getElementById('lsr-top-diagnostics-banner');
@@ -6061,6 +6414,7 @@ function initLoginSequenceRecorder() {
   const btnRecord = document.getElementById('btn-lsr-record');
   const btnAddOtpStep = document.getElementById('btn-lsr-add-otp-step');
   const btnSave = document.getElementById('btn-lsr-save');
+  const btnDeleteSeqModal = document.getElementById('btn-lsr-delete-sequence');
   const btnPlay = document.getElementById('btn-lsr-play');
   const btnNewBlank = document.getElementById('btn-lsr-new-blank');
   const btnLoadExampleModal = document.getElementById('btn-lsr-load-example');
@@ -6086,6 +6440,7 @@ function initLoginSequenceRecorder() {
   const panelSession = document.getElementById('lsr-panel-session');
 
   function openLsrModal(seqToLoad = null, { isNewBlank = false } = {}) {
+    state.lsrDraftDismissed = false;
     if (isNewBlank) {
       state.loginSequence = createDefaultLoginSequence();
       state.selectedLsrStepIndex = -1;
@@ -6174,6 +6529,7 @@ function initLoginSequenceRecorder() {
 
   function activateSequenceForScan(seq) {
     if (!seq) return;
+    state.lsrDraftDismissed = false;
     state.loginSequence = normalizeClientLoginSequence(seq);
     state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
     state.lastLsrPlayResult = null;
@@ -6186,6 +6542,79 @@ function initLoginSequenceRecorder() {
       inlineDiagnosticsEl.innerHTML = `<div class="lsr-diag-banner-header">✅ Active sequence set to <strong>${escapeHtml(state.loginSequence.name)}</strong> (${escapeHtml(state.loginSequence.actions.length)} step(s)). Ready to scan or click Quick Play to verify.</div>`;
       inlineDiagnosticsEl.classList.remove('hidden');
     }
+  }
+
+  async function deleteLoginSequence(targetSeq) {
+    if (!targetSeq) return;
+    const deletedName = targetSeq.name || 'WrapperSequence.lsr';
+    const targetId = targetSeq.sequenceId || '';
+
+    // 1. Delete from backend store by sequenceId or sequence name
+    const deleteKey = targetId || deletedName;
+    if (deleteKey && typeof fetch === 'function') {
+      try {
+        await fetch(`/api/auth/sequences/${encodeURIComponent(deleteKey)}`, { method: 'DELETE' });
+      } catch {
+        // Ignore network/404 errors during delete
+      }
+    }
+
+    // 2. Remove from state.savedSequences
+    if (Array.isArray(state.savedSequences) && state.savedSequences.length > 0) {
+      const matchIdx = state.savedSequences.findIndex(s =>
+        s === targetSeq ||
+        (targetId && s.sequenceId === targetId) ||
+        (!targetId && !s.sequenceId && s.name === deletedName) ||
+        s.name === deletedName
+      );
+      if (matchIdx >= 0) {
+        state.savedSequences.splice(matchIdx, 1);
+      }
+    }
+
+    // 3. Update active state.loginSequence or enter clean empty state
+    const wasActive = Boolean(
+      targetSeq === state.loginSequence ||
+      (targetId && targetId === state.loginSequence.sequenceId) ||
+      (!targetId && deletedName === state.loginSequence.name)
+    );
+
+    if (state.savedSequences.length === 0) {
+      state.lsrDraftDismissed = true;
+      state.loginSequence = createDefaultLoginSequence();
+      state.selectedLsrStepIndex = -1;
+      state.lastLsrPlayResult = null;
+      state.lastInspectedPage = null;
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
+      if (visualCanvas) {
+        visualCanvas.innerHTML = '<div class="empty-muted">🗑️ Sequence deleted. Enter a Login URL above and click <strong>→ Load Page Forms</strong>, or click <strong>⚡ Load Working Example</strong> to create a new sequence.</div>';
+      }
+    } else if (wasActive) {
+      state.lsrDraftDismissed = false;
+      state.loginSequence = normalizeClientLoginSequence(state.savedSequences[0]);
+      state.selectedLsrStepIndex = state.loginSequence.actions.length > 0 ? 0 : -1;
+      state.lastLsrPlayResult = null;
+      if (state.loginSequence.actions.length > 0) {
+        renderSequenceBlueprintCanvas(state.loginSequence);
+      }
+    }
+
+    persistSequencesToLocal();
+    applyLsrStateToInputs();
+
+    const msgHtml = `<div class="lsr-diag-banner-header">🗑️ Deleted login sequence <strong>${escapeHtml(deletedName)}</strong>.</div>`;
+    if (inlineDiagnosticsEl) {
+      inlineDiagnosticsEl.className = 'lsr-top-diagnostics-banner info';
+      inlineDiagnosticsEl.innerHTML = msgHtml;
+      inlineDiagnosticsEl.classList.remove('hidden');
+    }
+    if (topDiagnosticsEl) {
+      topDiagnosticsEl.className = 'lsr-top-diagnostics-banner info';
+      topDiagnosticsEl.innerHTML = msgHtml;
+      topDiagnosticsEl.classList.remove('hidden');
+    }
+    showLsrPlayOutput(`🗑️ Deleted login sequence <strong>${escapeHtml(deletedName)}</strong>.`, 'info');
   }
 
   async function duplicateSequence(seq) {
@@ -6294,8 +6723,8 @@ function initLoginSequenceRecorder() {
       }
 
       const recIdEl = document.getElementById('adv-recorded-session-id');
-      if (recIdEl && res.sessionId) {
-        recIdEl.value = res.sessionId;
+      if (recIdEl) {
+        recIdEl.value = res.authenticated === true && res.sessionId ? res.sessionId : '';
       }
       renderRecordedSessionPreview(res);
       renderLsrDiagnosticsBanner(res);
@@ -6325,6 +6754,8 @@ function initLoginSequenceRecorder() {
         <div class="lsr-play-steps-list">${stepsHtml}</div>
       `, res.authenticated ? 'success' : 'error');
     } catch (err) {
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
       const failRes = buildSyntheticPlayResultFromSequence(payload, {
         errorText: err.message,
         markFirstStepFailed: true
@@ -6519,6 +6950,17 @@ function initLoginSequenceRecorder() {
       await duplicateSequence(seq);
     });
   }
+  if (btnDeleteSelectedLsr) {
+    btnDeleteSelectedLsr.addEventListener('click', async () => {
+      const seq = getSelectedReuseSequence() || state.loginSequence;
+      await deleteLoginSequence(seq);
+    });
+  }
+  if (btnDeleteSeqModal) {
+    btnDeleteSeqModal.addEventListener('click', async () => {
+      await deleteLoginSequence(state.loginSequence);
+    });
+  }
   if (btnRefreshLsrList) {
     btnRefreshLsrList.addEventListener('click', async () => {
       await Promise.all([loadSystemVariables(), loadSavedLoginSequences()]);
@@ -6584,18 +7026,45 @@ function initLoginSequenceRecorder() {
       }
     });
 
-    if (openModal) {
-      openLsrModal(exampleSeq);
+    state.lsrDraftDismissed = false;
+    let savedExample = exampleSeq;
+    try {
+      const saveRes = await apiPost('/api/auth/sequences', {
+        ...exampleSeq,
+        allowPrivate: true,
+        systemVariables: state.systemVariables
+      });
+      savedExample = normalizeClientLoginSequence({
+        ...(saveRes?.sequence || exampleSeq),
+        secrets: exampleSeq.secrets,
+        otpConfig: exampleSeq.otpConfig
+      });
+    } catch {
+      savedExample.sequenceId = savedExample.sequenceId || `local-${Date.now()}`;
+    }
+    const existingExIdx = state.savedSequences.findIndex(s =>
+      (s.sequenceId && s.sequenceId === savedExample.sequenceId) ||
+      s.name === savedExample.name
+    );
+    if (existingExIdx >= 0) {
+      state.savedSequences[existingExIdx] = savedExample;
     } else {
-      state.loginSequence = exampleSeq;
+      state.savedSequences.unshift(savedExample);
+    }
+    persistSequencesToLocal();
+
+    if (openModal) {
+      openLsrModal(savedExample);
+    } else {
+      state.loginSequence = savedExample;
       state.selectedLsrStepIndex = 0;
       applyLsrStateToInputs();
     }
     if (inspectUrlEl) inspectUrlEl.value = demoLoginUrl;
-    renderSequenceBlueprintCanvas(exampleSeq);
+    renderSequenceBlueprintCanvas(savedExample);
 
     if (autoPlay) {
-      await executePlayLsrSequence({ seqOverride: exampleSeq, openModalOnPlay: openModal });
+      await executePlayLsrSequence({ seqOverride: savedExample, openModalOnPlay: openModal });
     }
   }
 
@@ -6720,7 +7189,7 @@ function initLoginSequenceRecorder() {
       if (!actionBtn) return;
       const action = actionBtn.getAttribute('data-lsr-card-action');
       const idx = parseInt(actionBtn.getAttribute('data-lsr-seq-idx'), 10);
-      const list = state.savedSequences.length > 0 ? state.savedSequences : [state.loginSequence];
+      const list = getDisplayedSequenceCards();
       const targetSeq = list[idx];
       if (!targetSeq) return;
 
@@ -6764,25 +7233,7 @@ function initLoginSequenceRecorder() {
       }
 
       if (action === 'delete') {
-        if (targetSeq.sequenceId) {
-          try {
-            await fetch(`/api/auth/sequences/${encodeURIComponent(targetSeq.sequenceId)}`, { method: 'DELETE' });
-          } catch {
-            // Ignore network/404 errors during delete
-          }
-        }
-        if (state.savedSequences.length > 0) {
-          state.savedSequences.splice(idx, 1);
-        }
-        if (!targetSeq.sequenceId || targetSeq.sequenceId === state.loginSequence.sequenceId) {
-          state.loginSequence = state.savedSequences.length > 0
-            ? normalizeClientLoginSequence(state.savedSequences[0])
-            : createDefaultLoginSequence();
-          state.selectedLsrStepIndex = -1;
-          state.lastLsrPlayResult = null;
-        }
-        persistSequencesToLocal();
-        applyLsrStateToInputs();
+        await deleteLoginSequence(targetSeq);
       }
     });
   }
@@ -6843,14 +7294,23 @@ function initLoginSequenceRecorder() {
         allowPrivate,
         ...(sourceIp ? { sourceIp } : {})
       });
-      state.loginSequence.targetUrl = state.loginSequence.targetUrl || data.pageUrl || normalizedUrl;
+      const resolvedPageUrl = data.pageUrl || normalizedUrl;
+      state.loginSequence.targetUrl = resolvedPageUrl;
+      state.lastLsrPlayResult = null;
+      renderLsrDiagnosticsBanner(null, { includeInline: false });
       renderInspectedPageCanvas(data);
 
-      if (autoRecordNav) {
-        const navUrl = data.pageUrl || normalizedUrl;
-        const alreadyHasNav = state.loginSequence.actions.some(a => a.type === 'navigate' && a.url === navUrl);
+      // Update stale placeholder navigate step or auto-record navigate step when requested
+      const firstAction = state.loginSequence.actions[0];
+      if (firstAction && firstAction.type === 'navigate' && /wrapper\.infsalesgroup\.com/i.test(firstAction.url || '')) {
+        firstAction.url = resolvedPageUrl;
+        firstAction.label = formatLsrStepLabel(firstAction);
+        renderLsrActionsList();
+        renderLsrActionProperties();
+      } else if (autoRecordNav || state.loginSequence.actions.length === 0) {
+        const alreadyHasNav = state.loginSequence.actions.some(a => a.type === 'navigate' && a.url === resolvedPageUrl);
         if (!alreadyHasNav) {
-          appendLsrStep({ type: 'navigate', url: navUrl });
+          appendLsrStep({ type: 'navigate', url: resolvedPageUrl });
         }
       }
     } catch (err) {
@@ -6912,6 +7372,22 @@ function initLoginSequenceRecorder() {
         const idx = parseInt(recInputBtn.getAttribute('data-lsr-record-input'), 10);
         const inp = state.lastInspectedPage.inputs?.[idx];
         if (!inp) return;
+        const inspectedUrl = state.lastInspectedPage.pageUrl || inspectUrlEl?.value.trim() || '';
+        if (inspectedUrl) {
+          const hasNav = state.loginSequence.actions.some(a => a.type === 'navigate');
+          if (!hasNav) {
+            state.loginSequence.actions.unshift({
+              type: 'navigate',
+              url: inspectedUrl,
+              step: 1,
+              label: formatLsrStepLabel({ type: 'navigate', url: inspectedUrl })
+            });
+          } else if (/wrapper\.infsalesgroup\.com/i.test(state.loginSequence.actions[0]?.url || '')) {
+            state.loginSequence.actions[0].url = inspectedUrl;
+            state.loginSequence.actions[0].label = formatLsrStepLabel(state.loginSequence.actions[0]);
+          }
+          state.loginSequence.targetUrl = inspectedUrl;
+        }
         if (inp.isOtpCandidate) {
           appendLsrStep({
             type: 'fill_otp',
@@ -6985,9 +7461,44 @@ function initLoginSequenceRecorder() {
     });
   }
 
+  function deleteStepAtIndex(targetIdx) {
+    const actions = state.loginSequence.actions;
+    if (!Array.isArray(actions) || actions.length === 0) return;
+    const idx = (Number.isInteger(targetIdx) && targetIdx >= 0 && targetIdx < actions.length)
+      ? targetIdx
+      : (state.selectedLsrStepIndex >= 0 && state.selectedLsrStepIndex < actions.length
+          ? state.selectedLsrStepIndex
+          : actions.length - 1);
+    const [removed] = actions.splice(idx, 1);
+    actions.forEach((act, i) => {
+      act.step = i + 1;
+      act.label = formatLsrStepLabel(act);
+    });
+    state.selectedLsrStepIndex = actions.length > 0 ? Math.min(idx, actions.length - 1) : -1;
+    state.loginSequence.updatedAt = new Date().toISOString();
+    renderLsrActionsList();
+    renderLsrActionProperties();
+    renderLsrSequenceCards();
+    if (actions.length > 0 && !state.lastLsrPlayResult && !state.lastInspectedPage) {
+      renderSequenceBlueprintCanvas(state.loginSequence);
+    }
+    if (removed) {
+      showLsrPlayOutput(`🗑️ Removed Step ${escapeHtml(idx + 1)}: <strong>${escapeHtml(removed.label || removed.type)}</strong>.`, 'info');
+    }
+  }
+
   // Step selection & reordering
   if (actionsListEl) {
     actionsListEl.addEventListener('click', e => {
+      const delStepBtn = e.target.closest('[data-lsr-delete-step]');
+      if (delStepBtn) {
+        e.stopPropagation();
+        const delIdx = parseInt(delStepBtn.getAttribute('data-lsr-delete-step'), 10);
+        if (Number.isInteger(delIdx)) {
+          deleteStepAtIndex(delIdx);
+        }
+        return;
+      }
       const item = e.target.closest('[data-lsr-step-idx]');
       if (!item) return;
       const idx = parseInt(item.getAttribute('data-lsr-step-idx'), 10);
@@ -6997,6 +7508,8 @@ function initLoginSequenceRecorder() {
         renderLsrActionProperties();
         if (state.lastLsrPlayResult) {
           renderVisualPlaySnapshot(state.lastLsrPlayResult, idx);
+        } else {
+          renderSequenceBlueprintCanvas(state.loginSequence);
         }
       }
     });
@@ -7016,6 +7529,7 @@ function initLoginSequenceRecorder() {
       if (idx <= 0 || idx >= actions.length) return;
       const [moved] = actions.splice(idx, 1);
       actions.splice(idx - 1, 0, moved);
+      actions.forEach((act, i) => { act.step = i + 1; });
       state.selectedLsrStepIndex = idx - 1;
       renderLsrActionsList();
       renderLsrActionProperties();
@@ -7029,6 +7543,7 @@ function initLoginSequenceRecorder() {
       if (idx < 0 || idx >= actions.length - 1) return;
       const [moved] = actions.splice(idx, 1);
       actions.splice(idx + 1, 0, moved);
+      actions.forEach((act, i) => { act.step = i + 1; });
       state.selectedLsrStepIndex = idx + 1;
       renderLsrActionsList();
       renderLsrActionProperties();
@@ -7037,14 +7552,7 @@ function initLoginSequenceRecorder() {
 
   if (btnStepDelete) {
     btnStepDelete.addEventListener('click', () => {
-      const idx = state.selectedLsrStepIndex;
-      const actions = state.loginSequence.actions;
-      if (idx < 0 || idx >= actions.length) return;
-      actions.splice(idx, 1);
-      state.selectedLsrStepIndex = actions.length > 0 ? Math.min(idx, actions.length - 1) : -1;
-      renderLsrActionsList();
-      renderLsrActionProperties();
-      renderLsrSequenceCards();
+      deleteStepAtIndex(state.selectedLsrStepIndex);
     });
   }
 
@@ -7061,6 +7569,9 @@ function initLoginSequenceRecorder() {
       const idx = state.selectedLsrStepIndex;
       const action = state.loginSequence.actions[idx];
       if (!action) return;
+
+      const recIdEl = document.getElementById('adv-recorded-session-id');
+      if (recIdEl) recIdEl.value = '';
 
       if (e.target.id === 'lsr-prop-type') {
         const next = createDefaultStepForType(e.target.value);
@@ -7080,9 +7591,15 @@ function initLoginSequenceRecorder() {
         const valEl = document.getElementById('lsr-prop-value');
         const maskEl = document.getElementById('lsr-prop-is-secret');
         if (selTypeEl) action.selectorType = selTypeEl.value;
-        if (selEl) {
+        if (selEl && (e.target === selEl || e.target === selTypeEl)) {
           action.selector = selEl.value.trim();
-          action.fieldName = action.selector.replace(/^#/, '');
+          const cleanSel = action.selector.replace(/^#/, '');
+          const matchedInspectedInput = (state.lastInspectedPage?.inputs || []).find(
+            inp => inp.id === cleanSel || inp.name === cleanSel || inp.selectorValue === action.selector
+          );
+          action.fieldName = matchedInspectedInput?.name || cleanSel;
+        } else if (selEl && !action.selector) {
+          action.selector = selEl.value.trim();
         }
         if (secEl && e.target === secEl) {
           const refVal = secEl.value.trim();
@@ -7152,9 +7669,15 @@ function initLoginSequenceRecorder() {
 
       action.label = formatLsrStepLabel(action);
       state.loginSequence.updatedAt = new Date().toISOString();
+      if (state.lastLsrPlayResult && !state.lastLsrPlayResult.authenticated) {
+        state.lastLsrPlayResult = null;
+        renderLsrDiagnosticsBanner(null, { includeInline: false });
+      }
       renderLsrActionsList();
       if (!state.lastLsrPlayResult && !state.lastInspectedPage) {
         renderSequenceBlueprintCanvas(state.loginSequence);
+      } else if (state.lastLsrPlayResult) {
+        renderVisualPlaySnapshot(state.lastLsrPlayResult, idx);
       }
     };
 
@@ -7221,6 +7744,7 @@ function initLoginSequenceRecorder() {
           secrets: payload.secrets,
           otpConfig: payload.otpConfig
         });
+        state.lsrDraftDismissed = false;
         state.loginSequence = saved;
         const idx = state.savedSequences.findIndex(s =>
           (s.sequenceId && s.sequenceId === saved.sequenceId) ||
@@ -7233,6 +7757,8 @@ function initLoginSequenceRecorder() {
         }
         persistSequencesToLocal();
         applyLsrStateToInputs();
+        const recIdEl = document.getElementById('adv-recorded-session-id');
+        if (recIdEl) recIdEl.value = '';
         if (!state.lastLsrPlayResult) {
           renderSequenceBlueprintCanvas(saved);
         }

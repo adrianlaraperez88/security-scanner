@@ -37,6 +37,9 @@ export const TECH_PRIORITY = {
   'codeigniter': 10,
   'joomla': 10,
   'symfony': 10,
+  'yii': 10,
+  'yii1': 10,
+  'yii2': 10,
   'aspnet': 10,
   'flask': 10,
   'fastapi': 10,
@@ -74,6 +77,9 @@ export const CATEGORY_MAP = {
   codeigniter: 'frameworks',
   joomla: 'frameworks',
   symfony: 'frameworks',
+  yii: 'frameworks',
+  yii1: 'frameworks',
+  yii2: 'frameworks',
   aspnet: 'frameworks',
   flask: 'frameworks',
   fastapi: 'frameworks',
@@ -108,6 +114,9 @@ export const TECH_DISPLAY_NAMES = {
   codeigniter: 'CodeIgniter',
   joomla: 'Joomla',
   symfony: 'Symfony',
+  yii: 'Yii Framework',
+  yii1: 'Yii 1.x',
+  yii2: 'Yii 2.x',
   aspnet: 'ASP.NET',
   flask: 'Flask',
   fastapi: 'FastAPI',
@@ -164,7 +173,11 @@ export function inferEcosystemTags(stackItems = []) {
     if (tech) tags.add(tech);
   }
 
-  const phpFrameworks = ['laravel', 'wordpress', 'drupal', 'magento', 'codeigniter', 'joomla', 'symfony'];
+  if (tags.has('yii1') || tags.has('yii2')) {
+    tags.add('yii');
+  }
+
+  const phpFrameworks = ['laravel', 'wordpress', 'drupal', 'magento', 'codeigniter', 'joomla', 'symfony', 'yii', 'yii1', 'yii2'];
   if (phpFrameworks.some(f => tags.has(f))) {
     tags.add('php');
   }
@@ -245,6 +258,9 @@ export function recommendProfileForStack(primary, detectedTags = []) {
       case 'drupal': return 'drupal';
       case 'magento': return 'magento';
       case 'symfony': return 'symfony';
+      case 'yii':
+      case 'yii1':
+      case 'yii2': return 'yii';
       case 'codeigniter': return 'codeigniter';
       case 'php':
       case 'joomla': return 'php';
@@ -288,7 +304,7 @@ export function recommendProfileForStack(primary, detectedTags = []) {
   const priorityOrder = [
     'device', 'tv', 'smart-tv', 'smart_tv', 'camera', 'ip-camera', 'ip_camera', 'nvr',
     'pc', 'workstation', 'server', 'pc-workstation', 'pc_workstation', 'iot',
-    'laravel', 'wordpress', 'drupal', 'magento', 'symfony', 'codeigniter',
+    'laravel', 'wordpress', 'drupal', 'magento', 'symfony', 'yii1', 'yii2', 'yii', 'codeigniter',
     'joomla', 'nextjs', 'express', 'django', 'flask', 'fastapi', 'spring',
     'tomcat', 'react', 'vue', 'angular', 'php', 'node', 'python', 'java', 'nginx', 'apache'
   ];
@@ -470,7 +486,7 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
   let res;
   const fastTimeout = Number.isFinite(Number(options.rootTimeoutMs ?? options.probeTimeoutMs)) && Number(options.rootTimeoutMs ?? options.probeTimeoutMs) > 0
     ? Number(options.rootTimeoutMs ?? options.probeTimeoutMs)
-    : ((deviceMode || isPrivateLanTarget || allowPrivate) ? 2000 : 10000);
+    : ((deviceMode || isPrivateLanTarget) ? 2000 : 10000);
 
   try {
     res = await fetchWithRetry(
@@ -479,7 +495,7 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
         maxBytes: DEFAULT_MAX_HTML_BYTES,
         retries: 0,
         failFast: true,
-        ...((deviceMode || isPrivateLanTarget || allowPrivate) ? { timeout: fastTimeout, allowPrivate } : {})
+        ...((deviceMode || isPrivateLanTarget) ? { timeout: fastTimeout } : {}), ...(allowPrivate ? { allowPrivate } : {})
       },
       0,
       fastTimeout
@@ -550,7 +566,7 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
   let laravel = 0;
   if (setCookie.includes('laravel_session')) laravel += 5;
   if (setCookie.includes('xsrf-token'))      laravel += 4;
-  if (html.includes('csrf-token'))           laravel += 3;
+  if (html.includes('csrf-token') && !html.includes('name="csrf-param"')) laravel += 3;
   if (html.includes('name="_token"'))        laravel += 3;
   if (html.includes('livewire/livewire.js') || html.includes('wire:initial-data') || html.includes('wire:click')) laravel += 4;
   if (html.includes('inertia') || html.includes('data-page=')) laravel += 3;
@@ -558,10 +574,96 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
   if (html.includes('illuminate'))           laravel += 1;
   if (laravel) boost('laravel', laravel);
 
+  // ── Yii 1.x & Yii 2.x ─────────────────────────────────────────────────────
+  let yii1 = 0;
+  if (setCookie.includes('yii_csrf_token') || html.includes('yii_csrf_token')) yii1 += 6;
+  if (
+    html.includes('jquery.yiiactiveform') ||
+    html.includes('jquery.yiigridview') ||
+    html.includes('jquery.yiilistview') ||
+    html.includes('yiiactiveform')
+  ) {
+    yii1 += 5;
+  }
+  if (
+    html.includes('cexception') ||
+    html.includes('cdbexception') ||
+    html.includes('chttpexception') ||
+    html.includes('cactiveform') ||
+    html.includes('cwebapplication')
+  ) {
+    yii1 += 5;
+  }
+  if (html.includes('loginform[') && (html.includes('loginform_username') || html.includes('name="yt0"'))) {
+    yii1 += 5;
+  } else if (html.includes('name="yt0"') && html.includes('value="login"')) {
+    yii1 += 3;
+  }
+  if (yii1) {
+    boost('yii1', yii1);
+    boost('yii', yii1);
+  }
+
+  let yii2 = 0;
+  if (
+    setCookie.includes('_csrf-frontend') ||
+    setCookie.includes('_csrf-backend') ||
+    html.includes('_csrf-frontend') ||
+    html.includes('_csrf-backend')
+  ) {
+    yii2 += 6;
+  }
+  if (
+    setCookie.includes('_identity-frontend') ||
+    setCookie.includes('_identity-backend') ||
+    setCookie.includes('_identity=')
+  ) {
+    yii2 += 5;
+  }
+  if (
+    html.includes('yii.activeform.js') ||
+    html.includes('yii.gridview.js') ||
+    html.includes('yii.validation.js') ||
+    html.includes('yii.captcha.js') ||
+    html.includes('.yiiactiveform(')
+  ) {
+    yii2 += 5;
+  }
+  if (
+    Boolean(h['x-debug-tag'] || h['x-debug-link'] || h['x-debug-duration']) ||
+    html.includes('yii-debug-toolbar')
+  ) {
+    yii2 += 6;
+  }
+  if (html.includes('name="csrf-param"') && (html.includes('content="_csrf') || html.includes("content='_csrf"))) {
+    yii2 += 5;
+  }
+  if (html.includes('loginform[') && html.includes('loginform-username')) {
+    yii2 += 5;
+  }
+  if (html.includes('yii\\base\\') || html.includes('yii\\web\\') || html.includes('yii\\db\\')) {
+    yii2 += 5;
+  }
+  if (yii2) {
+    boost('yii2', yii2);
+    boost('yii', yii2);
+  }
+
+  if (!yii1 && !yii2) {
+    let yiiGeneric = 0;
+    if (powered.includes('yii') || generator.includes('yii')) yiiGeneric += 5;
+    if (html.includes('powered by yii framework') || html.includes('yiiframework.com')) yiiGeneric += 5;
+    if (yiiGeneric) boost('yii', yiiGeneric);
+  }
+
   // ── PHP ───────────────────────────────────────────────────────────────────
   let php = 0;
-  if (powered.includes('php'))  php += 5;
-  if (html.includes('.php'))    php += 1;
+  if (powered.includes('php'))                                              php += 5;
+  if (/\.php(?:\/|\?|$)/i.test(normalizedTarget) || /\.php(?:\/|\?|$)/i.test(res?.url || '')) php += 5;
+  if (setCookie.includes('phpsessid'))                                      php += 5;
+  if (setCookie.includes('yii_csrf_token') || html.includes('yii_csrf_token')) php += 5;
+  if (html.includes('loginform[') || html.includes('yiiactiveform'))        php += 4;
+  if (html.includes('.php'))                                                php += 1;
   if (php) boost('php', php);
 
   // ── WordPress ─────────────────────────────────────────────────────────────
@@ -913,6 +1015,14 @@ export async function fingerprint(target, fetchWithRetry, options = {}) {
         }
         if (pCookie.includes('laravel_session') || pCookie.includes('xsrf-token')) {
           boost('laravel', 5);
+        }
+        if (pCookie.includes('yii_csrf_token') || pText.includes('chttpexception') || pText.includes('cexception') || pText.includes('unable to resolve the request')) {
+          boost('yii1', 5);
+          boost('yii', 5);
+        }
+        if (pCookie.includes('_csrf-frontend') || pCookie.includes('_csrf-backend') || pText.includes('yii\\web\\notfoundhttpexception') || pText.includes('yii-debug-toolbar')) {
+          boost('yii2', 5);
+          boost('yii', 5);
         }
       }
     } catch {

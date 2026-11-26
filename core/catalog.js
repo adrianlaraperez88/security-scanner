@@ -292,6 +292,9 @@ const METADATA_ENTRIES = [
       'php distro backport check (cve-2026-129292)',
       'laravel file validation bypass (cve-2025-27515)',
       'symfony httpfoundation request url parsing flaw (cve-2024-50342)',
+      'yii 2 __wakeup() behavior attachment rce (cve-2024-58136)',
+      'yii 2 unsafe object deserialization (cve-2024-4991)',
+      'yii 1.1 predictable prng / eol vulnerability (cve-2021-3692)',
       'cve-php-ecosystem'
     ]
   },
@@ -755,6 +758,15 @@ const METADATA_ENTRIES = [
     whyItMatters: 'Symfony WebProfiler exposes all request data, database credentials, and session tokens.',
     defaultFix: 'Ensure APP_ENV=prod and remove web-profiler-bundle from production environments.',
     aliases: ['symfony security', 'symfony', 'symfony-checks', 'symfony misconfiguration']
+  },
+  {
+    id: 'yii-checks',
+    title: 'Yii 1.x & Yii 2.x Framework Security',
+    category: 'Framework Security',
+    plainExplanation: 'Audits Yii 1.x and Yii 2.x applications for exposed Gii code generators (/gii, ?r=gii), Yii 2 Debug module toolbars (/debug, X-Debug-Tag), YII_DEBUG stack trace disclosures (CException, CDbException), and accessible protected/runtime logs.',
+    whyItMatters: 'Exposed Yii Gii code generators allow remote code generation and arbitrary PHP file creation (RCE). Exposed Yii 2 Debug panels and YII_DEBUG stack traces leak database credentials, session tokens, SQL queries, and application secrets.',
+    defaultFix: 'Disable Gii and Debug modules in production (set YII_DEBUG to false and YII_ENV to prod), restrict Gii/Debug allowedIPs strictly to localhost, and block web server access to protected/, runtime/, and config/ directories.',
+    aliases: ['yii security', 'yii', 'yii1', 'yii2', 'yii-checks', 'yii 1.x & yii 2.x framework security', 'yii misconfiguration']
   },
   {
     id: 'wp-checks',
@@ -1805,6 +1817,18 @@ export const CWE_OWASP_MAP = {
     references: [
       'https://cwe.mitre.org/data/definitions/215.html',
       'https://owasp.org/Top10/A05_2021-Security_Misconfiguration/'
+    ]
+  },
+  'yii-checks': {
+    cwe: 'CWE-215',
+    owasp: 'A05:2021-Security Misconfiguration',
+    cvssScore: 9.8,
+    cveIds: ['CVE-2024-58136', 'CVE-2024-4991', 'CVE-2021-3692'],
+    references: [
+      'https://www.yiiframework.com/doc/guide/2.0/en/security-best-practices',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-58136',
+      'https://nvd.nist.gov/vuln/detail/CVE-2024-4991',
+      'https://cwe.mitre.org/data/definitions/215.html'
     ]
   },
   'wp-checks': {

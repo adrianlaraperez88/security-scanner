@@ -20,7 +20,8 @@ import { selectScannersForStack,
          ACTIVE_FUZZING_CHECKS }                from './core/profiles.js';
 import { TaskQueue }                            from './core/queue.js';
 import { crawlPage,
-         discoverApiRoutesFromPage }            from './core/crawler.js';
+         discoverApiRoutesFromPage,
+         extractLinksAndFormsFromHtml }         from './core/crawler.js';
 import { normalizeTargetInput, resolveBareIpTargets, validateTargets } from './core/validator.js';
 import { normalizeDeviceCategory }              from './core/device-scanner.js';
 import { getCheckInfo, getCheckMeta }           from './core/catalog.js';
@@ -31,7 +32,9 @@ import { validateCustomHeaders }                from './core/headers.js';
 import { evaluateAssetGate, TargetPinStore }    from './core/guard.js';
 import { discoverWebsiteRealIp }                from './core/real-ip-finder.js';
 import { AuthSessionManager,
-         parseLoginFormHtml }                   from './core/auth-session.js';
+         parseLoginFormHtml,
+         normalizeLoginSequence,
+         buildAuthenticatedSeedUrls }           from './core/auth-session.js';
 import pLimit                                   from 'p-limit';
 
 export { discoverWebsiteRealIp, AuthSessionManager, parseLoginFormHtml };
@@ -195,6 +198,13 @@ export async function runScanner(options = {}) {
     passwordField = null,
     loginPayload = null,
     recordedSession = null,
+    loginSequence = null,
+    sequenceId = null,
+    systemVariables = null,
+    secrets = null,
+    otpConfig = null,
+    restrictions = null,
+    sessionDetection = null,
     profile      = 'smart',
     forceAll     = false,
     diff         = false,
@@ -420,6 +430,13 @@ export async function runScanner(options = {}) {
   const effectiveUsernameField = authSessionCfg?.usernameField ?? usernameField ?? null;
   const effectivePasswordField = authSessionCfg?.passwordField ?? passwordField ?? null;
   const effectiveLoginPayload = authSessionCfg?.loginPayload ?? loginPayload ?? null;
+  const effectiveLoginSequence = authSessionCfg?.loginSequence ?? loginSequence ?? null;
+  const effectiveSequenceId = authSessionCfg?.sequenceId ?? sequenceId ?? null;
+  const effectiveSystemVariables = authSessionCfg?.systemVariables ?? systemVariables ?? null;
+  const effectiveSecrets = authSessionCfg?.secrets ?? secrets ?? null;
+  const effectiveOtpConfig = authSessionCfg?.otpConfig ?? otpConfig ?? null;
+  const effectiveRestrictions = authSessionCfg?.restrictions ?? restrictions ?? null;
+  const effectiveSessionDetection = authSessionCfg?.sessionDetection ?? sessionDetection ?? null;
 
   const hasAuthSessionConfig = Boolean(
     authSession instanceof AuthSessionManager ||
@@ -427,7 +444,9 @@ export async function runScanner(options = {}) {
     effectiveLoginUrl ||
     effectiveUsername !== null ||
     effectivePassword !== null ||
-    effectiveLoginPayload !== null
+    effectiveLoginPayload !== null ||
+    effectiveLoginSequence !== null ||
+    (Array.isArray(effectiveRestrictions) && effectiveRestrictions.length > 0)
   );
 
   if (hasAuthSessionConfig) {
@@ -446,6 +465,9 @@ export async function runScanner(options = {}) {
       if (effectiveUsernameField) authManager.usernameField = effectiveUsernameField;
       if (effectivePasswordField) authManager.passwordField = effectivePasswordField;
       if (effectiveLoginPayload !== null && effectiveLoginPayload !== undefined) authManager.loginPayload = effectiveLoginPayload;
+      if (effectiveLoginSequence) {
+        authManager.loginSequence = normalizeLoginSequence(effectiveLoginSequence, authManager.targetUrl);
+      }
     } else {
       authManager = new AuthSessionManager({
         ...(authSessionCfg || {}),
@@ -457,13 +479,21 @@ export async function runScanner(options = {}) {
         ...(effectiveUsernameField ? { usernameField: effectiveUsernameField } : {}),
         ...(effectivePasswordField ? { passwordField: effectivePasswordField } : {}),
         ...(effectiveLoginPayload !== null && effectiveLoginPayload !== undefined ? { loginPayload: effectiveLoginPayload } : {}),
+        ...(effectiveLoginSequence ? { loginSequence: effectiveLoginSequence } : {}),
+        ...(effectiveSequenceId ? { sequenceId: effectiveSequenceId } : {}),
+        ...(effectiveSystemVariables ? { systemVariables: effectiveSystemVariables } : {}),
+        ...(effectiveSecrets ? { secrets: effectiveSecrets } : {}),
+        ...(effectiveOtpConfig ? { otpConfig: effectiveOtpConfig } : {}),
+        ...(effectiveRestrictions ? { restrictions: effectiveRestrictions } : {}),
+        ...(effectiveSessionDetection ? { sessionDetection: effectiveSessionDetection } : {}),
       });
     }
 
-    const alreadyAuthenticated = Boolean(authManager.bearerToken || authManager.cookies.size > 0);
+    const alreadyAuthenticated = authManager.getRecordedSession().authenticated;
     const hasLoginCreds = Boolean(
       authManager.loginPayload !== null ||
-      (authManager.username !== null && authManager.password !== null)
+      (authManager.username !== null && authManager.password !== null) ||
+      Boolean(authManager.loginSequence?.actions?.length)
     );
     if (!alreadyAuthenticated && hasLoginCreds) {
       const loginOutcome = await authManager.executeLoginMacro(baseGovernedFetch);
@@ -747,7 +777,48 @@ export async function runScanner(options = {}) {
     });
 
     // 2. Discover URLs via Crawler
-    const queue = new TaskQueue(initialTarget);
+    const queue = new TaskQueue(initialTarget, {
+      shouldEnqueue: (candidateUrl) => !(authManager && authManager.isRestrictedUrl(candidateUrl))
+    });
+    const sharedRouteMap = new Map();
+    const seenAppScriptUrls = new Set();
+    const discoveredMenus = [];
+    const seenMenuKeys = new Set();
+    const recordDiscoveredMenus = (menusList) => {
+      if (!Array.isArray(menusList)) return;
+      for (const m of menusList) {
+        if (!m || !m.label) continue;
+        const key = `${(m.parentMenu || 'Main Menu').toLowerCase()}::${m.label.toLowerCase()}::${(m.url || m.routeKey || m.trigger || '').toLowerCase()}`;
+        if (seenMenuKeys.has(key)) continue;
+        seenMenuKeys.add(key);
+        discoveredMenus.push({ target: initialTarget, ...m });
+      }
+    };
+    const discoveredForms = [];
+    const seenFormKeys = new Set();
+    const recordDiscoveredForms = (formsList) => {
+      if (!Array.isArray(formsList)) return;
+      for (const form of formsList) {
+        if (!form || !form.actionUrl) continue;
+        const key = `${form.method || 'GET'}::${form.actionUrl}::${(form.fields || []).map(f => f.name).join(',')}`;
+        if (seenFormKeys.has(key)) continue;
+        seenFormKeys.add(key);
+        discoveredForms.push(form);
+      }
+    };
+    if (authManager) {
+      const authSeeds = buildAuthenticatedSeedUrls(initialTarget, authManager);
+      queue.push(authSeeds, initialTarget);
+      if (authManager.postLoginHtml) {
+        const postLoginBase = authManager.postLoginUrl || initialTarget;
+        const extractedPostLogin = extractLinksAndFormsFromHtml(authManager.postLoginHtml, postLoginBase, {
+          routeMap: sharedRouteMap
+        });
+        queue.push(extractedPostLogin.links, postLoginBase);
+        recordDiscoveredMenus(extractedPostLogin.menus);
+        recordDiscoveredForms(extractedPostLogin.forms);
+      }
+    }
     let depth = 0;
     const MAX_API_ROUTES_PER_TARGET = 12;
     let apiRoutesEnqueued = 0;
@@ -760,7 +831,7 @@ export async function runScanner(options = {}) {
       );
       if (safeSlice.length > 0) {
         apiRoutesEnqueued += safeSlice.length;
-        queue.push(safeSlice);
+        queue.push(safeSlice, initialTarget);
       }
     };
 
@@ -775,15 +846,25 @@ export async function runScanner(options = {}) {
         pagesFound: queue.totalFound,
       });
       const topLevelPaths = queue.pending.splice(0, queue.pending.length);
-      log(`    🕸️   Depth ${depth}: Scanning ${topLevelPaths.length} pages for links...`);
+      log(`    🕸️   Depth ${depth}: Scanning ${topLevelPaths.length} pages for links, menus & forms...`);
       
       for (const p of topLevelPaths) {
         const isSeedPage = p.replace(/\/+$/, '') === normalizedInitialTarget;
         if ((depth === 0 || isSeedPage) && fp?.apiCommunication?.sameOriginEndpoints?.length) {
           enqueueApiRoutes(fp.apiCommunication.sameOriginEndpoints);
         }
-        const crawlRes = await crawlPage(p, fetchWithRetry, { includeResponse: true });
-        queue.push(crawlRes.links);
+        const crawlRes = await crawlPage(p, fetchWithRetry, {
+          includeResponse: true,
+          routeMap: sharedRouteMap,
+          seenAppScriptUrls,
+          discoverAppScripts: depth === 0 || isSeedPage
+        });
+        const pageBaseUrl = (typeof crawlRes.response?.url === 'string' && /^https?:\/\//i.test(crawlRes.response.url))
+          ? crawlRes.response.url
+          : p;
+        queue.push(crawlRes.links, pageBaseUrl);
+        recordDiscoveredMenus(crawlRes.menus);
+        recordDiscoveredForms(crawlRes.forms);
         if (apiRoutesEnqueued < MAX_API_ROUTES_PER_TARGET && crawlRes.response?.status === 200) {
           const apiRoutes = await discoverApiRoutesFromPage(p, crawlRes.response.text || '', fetchWithRetry, {
             rootResponse: crawlRes.response,
@@ -860,6 +941,7 @@ export async function runScanner(options = {}) {
       ...(activeGovernor ? { governor: activeGovernor } : {}),
       ...(activeDnsResolver ? { dnsResolver: activeDnsResolver } : {}),
       ...(activeOastServer ? { oastServer: activeOastServer } : {}),
+      ...(discoveredForms.length > 0 ? { discoveredForms } : {}),
       targetPinStore,
     };
 

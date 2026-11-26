@@ -32,7 +32,7 @@ import { normalizeScopeRules } from '../scan.js';
 import { calculateRisk } from './severity.js';
 import { fingerprint } from './fingerprint.js';
 import { TaskQueue } from './queue.js';
-import { crawlPage, discoverApiRoutesFromPage } from './crawler.js';
+import { crawlPage, discoverApiRoutesFromPage, extractLinksAndFormsFromHtml } from './crawler.js';
 import { fetchWithRetry as baseFetch, createGovernedFetch } from './fetch.js';
 import { GraphStore } from './graph-store.js';
 import { TrafficStore, analyzePassiveExchange } from './traffic.js';
@@ -64,7 +64,8 @@ import {
   parseLsrSequence,
   exportLsrSequence,
   normalizeSystemVariables,
-  exportSystemVariables
+  exportSystemVariables,
+  buildAuthenticatedSeedUrls
 } from './auth-session.js';
 import {
   detectRuntimeScaFindings,
@@ -849,6 +850,7 @@ async function executeScanJob(job, ctx = {}) {
     };
     copyFetchMeta(governedFetch, fetchWithRetry);
 
+    let activeAuthManager = null;
     if (job.authSessionConfig) {
       const cfg = { ...job.authSessionConfig };
       if (cfg.sequenceId && !cfg.loginSequence && ctx.savedSequences?.has(cfg.sequenceId)) {
@@ -868,6 +870,9 @@ async function executeScanJob(job, ctx = {}) {
         authManager = AuthSessionManager.fromRecordedSession(
           ctx.recordedSessions.get(cfg.recordedSessionId)
         );
+        if (cfg.loginSequence) {
+          authManager.loginSequence = normalizeLoginSequence(cfg.loginSequence, authManager.targetUrl || job.targets[0]);
+        }
         if (mergedJobSystemVars.length > 0) {
           for (const item of normalizeSystemVariables(mergedJobSystemVars)) {
             const prev = authManager.systemVariables.get(item.name);
@@ -897,6 +902,7 @@ async function executeScanJob(job, ctx = {}) {
         await authManager.executeLoginMacro(fetchWithRetry);
       }
 
+      activeAuthManager = authManager;
       storeRecordedSession(ctx.recordedSessions, authManager.exportRecordedSession());
       if (authManager.loginSequence?.actions?.length > 0 && ctx.savedSequences) {
         storeSavedSequence(ctx.savedSequences, authManager.loginSequence);
@@ -918,6 +924,9 @@ async function executeScanJob(job, ctx = {}) {
 
     const allResults = [];
     const stacks = [];
+    const allDiscoveredMenus = [];
+    const allDiscoveredForms = [];
+    const allDiscoveredPages = [];
     let totalPagesFound = 0;
 
     const targetLimit = pLimit(Math.max(1, Math.min(job.concurrency, 10)));
@@ -1063,7 +1072,55 @@ async function executeScanJob(job, ctx = {}) {
             : `Discovering pages on ${initialTarget} (max depth: ${job.maxDepth})...`
         });
 
-        const queue = new TaskQueue(initialTarget);
+        const queue = new TaskQueue(initialTarget, {
+          shouldEnqueue: (candidateUrl) => !(activeAuthManager && activeAuthManager.isRestrictedUrl(candidateUrl))
+        });
+        const sharedRouteMap = new Map();
+        const seenAppScriptUrls = new Set();
+        const discoveredMenus = [];
+        const seenMenuKeys = new Set();
+        const recordDiscoveredMenus = (menusList) => {
+          if (!Array.isArray(menusList)) return;
+          for (const m of menusList) {
+            if (!m || !m.label) continue;
+            const key = `${(m.parentMenu || 'Main Menu').toLowerCase()}::${m.label.toLowerCase()}::${(m.url || m.routeKey || m.trigger || '').toLowerCase()}`;
+            if (seenMenuKeys.has(key)) continue;
+            seenMenuKeys.add(key);
+            discoveredMenus.push({
+              target: initialTarget,
+              ...m
+            });
+          }
+        };
+
+        const discoveredForms = [];
+        const seenFormKeys = new Set();
+        const recordDiscoveredForms = (formsList) => {
+          if (!Array.isArray(formsList)) return;
+          for (const form of formsList) {
+            if (!form || !form.actionUrl) continue;
+            const key = `${form.method || 'GET'}::${form.actionUrl}::${(form.fields || []).map(f => f.name).join(',')}`;
+            if (seenFormKeys.has(key)) continue;
+            seenFormKeys.add(key);
+            discoveredForms.push({
+              target: initialTarget,
+              ...form
+            });
+          }
+        };
+        if (activeAuthManager) {
+          const authSeeds = buildAuthenticatedSeedUrls(initialTarget, activeAuthManager);
+          queue.push(authSeeds, initialTarget);
+          if (activeAuthManager.postLoginHtml) {
+            const postLoginBase = activeAuthManager.postLoginUrl || initialTarget;
+            const extractedPostLogin = extractLinksAndFormsFromHtml(activeAuthManager.postLoginHtml, postLoginBase, {
+              routeMap: sharedRouteMap
+            });
+            queue.push(extractedPostLogin.links, postLoginBase);
+            recordDiscoveredMenus(extractedPostLogin.menus);
+            recordDiscoveredForms(extractedPostLogin.forms);
+          }
+        }
         let depth = 0;
         const MAX_API_ROUTES_PER_TARGET = 12;
         let apiRoutesEnqueued = 0;
@@ -1076,7 +1133,7 @@ async function executeScanJob(job, ctx = {}) {
           );
           if (safeSlice.length > 0) {
             apiRoutesEnqueued += safeSlice.length;
-            queue.push(safeSlice);
+            queue.push(safeSlice, initialTarget);
           }
         };
 
@@ -1090,7 +1147,7 @@ async function executeScanJob(job, ctx = {}) {
             depth,
             pending: currentBatch.length,
             pagesFound: queue.totalFound,
-            message: `Depth ${depth}: Analyzing ${currentBatch.length} pages for links...`
+            message: `Depth ${depth}: Analyzing ${currentBatch.length} pages for links, menus & forms...`
           });
 
           for (const p of currentBatch) {
@@ -1099,8 +1156,18 @@ async function executeScanJob(job, ctx = {}) {
               if ((depth === 0 || isSeedPage) && fp?.apiCommunication?.sameOriginEndpoints?.length) {
                 enqueueApiRoutes(fp.apiCommunication.sameOriginEndpoints);
               }
-              const crawlRes = await crawlPage(p, fetchWithRetry, { includeResponse: true });
-              queue.push(crawlRes.links);
+              const crawlRes = await crawlPage(p, fetchWithRetry, {
+                includeResponse: true,
+                routeMap: sharedRouteMap,
+                seenAppScriptUrls,
+                discoverAppScripts: depth === 0 || isSeedPage
+              });
+              const pageBaseUrl = (typeof crawlRes.response?.url === 'string' && /^https?:\/\//i.test(crawlRes.response.url))
+                ? crawlRes.response.url
+                : p;
+              queue.push(crawlRes.links, pageBaseUrl);
+              recordDiscoveredMenus(crawlRes.menus);
+              recordDiscoveredForms(crawlRes.forms);
               if (apiRoutesEnqueued < MAX_API_ROUTES_PER_TARGET && crawlRes.response?.status === 200) {
                 const apiRoutes = await discoverApiRoutesFromPage(p, crawlRes.response.text || '', fetchWithRetry, {
                   rootResponse: crawlRes.response,
@@ -1120,7 +1187,58 @@ async function executeScanJob(job, ctx = {}) {
           depth++;
         }
 
+        // If maxDepth stopped before inspecting newly discovered menu/submenu views, sample up to 8 menu views for forms
+        if (!isDeviceBasePortClosed && discoveredMenus.length > 0 && queue.pending.length > 0) {
+          const menuViewSamples = queue.pending.splice(0, 8);
+          for (const viewUrl of menuViewSamples) {
+            try {
+              const viewRes = await crawlPage(viewUrl, fetchWithRetry, {
+                includeResponse: true,
+                routeMap: sharedRouteMap,
+                seenAppScriptUrls,
+                discoverAppScripts: false
+              });
+              const viewBaseUrl = (typeof viewRes.response?.url === 'string' && /^https?:\/\//i.test(viewRes.response.url))
+                ? viewRes.response.url
+                : viewUrl;
+              queue.push(viewRes.links, viewBaseUrl);
+              recordDiscoveredMenus(viewRes.menus);
+              recordDiscoveredForms(viewRes.forms);
+            } catch {}
+          }
+        }
+
         const discoveredUrls = Array.from(queue.seen);
+        const discoveredUrlNormSet = new Set(discoveredUrls.map(u => String(u).replace(/\/+$/, '')));
+        const activeFuzzCheckNames = activeScanners
+          .filter(s => ACTIVE_FUZZING_CHECKS.has(s.name))
+          .map(s => s.name);
+
+        for (const m of discoveredMenus) {
+          m.auditStatus = m.kind === 'logout'
+            ? 'logout_protected'
+            : m.kind === 'external_app'
+              ? 'external_app'
+              : (m.url && discoveredUrlNormSet.has(String(m.url).replace(/\/+$/, '')))
+                ? 'crawled'
+                : 'discovered';
+          allDiscoveredMenus.push(m);
+        }
+
+        for (const f of discoveredForms) {
+          const checksForForm = [...activeFuzzCheckNames];
+          if (f.method === 'POST' && checksForForm.length > 0 && !checksForForm.includes('post-form-fuzz')) {
+            checksForForm.push('post-form-fuzz');
+          }
+          f.hiddenFieldNames = Object.keys(f.hiddenFields || {});
+          f.checksRun = checksForForm;
+          f.tested = true;
+          allDiscoveredForms.push(f);
+        }
+
+        for (const u of discoveredUrls) {
+          if (!allDiscoveredPages.includes(u)) allDiscoveredPages.push(u);
+        }
         totalPagesFound += discoveredUrls.length;
 
         broadcastJobEvent(job, {
@@ -1128,7 +1246,11 @@ async function executeScanJob(job, ctx = {}) {
           target: initialTarget,
           pagesFound: discoveredUrls.length,
           pages: discoveredUrls,
-          message: `Crawl complete. Found ${discoveredUrls.length} unique pages on ${initialTarget}`
+          menusFound: discoveredMenus.length,
+          formsFound: discoveredForms.length,
+          menus: discoveredMenus,
+          forms: discoveredForms,
+          message: `Crawl complete. Found ${discoveredUrls.length} unique pages, ${discoveredMenus.length} menu/submenu items, and ${discoveredForms.length} forms on ${initialTarget}`
         });
 
         // 3. Run active scanners across discovered pages
@@ -1183,6 +1305,7 @@ async function executeScanJob(job, ctx = {}) {
           ...(Array.isArray(activeScopeRules) && activeScopeRules.length ? { scopeRules: activeScopeRules } : {}),
           ...(activeGovernor ? { governor: activeGovernor } : {}),
           ...(ctx.dnsResolver ? { dnsResolver: ctx.dnsResolver } : {}),
+          ...(discoveredForms.length > 0 ? { discoveredForms } : {}),
           targetPinStore
         };
 
@@ -1379,12 +1502,16 @@ async function executeScanJob(job, ctx = {}) {
     let jsonReportFile = null;
     if (!job.noHistory) {
       historyFile = saveHistory(job.targets, allResults, risk, stacks);
-      if (historyFile && (apiCommunication || runtimeSca || cveCoverage)) {
+      if (historyFile && (apiCommunication || runtimeSca || cveCoverage || allDiscoveredMenus.length || allDiscoveredForms.length || allDiscoveredPages.length)) {
         try {
           const histRaw = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
           if (apiCommunication) histRaw.apiCommunication = apiCommunication;
           if (runtimeSca) histRaw.runtimeSca = runtimeSca;
           if (cveCoverage) histRaw.cveCoverage = cveCoverage;
+          histRaw.discoveredMenus = allDiscoveredMenus;
+          histRaw.discoveredForms = allDiscoveredForms;
+          histRaw.discoveredPages = allDiscoveredPages;
+          histRaw.pagesCount = totalPagesFound;
           fs.writeFileSync(historyFile, JSON.stringify(histRaw, null, 2));
         } catch {}
       }
@@ -1468,6 +1595,9 @@ async function executeScanJob(job, ctx = {}) {
       taskId: ingestedTask?.taskId || null,
       ...(agentSummary ? { agentSummary } : {}),
       pagesCount: totalPagesFound,
+      discoveredMenus: allDiscoveredMenus,
+      discoveredForms: allDiscoveredForms,
+      discoveredPages: allDiscoveredPages,
       completedAt: new Date().toISOString()
     };
 
@@ -5146,15 +5276,24 @@ export function createAppServer(options = {}) {
       }
 
       if (method === 'DELETE') {
-        if (!savedSequences.has(sequenceId)) {
+        let keyToDelete = savedSequences.has(sequenceId) ? sequenceId : null;
+        if (!keyToDelete) {
+          for (const [k, v] of savedSequences.entries()) {
+            if (v && (v.sequenceId === sequenceId || v.name === sequenceId)) {
+              keyToDelete = k;
+              break;
+            }
+          }
+        }
+        if (!keyToDelete) {
           sendJson(res, 404, { error: 'Saved login sequence not found' });
           return;
         }
-        savedSequences.delete(sequenceId);
+        savedSequences.delete(keyToDelete);
         if (!useInMemory) {
           savePersistedSequences(historyDir, savedSequences);
         }
-        sendJson(res, 200, { deleted: true, sequenceId });
+        sendJson(res, 200, { deleted: true, sequenceId: keyToDelete });
         return;
       }
     }
@@ -5372,7 +5511,7 @@ export function createAppServer(options = {}) {
           return;
         }
 
-        const effectiveRecordTimeout = Math.max(2000, Math.min(Number(body.timeout) || 8000, 30000));
+        const effectiveRecordTimeout = Math.max(2000, Math.min(Number(body.timeout) || 15000, 45000));
         governed = options.fetcher || createGovernedFetch({
           allowPrivate: effectiveAllowPrivate,
           sourceIp: cleanSourceIp,

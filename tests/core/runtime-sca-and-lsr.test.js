@@ -1524,7 +1524,285 @@ describe('Runtime SCA Dependency Engine & Visual Multi-Step Login Sequence Recor
         assert.ok(playDemoRes.data.hasBearerToken);
         assert.equal(playDemoRes.data.steps.length, 5);
         assert.ok(playDemoRes.data.steps[4].domSnapshot);
+
+        // Verify DELETE /api/auth/sequences/:id supports deleting by sequence name as well as sequenceId
+        const delByNameRes = await app.jsonFetch('/api/auth/sequences/DemoEnterpriseMFA.lsr', {
+          method: 'DELETE'
+        });
+        assert.equal(delByNameRes.status, 200);
+        assert.equal(delByNameRes.data.deleted, true);
+
+        const listAfterDel = await app.jsonFetch('/api/auth/sequences');
+        assert.equal(listAfterDel.status, 200);
+        assert.equal(listAfterDel.data.sequences.some(s => s.sequenceId === demoSeqId), false);
       });
+    });
+
+    test('3.6 Yii 1.x /broadbandAdmin/index.php/site/login .lsr Authenticated Post-Login Website & Form Scan (GET & POST Forms + Logout Guard)', async () => {
+      const authenticatedPhpSessions = new Set();
+      let logoutEndpointCalled = false;
+      const visitedAuthenticatedPaths = new Set();
+
+      await withMockTarget(
+        {
+          routes: (reqInfo) => {
+            const cookieHeader = String(reqInfo.headers?.cookie || '');
+            const hasPhpSess = cookieHeader.includes('PHPSESSID=yii_sess_1');
+            const isAuthed = hasPhpSess && authenticatedPhpSessions.has('yii_sess_1');
+
+            // Logout route — if called, destroys session! Must be blocked by logout guard
+            if (
+              reqInfo.pathname === '/broadbandAdmin/index.php/site/logout' ||
+              (reqInfo.pathname === '/broadbandAdmin/index.php' && String(reqInfo.search || '').includes('r=site/logout'))
+            ) {
+              logoutEndpointCalled = true;
+              authenticatedPhpSessions.clear();
+              return { status: 302, headers: { Location: '/broadbandAdmin/index.php/site/login' }, body: '' };
+            }
+
+            // Yii 1.x Login Page (GET & POST)
+            if (reqInfo.pathname === '/broadbandAdmin/index.php/site/login') {
+              if (reqInfo.method === 'GET') {
+                return {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Set-Cookie': [
+                      'PHPSESSID=yii_sess_1; Path=/; HttpOnly',
+                      'YII_CSRF_TOKEN=yii_csrf_tok_1; Path=/'
+                    ]
+                  },
+                  body: `<!DOCTYPE html>
+<html>
+<head><title>BroadbandAdmin - Login</title></head>
+<body>
+  <form id="login-form" action="/broadbandAdmin/index.php/site/login" method="post">
+    <div style="display:none"><input type="hidden" value="yii_csrf_tok_1" name="YII_CSRF_TOKEN" /></div>
+    <label for="LoginForm_username">Username</label>
+    <input name="LoginForm[username]" id="LoginForm_username" type="text" />
+    <label for="LoginForm_password">Password</label>
+    <input name="LoginForm[password]" id="LoginForm_password" type="password" />
+    <input type="submit" name="yt0" value="Login" />
+  </form>
+</body>
+</html>`
+                };
+              }
+
+              if (reqInfo.method === 'POST') {
+                const params = Object.fromEntries(new URLSearchParams(reqInfo.body || '').entries());
+                if (
+                  hasPhpSess &&
+                  params.YII_CSRF_TOKEN === 'yii_csrf_tok_1' &&
+                  params['LoginForm[username]'] === 'al13456' &&
+                  params['LoginForm[password]'] === 'YiiAdminSecret!2026' &&
+                  params.yt0 === 'Login'
+                ) {
+                  // Authenticate existing PHPSESSID in-place (no new Set-Cookie on 302)
+                  authenticatedPhpSessions.add('yii_sess_1');
+                  return {
+                    status: 302,
+                    headers: { Location: '/broadbandAdmin/index.php/site/index' },
+                    body: ''
+                  };
+                }
+                return {
+                  status: 200,
+                  headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                  body: '<div class="errorSummary">Incorrect username or password.</div><input type="password" id="LoginForm_password" name="LoginForm[password]" />'
+                };
+              }
+            }
+
+            // Protected Post-Login Dashboard (/broadbandAdmin/index.php/site/index or /broadbandAdmin/index.php)
+            if (
+              reqInfo.pathname === '/broadbandAdmin/index.php/site/index' ||
+              reqInfo.pathname === '/broadbandAdmin/index.php'
+            ) {
+              if (!isAuthed) {
+                return { status: 302, headers: { Location: '/broadbandAdmin/index.php/site/login' }, body: '' };
+              }
+              visitedAuthenticatedPaths.add(reqInfo.pathname);
+              return {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                body: `<!DOCTYPE html>
+<html>
+<head><title>BroadbandAdmin Dashboard</title></head>
+<body>
+  <nav>
+    <a href="/broadbandAdmin/index.php/customer/admin">Manage Customers</a>
+    <a href="/broadbandAdmin/index.php/router/update">Router Settings</a>
+    <a href="/broadbandAdmin/index.php?r=site/logout">Logout (al13456)</a>
+    <a href="/broadbandAdmin/index.php/site/logout">Sign Out</a>
+  </nav>
+</body>
+</html>`
+              };
+            }
+
+            // Protected Post-Login Page 1: GET Search Form (/broadbandAdmin/index.php/customer/admin)
+            if (reqInfo.pathname === '/broadbandAdmin/index.php/customer/admin') {
+              if (!isAuthed) {
+                return { status: 302, headers: { Location: '/broadbandAdmin/index.php/site/login' }, body: '' };
+              }
+              visitedAuthenticatedPaths.add(reqInfo.pathname);
+              const qParams = new URLSearchParams(reqInfo.search || '');
+              const searchVal = qParams.get('Customer[search]') || '';
+              return {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                body: `<!DOCTYPE html>
+<html>
+<body>
+  <h1>Customer Directory</h1>
+  <form method="get" action="/broadbandAdmin/index.php/customer/admin">
+    <input type="text" id="Customer_search" name="Customer[search]" value="" />
+    <input type="submit" value="Search" />
+  </form>
+  <div class="results">Results for: ${searchVal}</div>
+</body>
+</html>`
+              };
+            }
+
+            // Protected Post-Login Page 2: POST Form with CSRF (/broadbandAdmin/index.php/router/update)
+            if (reqInfo.pathname === '/broadbandAdmin/index.php/router/update') {
+              if (!isAuthed) {
+                return { status: 302, headers: { Location: '/broadbandAdmin/index.php/site/login' }, body: '' };
+              }
+              visitedAuthenticatedPaths.add(reqInfo.pathname);
+              if (reqInfo.method === 'POST') {
+                const bodyParams = Object.fromEntries(new URLSearchParams(reqInfo.body || '').entries());
+                const hostVal = bodyParams['Router[hostname]'] || '';
+                if (bodyParams.YII_CSRF_TOKEN === 'yii_csrf_tok_1' && hostVal.includes("'")) {
+                  return {
+                    status: 500,
+                    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                    body: 'CDbCommand failed to execute the SQL statement: SQLSTATE[42000]: You have an error in your SQL syntax near ' + hostVal
+                  };
+                }
+                return { status: 200, body: 'Router updated OK' };
+              }
+              return {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                body: `<!DOCTYPE html>
+<html>
+<body>
+  <h1>Update Router Configuration</h1>
+  <form method="post" action="/broadbandAdmin/index.php/router/update">
+    <input type="hidden" name="YII_CSRF_TOKEN" value="yii_csrf_tok_1" />
+    <input type="text" id="Router_hostname" name="Router[hostname]" value="edge-router-01" />
+    <button type="submit">Save Router</button>
+  </form>
+</body>
+</html>`
+              };
+            }
+
+            return { status: 404, body: 'Not Found' };
+          }
+        },
+        async (mockTarget) => {
+          const loginUrl = `${mockTarget.baseUrl}/broadbandAdmin/index.php/site/login`;
+
+          await withAppHarness({}, async (app) => {
+            // 1. Inspect the Yii login page and verify YII_CSRF_TOKEN + LoginForm_username + yt0 button are detected
+            const inspectRes = await app.jsonFetch('/api/auth/inspect-page', {
+              method: 'POST',
+              body: { targetUrl: loginUrl, allowPrivate: true }
+            });
+            assert.equal(inspectRes.status, 200);
+            assert.equal(inspectRes.data.csrf.formField, 'YII_CSRF_TOKEN');
+            assert.ok(inspectRes.data.inputs.some(i => i.id === 'LoginForm_username' && i.name === 'LoginForm[username]'));
+            assert.ok(inspectRes.data.buttons.some(b => b.name === 'yt0' && b.text === 'Login'));
+
+            // 2. Launch a scan directly targeting the login URL (/broadbandAdmin/index.php/site/login) with an .lsr sequence
+            const yiiLsr = {
+              name: 'BroadbandAdminYii.lsr',
+              targetUrl: loginUrl,
+              actions: [
+                { type: 'navigate', url: loginUrl },
+                { type: 'change_input', selectorType: 'id', selector: 'LoginForm_username', fieldName: 'LoginForm_username', value: 'al13456' },
+                { type: 'change_input', selectorType: 'id', selector: 'LoginForm_password', fieldName: 'LoginForm_password', value: 'YiiAdminSecret!2026', isSecret: true },
+                { type: 'click_button', selectorType: 'text', selector: 'Login' }
+              ],
+              restrictions: ['/broadbandAdmin/index.php/site/logout']
+            };
+
+            const startScanRes = await app.jsonFetch('/api/scan', {
+              method: 'POST',
+              body: {
+                target: loginUrl,
+                allowPrivate: true,
+                noHistory: true,
+                maxDepth: 1,
+                checks: ['xss', 'sqli'],
+                loginSequence: yiiLsr,
+                jev: ALL_JEV_TRUE
+              }
+            });
+            assert.equal(startScanRes.status, 202);
+            const scanId = startScanRes.data.scanId || startScanRes.data.id;
+            assert.ok(scanId);
+
+            let scanRes = null;
+            for (let i = 0; i < 200; i++) {
+              const pollRes = await app.jsonFetch(`/api/scan/${scanId}`);
+              if (
+                pollRes.data?.status === 'completed' ||
+                pollRes.data?.status === 'done' ||
+                pollRes.data?.status === 'failed' ||
+                pollRes.data?.status === 'error'
+              ) {
+                scanRes = pollRes.data;
+                break;
+              }
+              await new Promise(r => setTimeout(r, 100));
+            }
+            assert.ok(scanRes, 'Expected Yii post-login scan job to complete');
+
+            assert.equal(scanRes.status, 'completed');
+            assert.equal(scanRes.result.authSession.authenticated, true, 'Expected Yii .lsr login to authenticate PHPSESSID');
+            assert.match(scanRes.result.authSession.postLoginUrl || '', /\/broadbandAdmin\/index\.php\/site\/index$/);
+            assert.equal(logoutEndpointCalled, false, 'Expected logout links (/site/logout and ?r=site/logout) to be skipped');
+
+            // Verify PHP tech stack was detected from /index.php + PHPSESSID + YII_CSRF_TOKEN
+            assert.ok(
+              scanRes.result.stacks[0].detectedTags.includes('php'),
+              `Expected PHP tag to be detected on Yii target (got ${JSON.stringify(scanRes.result.stacks[0].detectedTags)})`
+            );
+
+            // Verify post-login pages were crawled even though target was /broadbandAdmin/index.php/site/login
+            assert.equal(visitedAuthenticatedPaths.has('/broadbandAdmin/index.php/site/index'), true);
+            assert.equal(visitedAuthenticatedPaths.has('/broadbandAdmin/index.php/customer/admin'), true);
+            assert.equal(visitedAuthenticatedPaths.has('/broadbandAdmin/index.php/router/update'), true);
+
+            // Verify discoveredMenus and discoveredForms are populated in scanRes.result
+            assert.ok(Array.isArray(scanRes.result.discoveredMenus) && scanRes.result.discoveredMenus.length >= 3);
+            assert.ok(scanRes.result.discoveredMenus.some(m => m.label === 'Manage Customers' && m.auditStatus === 'crawled'));
+            assert.ok(scanRes.result.discoveredMenus.some(m => m.label === 'Router Settings' && m.auditStatus === 'crawled'));
+            assert.ok(scanRes.result.discoveredMenus.some(m => m.kind === 'logout' && m.auditStatus === 'logout_protected'));
+
+            assert.ok(Array.isArray(scanRes.result.discoveredForms) && scanRes.result.discoveredForms.length >= 2);
+            assert.ok(scanRes.result.discoveredForms.some(f => f.method === 'GET' && f.fields.some(fld => fld.name === 'Customer[search]')));
+            assert.ok(scanRes.result.discoveredForms.some(f => f.method === 'POST' && f.csrfField === 'YII_CSRF_TOKEN' && f.fields.some(fld => fld.name === 'Router[hostname]')));
+
+            // Verify GET form on /customer/admin was synthesized and fuzzed (finding reflected XSS on Customer[search])
+            const xssVulnerable = scanRes.result.results.find(
+              r => r.checkId === 'xss' && r.status === 'VULNERABLE'
+            );
+            assert.ok(xssVulnerable, 'Expected reflected XSS to be detected on post-login GET form Customer[search]');
+
+            // Verify POST form on /router/update was fuzzed with YII_CSRF_TOKEN preserved (finding SQLi on Router[hostname])
+            const sqliVulnerable = scanRes.result.results.find(
+              r => r.checkId === 'sqli' && r.status === 'VULNERABLE'
+            );
+            assert.ok(sqliVulnerable, 'Expected SQL injection to be detected on post-login POST form Router[hostname]');
+          });
+        }
+      );
     });
   });
 });

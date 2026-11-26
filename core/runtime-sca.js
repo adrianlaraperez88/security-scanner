@@ -504,6 +504,57 @@ export const RUNTIME_SCA_CATALOG = {
     ]
   },
 
+  yii: {
+    id: 'yii',
+    name: 'Yii Framework',
+    category: 'frameworks',
+    icon: '⚡',
+    eol: false,
+    EOL: false,
+    branches: {
+      '1': { latest: '1.1.31', cvss: 7.5, eol: true },
+      '1.1': { latest: '1.1.31', cvss: 7.5, eol: true },
+      '2': { latest: '2.0.53', cvss: 0.0 },
+      '2.0': { latest: '2.0.53', cvss: 0.0 }
+    },
+    overallLatestVersion: '2.0.53',
+    overallLatestCvss: 0.0,
+    vulnerabilities: [
+      {
+        min: '2.0.0',
+        below: '2.0.52',
+        cve: 'CVE-2024-58136',
+        cvss: 9.8,
+        severity: 'CRITICAL',
+        summary: 'Yii 2 PHP __wakeup() Component Behavior Attachment Remote Code Execution (< 2.0.52)'
+      },
+      {
+        min: '2.0.0',
+        below: '2.0.50',
+        cve: 'CVE-2024-4991',
+        cvss: 8.8,
+        severity: 'HIGH',
+        summary: 'Yii 2 Unsafe Object Deserialization & Behavior Injection (< 2.0.50)'
+      },
+      {
+        min: '2.0.0',
+        below: '2.0.49',
+        cve: 'CVE-2023-47129',
+        cvss: 9.8,
+        severity: 'CRITICAL',
+        summary: 'Yii 2 Arbitrary Object Instantiation & Deserialization RCE (< 2.0.49.4)'
+      },
+      {
+        min: '1.0.0',
+        below: '1.1.31',
+        cve: 'CVE-2021-3692',
+        cvss: 7.5,
+        severity: 'HIGH',
+        summary: 'Yii 1.1 Predictable PRNG / Unsafe Cryptographic Randomness & EOL Branch (< 1.1.31)'
+      }
+    ]
+  },
+
   php: {
     id: 'php',
     name: 'PHP',
@@ -731,6 +782,11 @@ const TECH_KEY_ALIASES = {
   wordpress: 'wordpress',
   drupal: 'drupal',
   symfony: 'symfony',
+  yii: 'yii',
+  yii1: 'yii',
+  yii2: 'yii',
+  'yiisoft/yii': 'yii',
+  'yiisoft/yii2': 'yii',
   php: 'php',
   nginx: 'nginx',
   apache: 'apache',
@@ -1108,6 +1164,10 @@ const BUNDLE_BANNER_PATTERNS = [
   {
     tech: 'nextjs',
     regex: /(?:window\.next\s*=\s*\{\s*version\s*:\s*["'](\d{1,3}\.\d{1,4}\.\d{1,4})["']|"next"\s*:\s*\{\s*"version"\s*:\s*["'](\d{1,3}\.\d{1,4}\.\d{1,4})["'])/gi
+  },
+  {
+    tech: 'yii',
+    regex: /(?:\bYii(?:\s+Framework)?\s*[\/v]?\s*([12]\.\d{1,2}\.\d{1,3})\b)/gi
   }
 ];
 
@@ -1323,6 +1383,9 @@ export function extractRuntimeScaFromResponse({
 
     const symfonyMatch = poweredHdr.match(/\bSymfony\s*\/?\s*v?(\d{1,3}\.\d{1,4}(?:\.\d{1,4})?)\b/i);
     if (symfonyMatch) recordVersion('symfony', symfonyMatch[1], 'header: X-Powered-By');
+
+    const yiiMatch = poweredHdr.match(/\bYii(?:\s+Framework)?\s*\/?\s*v?([12]\.\d{1,2}(?:\.\d{1,3})?)\b/i);
+    if (yiiMatch) recordVersion('yii', yiiMatch[1], 'header: X-Powered-By');
 
     const springMatch = poweredHdr.match(/\bSpring(?:\s+Boot)?\s*\/?\s*v?(\d{1,3}\.\d{1,4}(?:\.\d{1,4})?)\b/i);
     if (springMatch) recordVersion('spring-boot', springMatch[1], 'header: X-Powered-By');

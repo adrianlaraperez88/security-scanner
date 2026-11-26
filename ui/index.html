@@ -450,6 +450,7 @@
                         <button type="button" id="btn-use-selected-lsr" class="btn-secondary btn-small">✅ Use Selected Sequence</button>
                         <button type="button" id="btn-play-selected-lsr" class="btn-secondary btn-small">▶️ Quick Play / Verify</button>
                         <button type="button" id="btn-duplicate-selected-lsr" class="btn-secondary btn-small">📋 Duplicate</button>
+                        <button type="button" id="btn-delete-selected-lsr" class="btn-secondary btn-small" title="Delete selected login sequence">🗑️ Delete</button>
                         <button type="button" id="btn-refresh-lsr-list" class="btn-secondary btn-small" title="Refresh saved sequences &amp; system variables">🔄</button>
                       </div>
                       <div id="lsr-inline-diagnostics-summary" class="lsr-top-diagnostics-banner hidden" role="status"></div>
@@ -752,6 +753,63 @@
                   <!-- Endpoints and external origins populated dynamically -->
                 </div>
                 <div class="api-ai-output-card hidden" id="results-api-ai-output"></div>
+              </div>
+            </div>
+
+            <!-- Discovered Navigation Menus, Submenus & Tested Forms Inventory Card -->
+            <div id="results-crawl-inventory-card" class="stack-strategy-card crawl-inventory-card hidden">
+              <div class="stack-card-header">
+                <div class="stack-card-title-group">
+                  <span class="stack-card-icon">🧭</span>
+                  <div>
+                    <h3 class="stack-card-title">
+                      Discovered Menus, Submenus &amp; Tested Forms
+                      (<span id="results-menus-count">0</span> Menu Items · <span id="results-forms-count">0</span> Forms Tested)
+                    </h3>
+                    <p class="stack-card-subtitle" id="results-crawl-inventory-summary">
+                      Application navigation menus, dropdown submenus, SPA router views, and HTML/SPA forms discovered and audited during this scan.
+                    </p>
+                  </div>
+                </div>
+                <div class="cve-banner-kpis" id="results-crawl-inventory-kpis"></div>
+              </div>
+              <div class="stack-card-body">
+                <div id="results-menus-groups-summary" class="tech-badges-row" style="margin-bottom: 12px;"></div>
+                <div class="history-table-container" id="results-menus-table-wrap">
+                  <div class="pane-title" style="margin-bottom: 8px;">🧭 Navigation Menus, Dropdown Submenus &amp; SPA Views</div>
+                  <table class="history-table crawl-menus-table">
+                    <thead>
+                      <tr>
+                        <th>Menu / Group</th>
+                        <th>Submenu / Item</th>
+                        <th>Type &amp; Route / Trigger</th>
+                        <th>Resolved Target URL</th>
+                        <th>Audit Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="results-menus-tbody"></tbody>
+                  </table>
+                </div>
+                <div class="history-table-container" id="results-forms-table-wrap" style="margin-top: 16px;">
+                  <div class="pane-title" style="margin-bottom: 8px;">📝 Forms &amp; Interactive Inputs Tested</div>
+                  <table class="history-table crawl-forms-table">
+                    <thead>
+                      <tr>
+                        <th>Form / View Name</th>
+                        <th>Method</th>
+                        <th>Page &amp; Action URL</th>
+                        <th>Inputs &amp; Fields Tested</th>
+                        <th>CSRF Token</th>
+                        <th>Security Checks Run</th>
+                      </tr>
+                    </thead>
+                    <tbody id="results-forms-tbody"></tbody>
+                  </table>
+                </div>
+                <details id="results-pages-details" style="margin-top: 12px;">
+                  <summary style="cursor: pointer; font-weight: 600;">🕸️ View All Crawled &amp; Audited URLs (<span id="results-crawled-urls-count">0</span>)</summary>
+                  <div id="results-crawled-urls-list" style="margin-top: 8px;"></div>
+                </details>
               </div>
             </div>
 
@@ -1376,6 +1434,7 @@
           <button type="button" id="btn-lsr-new-blank" class="btn-secondary btn-small" title="Start a fresh blank login sequence">✨ New Blank</button>
           <button type="button" id="btn-lsr-load-example" class="btn-secondary btn-small" title="Load a working 5-step + 2FA demo login sequence">⚡ Load Working Example</button>
           <button type="button" id="btn-lsr-save" class="btn-primary btn-small">💾 Save</button>
+          <button type="button" id="btn-lsr-delete-sequence" class="btn-secondary btn-small" title="Delete this login sequence">🗑️ Delete</button>
           <button type="button" id="btn-lsr-play" class="btn-success btn-small">▶️ Play / Test Sequence</button>
           <button type="button" id="btn-lsr-record" class="btn-secondary btn-small">⏺️ Inspect &amp; Record Page</button>
           <button type="button" id="btn-lsr-add-otp-step" class="btn-secondary btn-small">🔑 + OTP Step</button>

@@ -995,3 +995,81 @@ test('Fingerprint (R3 scoping): bare public IP without deviceMode does NOT trigg
   assert.equal(explicitCamPublicFp.recommendedProfile, 'device');
   assert.equal(explicitCamPublicFp.deviceInfo?.category, 'ip_camera');
 });
+
+test('Fingerprint: distinguishes Yii 1.x (yii1) and Yii 2.x (yii2) and recommends the yii profile', async () => {
+  // 1. Yii 1.x login page (YII_CSRF_TOKEN, LoginForm_username, yt0=Login, jquery.yiiactiveform.js)
+  const yii1Fp = await fingerprint(
+    'https://satprocess.com/broadbandAdmin/index.php/site/login',
+    async () => ({
+      status: 200,
+      headers: {
+        'set-cookie': 'PHPSESSID=abc123; path=/, YII_CSRF_TOKEN=def456; path=/',
+        'x-powered-by': 'PHP/7.4.33'
+      },
+      text: `
+        <html>
+          <head><script src="/broadbandAdmin/assets/1a2b3c/jquery.yiiactiveform.js"></script></head>
+          <body>
+            <form id="login-form" action="/broadbandAdmin/index.php/site/login" method="post">
+              <input type="hidden" value="def456" name="YII_CSRF_TOKEN" />
+              <input name="LoginForm[username]" id="LoginForm_username" type="text" />
+              <input name="LoginForm[password]" id="LoginForm_password" type="password" />
+              <input type="submit" name="yt0" value="Login" />
+            </form>
+          </body>
+        </html>
+      `
+    }),
+    { deepProbe: false, apiDiscovery: false }
+  );
+
+  assert.equal(yii1Fp.primary, 'yii1');
+  assert.ok(yii1Fp.detectedTags.includes('yii1'));
+  assert.ok(yii1Fp.detectedTags.includes('yii'));
+  assert.ok(yii1Fp.detectedTags.includes('php'));
+  assert.equal(yii1Fp.recommendedProfile, 'yii');
+  assert.ok(yii1Fp.summary.includes('Yii 1.x'));
+
+  // 2. Yii 2.x page (_csrf-frontend, csrf-param meta tag, loginform-username, yii.activeForm.js)
+  const yii2Fp = await fingerprint(
+    'https://app.example.com/index.php?r=site%2Flogin',
+    async () => ({
+      status: 200,
+      headers: {
+        'set-cookie': '_csrf-frontend=xyz987; path=/; HttpOnly',
+        'x-powered-by': 'PHP/8.2.27'
+      },
+      text: `
+        <html>
+          <head>
+            <meta name="csrf-param" content="_csrf-frontend">
+            <meta name="csrf-token" content="tokenValue==">
+            <script src="/assets/9f8e7d/yii.activeForm.js"></script>
+          </head>
+          <body>
+            <form id="login-form" action="/index.php?r=site%2Flogin" method="post">
+              <input type="hidden" name="_csrf-frontend" value="tokenValue==">
+              <input type="text" id="loginform-username" name="LoginForm[username]">
+              <input type="password" id="loginform-password" name="LoginForm[password]">
+              <button type="submit" name="login-button">Login</button>
+            </form>
+          </body>
+        </html>
+      `
+    }),
+    { deepProbe: false, apiDiscovery: false }
+  );
+
+  assert.equal(yii2Fp.primary, 'yii2');
+  assert.ok(yii2Fp.detectedTags.includes('yii2'));
+  assert.ok(yii2Fp.detectedTags.includes('yii'));
+  assert.ok(yii2Fp.detectedTags.includes('php'));
+  assert.equal(yii2Fp.recommendedProfile, 'yii');
+  assert.ok(yii2Fp.summary.includes('Yii 2.x'));
+
+  // Verify getProfileChecks resolves yii, yii1, and yii2 to PROFILES.yii
+  const yiiChecks = getProfileChecks('yii');
+  assert.ok(Array.isArray(yiiChecks) && yiiChecks.includes('yii-checks'));
+  assert.deepEqual(getProfileChecks('yii1'), yiiChecks);
+  assert.deepEqual(getProfileChecks('yii2'), yiiChecks);
+});

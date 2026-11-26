@@ -15,11 +15,14 @@
 
 import crypto from 'node:crypto';
 
-const LOGOUT_PATH_RE = /(?:^|\/)(?:log[-_]?out|sign[-_]?out|log[-_]?off|kill[-_]?session|destroy[-_]?session)(?:\/|$|\?)/i;
+const LOGOUT_PATH_RE = /(?:^|[\/?&=])(?:log[-_]?out|sign[-_]?out|log[-_]?off|kill[-_]?session|destroy[-_]?session)(?:[\/?&#=]|$)/i;
 
 const COMMON_LOGIN_PATHS = [
   '/login',
   '/signin',
+  '/site/login',
+  '/index.php/site/login',
+  '/index.php?r=site/login',
   '/user/login',
   '/admin/login',
   '/wp-login.php',
@@ -67,14 +70,34 @@ const CSRF_INPUT_NAMES = [
   'authenticity_token',
   '__requestverificationtoken',
   '_csrf',
-  'csrf'
+  '_csrf-frontend',
+  '_csrf-backend',
+  'csrf',
+  'yii_csrf_token',
+  'csrfmiddlewaretoken',
+  '_csrf_token',
+  '__csrf_magic',
+  'antiforgery',
+  'xsrf_token',
+  '_xsrf'
 ];
+
+const CSRF_FIELD_NAME_RE = /(?:^|[_.\-\[])(?:csrf|xsrf|yii_csrf_token|requestverificationtoken|authenticity_token|antiforgery)(?:$|[_.\-\]])/i;
+
+export function isCsrfFieldName(fieldName = '') {
+  const clean = String(fieldName || '').trim().toLowerCase();
+  if (!clean) return false;
+  return CSRF_INPUT_NAMES.includes(clean) || CSRF_FIELD_NAME_RE.test(clean);
+}
 
 const CSRF_COOKIE_TO_HEADER = {
   'xsrf-token': 'X-XSRF-TOKEN',
   'csrftoken': 'X-CSRFToken',
   'csrf-token': 'X-CSRF-Token',
-  '_csrf': 'X-CSRF-Token'
+  '_csrf': 'X-CSRF-Token',
+  '_csrf-frontend': 'X-CSRF-Token',
+  '_csrf-backend': 'X-CSRF-Token',
+  'yii_csrf_token': 'X-CSRF-Token'
 };
 
 export const MAX_SEQUENCE_STEPS = 25;
@@ -136,6 +159,106 @@ export function isLogoutOrDestructiveUrl(rawUrlOrPath) {
 }
 
 /**
+ * Computes same-origin seed URLs for crawling an application after login,
+ * deriving application root/parent directories and Yii/PHP front-controller
+ * entrypoints (`/index.php`, `/index.php/site/index`) while filtering out
+ * logout/destructive and restricted URLs.
+ *
+ * @param {string} initialTarget
+ * @param {AuthSessionManager | null} [authManager=null]
+ * @returns {string[]}
+ */
+export function buildAuthenticatedSeedUrls(initialTarget, authManager = null) {
+  const rawTarget = String(initialTarget || '').trim();
+  if (!rawTarget) return [];
+
+  let baseParsed;
+  try {
+    baseParsed = new URL(rawTarget);
+  } catch {
+    return isLogoutOrDestructiveUrl(rawTarget) ? [] : [rawTarget];
+  }
+  if (baseParsed.protocol !== 'http:' && baseParsed.protocol !== 'https:') {
+    return [rawTarget];
+  }
+  baseParsed.hash = '';
+  const origin = baseParsed.origin;
+
+  const seen = new Set();
+  const seeds = [];
+  const addCandidate = (rawCandidate) => {
+    if (!rawCandidate || typeof rawCandidate !== 'string') return;
+    let parsed;
+    try {
+      parsed = new URL(rawCandidate, origin);
+    } catch {
+      return;
+    }
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.origin !== origin) {
+      return;
+    }
+    if (parsed.username || parsed.password) return;
+    parsed.hash = '';
+    const normalized = parsed.toString();
+    if (seen.has(normalized)) return;
+    if (isLogoutOrDestructiveUrl(normalized)) return;
+    if (typeof authManager?.isRestrictedUrl === 'function' && authManager.isRestrictedUrl(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    seeds.push(normalized);
+  };
+
+  addCandidate(baseParsed.toString());
+  if (authManager?.postLoginUrl) {
+    addCandidate(authManager.postLoginUrl);
+  }
+
+  const sourceUrls = [
+    baseParsed.toString(),
+    authManager?.postLoginUrl || '',
+    authManager?.loginUrl || ''
+  ].filter(Boolean);
+
+  const LOGIN_SUFFIX_RE = /(?:\/site)?\/(?:login|signin|auth|user\/login|admin\/login)\/?$/i;
+
+  for (const src of sourceUrls) {
+    let parsed;
+    try {
+      parsed = new URL(src, origin);
+    } catch {
+      continue;
+    }
+    if (parsed.origin !== origin) continue;
+
+    const pathname = parsed.pathname || '/';
+    const idxMatch = pathname.match(/^(.*)\/index\.php(?:\/.*)?$/i);
+    if (idxMatch) {
+      const appDir = (idxMatch[1] || '').replace(/\/+$/, '');
+      addCandidate(`${origin}${appDir}/index.php`);
+      addCandidate(`${origin}${appDir}/index.php/site/index`);
+      if (/[?&]r=[^&]*login/i.test(parsed.search || '')) {
+        addCandidate(`${origin}${appDir}/index.php?r=site/index`);
+      }
+      addCandidate(`${origin}${appDir}/`);
+    }
+
+    if (LOGIN_SUFFIX_RE.test(pathname)) {
+      const stripped = pathname.replace(LOGIN_SUFFIX_RE, '');
+      if (!stripped || stripped === '/') {
+        addCandidate(`${origin}/`);
+      } else if (/\.php$/i.test(stripped)) {
+        addCandidate(`${origin}${stripped}`);
+      } else {
+        addCandidate(`${origin}${stripped.replace(/\/+$/, '')}/`);
+      }
+    }
+  }
+
+  return seeds;
+}
+
+/**
  * Extracts CSRF tokens from HTML forms (`<input type="hidden" name="_token" value="...">`),
  * `<meta name="csrf-token" content="...">` tags, and response headers.
  *
@@ -167,30 +290,36 @@ export function extractCsrfTokens(htmlText = '', headers = {}) {
     }
   }
 
-  // 2. Check <meta name="csrf-token" content="...">
+  // 2. Check <meta name="csrf-param" content="..."> and <meta name="csrf-token" content="...">
+  const metaParamMatch =
+    html.match(/<meta[^>]+name=["']csrf-param["'][^>]+content=["']([^"']{1,128})["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']{1,128})["'][^>]+name=["']csrf-param["']/i);
+  if (metaParamMatch && !formField) {
+    formField = decodeBasicHtmlEntities(metaParamMatch[1]).trim();
+  }
   const metaMatch =
-    html.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']{6,256})["']/i) ||
-    html.match(/<meta[^>]+content=["']([^"']{6,256})["'][^>]+name=["']csrf-token["']/i);
+    html.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']{6,1024})["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']{6,1024})["'][^>]+name=["']csrf-token["']/i);
   if (metaMatch) {
-    tokenValue = metaMatch[1];
+    tokenValue = decodeBasicHtmlEntities(metaMatch[1]);
     headerName = headerName || 'X-CSRF-TOKEN';
-    headerValue = headerValue || metaMatch[1];
+    headerValue = headerValue || tokenValue;
   }
 
-  // 3. Check hidden <input> fields
-  const inputRegex = /<input\b[^>]{1,300}>/gi;
+  // 3. Check hidden <input> fields (including YII_CSRF_TOKEN, _csrf-frontend, csrfmiddlewaretoken, etc.)
+  const inputRegex = /<input\b[^>]{1,1024}>/gi;
   let m;
   while ((m = inputRegex.exec(html)) !== null) {
     const tag = m[0];
-    const nameMatch = tag.match(/\bname=["']([^"']{1,64})["']/i);
-    const valMatch = tag.match(/\bvalue=["']([^"']{4,256})["']/i);
+    const nameMatch = tag.match(/\bname=["']([^"']{1,128})["']/i);
+    const valMatch = tag.match(/\bvalue=["']([^"']{4,1024})["']/i);
     if (!nameMatch || !valMatch) continue;
-    const fieldName = nameMatch[1];
-    if (CSRF_INPUT_NAMES.includes(fieldName.toLowerCase())) {
+    const fieldName = decodeBasicHtmlEntities(nameMatch[1]).trim();
+    if (isCsrfFieldName(fieldName)) {
       formField = fieldName;
-      tokenValue = valMatch[1];
+      tokenValue = decodeBasicHtmlEntities(valMatch[1]);
       headerName = headerName || 'X-CSRF-TOKEN';
-      headerValue = headerValue || valMatch[1];
+      headerValue = headerValue || tokenValue;
       break;
     }
   }
@@ -750,6 +879,7 @@ function buildButtonDescriptor({ tagName, attrs, text, formIndex }) {
     name,
     type,
     text: cleanText,
+    value: attrs.value !== undefined ? String(attrs.value).trim() : cleanText,
     formIndex,
     selectorType,
     selectorValue,
@@ -1978,6 +2108,8 @@ export class AuthSessionManager {
     this.csrfFormField = null;
     this.csrfFormValue = null;
     this.reauthCount = 0;
+    this.postLoginUrl = config.postLoginUrl ? String(config.postLoginUrl).trim() : null;
+    this.postLoginHtml = typeof config.postLoginHtml === 'string' ? config.postLoginHtml : null;
 
     this._discoveredPreflight = null;
     this._reauthPromise = null;
@@ -2009,8 +2141,14 @@ export class AuthSessionManager {
       diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics : [],
       otpConfig: data.otpConfig || data.loginSequence?.otpConfig || null,
       restrictions: data.restrictions || data.loginSequence?.restrictions || null,
-      sessionDetection: data.sessionDetection || data.loginSequence?.sessionDetection || null
+      sessionDetection: data.sessionDetection || data.loginSequence?.sessionDetection || null,
+      postLoginUrl: typeof data.postLoginUrl === 'string' && data.postLoginUrl.trim() ? data.postLoginUrl.trim() : null,
+      postLoginHtml: typeof data.postLoginHtml === 'string' ? data.postLoginHtml : null
     });
+
+    mgr._lastLoginRejected = data.authenticated === false;
+    mgr.postLoginUrl = typeof data.postLoginUrl === 'string' && data.postLoginUrl.trim() ? data.postLoginUrl.trim() : null;
+    mgr.postLoginHtml = typeof data.postLoginHtml === 'string' ? data.postLoginHtml : null;
 
     if (data.cookies instanceof Map) {
       for (const [k, v] of data.cookies.entries()) {
@@ -2681,19 +2819,43 @@ export class AuthSessionManager {
     const cleanId = sel.replace(/^#/, '');
 
     if (selectorType === 'id') {
-      return inputs.find(i => i.id && i.id === cleanId) || null;
+      const exactId = inputs.find(i => i.id && i.id === cleanId);
+      if (exactId) return exactId;
     }
     if (selectorType === 'name') {
-      return inputs.find(i => i.name && (i.name === sel || (fieldName && i.name === fieldName))) || null;
+      const exactName = inputs.find(i => i.name && (i.name === sel || (fieldName && i.name === fieldName)));
+      if (exactName) return exactName;
     }
     if (sel.startsWith('#')) {
-      return inputs.find(i => i.id && i.id === sel.slice(1)) || null;
+      const hashId = inputs.find(i => i.id && i.id === sel.slice(1));
+      if (hashId) return hashId;
     }
     const nameAttrMatch = sel.match(/\[name=["']?([^"'\]]+)["']?\]/i);
     if (nameAttrMatch) {
-      return inputs.find(i => i.name === nameAttrMatch[1]) || null;
+      const attrMatch = inputs.find(i => i.name === nameAttrMatch[1]);
+      if (attrMatch) return attrMatch;
     }
-    return inputs.find(i => i.selectorValue === sel || (i.id && i.id === cleanId) || (i.name && i.name === sel)) || null;
+    const direct = inputs.find(i => i.selectorValue === sel || (i.id && i.id === cleanId) || (i.name && i.name === sel));
+    if (direct) return direct;
+
+    // Normalize Yii 1 (id="LoginForm_username" / name="LoginForm[username]") <-> Yii 2 (id="loginform-username")
+    const normalizeYiiFieldKey = (s) =>
+      String(s || '')
+        .trim()
+        .replace(/^#/, '')
+        .replace(/\[([^\]]+)\]/g, '_$1')
+        .replace(/[-_]+/g, '_')
+        .toLowerCase();
+    const targetNorm = normalizeYiiFieldKey(fieldName || cleanId);
+    if (targetNorm) {
+      const yiiMatch = inputs.find(
+        i =>
+          (i.id && normalizeYiiFieldKey(i.id) === targetNorm) ||
+          (i.name && normalizeYiiFieldKey(i.name) === targetNorm)
+      );
+      if (yiiMatch) return yiiMatch;
+    }
+    return null;
   }
 
   /** @private */
@@ -2863,9 +3025,46 @@ export class AuthSessionManager {
       httpStatus,
       { activeInput = null, clickedButton = null, pageErrorBanner = null, UnmatchedSelector = null, unmatchedSelector = null } = {}
     ) => {
-      const dom = (rawDom && ((Array.isArray(rawDom.inputs) && rawDom.inputs.length > 0) || (Array.isArray(rawDom.buttons) && rawDom.buttons.length > 0) || rawDom.title))
-        ? rawDom
-        : buildFallbackDomFromSequence();
+      const fallbackDom = buildFallbackDomFromSequence();
+      const hasRawDom = Boolean(
+        rawDom &&
+        ((Array.isArray(rawDom.inputs) && rawDom.inputs.length > 0) ||
+         (Array.isArray(rawDom.buttons) && rawDom.buttons.length > 0) ||
+         rawDom.title)
+      );
+      const dom = hasRawDom ? rawDom : fallbackDom;
+
+      // Merge any sequence-referenced inputs/buttons that are not yet present in rawDom
+      const combinedRawInputs = [...(dom?.inputs || [])];
+      const existingInputKeys = new Set(
+        combinedRawInputs
+          .flatMap(i => [i.id, i.name, i.selectorValue])
+          .filter(Boolean)
+          .map(s => String(s).replace(/^#/, '').trim().toLowerCase())
+      );
+      for (const fbInp of (fallbackDom.inputs || [])) {
+        const fbKey = String(fbInp.id || fbInp.name || fbInp.selectorValue || '').replace(/^#/, '').trim().toLowerCase();
+        if (fbKey && !existingInputKeys.has(fbKey)) {
+          existingInputKeys.add(fbKey);
+          combinedRawInputs.push(fbInp);
+        }
+      }
+
+      const combinedRawButtons = [...(dom?.buttons || [])];
+      const existingBtnKeys = new Set(
+        combinedRawButtons
+          .flatMap(b => [b.id, b.name, b.text, b.selectorValue])
+          .filter(Boolean)
+          .map(s => String(s).replace(/^#/, '').trim().toLowerCase())
+      );
+      for (const fbBtn of (fallbackDom.buttons || [])) {
+        const fbKey = String(fbBtn.id || fbBtn.name || fbBtn.text || fbBtn.selectorValue || '').replace(/^#/, '').trim().toLowerCase();
+        if (fbKey && !existingBtnKeys.has(fbKey)) {
+          existingBtnKeys.add(fbKey);
+          combinedRawButtons.push(fbBtn);
+        }
+      }
+
       const resolvedUnmatched = unmatchedSelector || UnmatchedSelector || null;
       return {
         pageUrl: pageUrl || '',
@@ -2875,24 +3074,40 @@ export class AuthSessionManager {
         csrfField: this.csrfFormField || dom?.csrf?.formField || null,
         pageErrorBanner: pageErrorBanner || null,
         unmatchedSelector: resolvedUnmatched,
-        inputs: (dom?.inputs || []).slice(0, 30).map(inp => {
+        inputs: combinedRawInputs.slice(0, 40).map(inp => {
           const key = inp.name || inp.id || inp.selectorValue;
+          const isHidden = inp.type === 'hidden';
           const filled =
             (key ? filledFields.get(key) : null) ||
             (inp.id ? filledFields.get(inp.id) : null) ||
             (inp.name ? filledFields.get(inp.name) : null) ||
             null;
+          const hiddenAutoValue = isHidden
+            ? (this.csrfFormField && (inp.name === this.csrfFormField || inp.id === this.csrfFormField) && this.csrfFormValue
+                ? this.csrfFormValue
+                : (inp.value || pendingInputs[inp.name] || ''))
+            : '';
           return {
             id: inp.id || '',
             name: inp.name || '',
             type: inp.type || 'text',
             label: inp.label || inp.placeholder || inp.name || inp.id || 'input',
-            selectorType: inp.selectorType || 'id',
+            displayLabel: inp.displayLabel || inp.label || inp.name || inp.id || 'input',
+            selectorType: inp.selectorType || (inp.id ? 'id' : 'name'),
             selectorValue: inp.selectorValue || inp.id || inp.name || '',
             isPassword: Boolean(inp.isPassword),
             isOtpCandidate: Boolean(inp.isOtpCandidate),
-            isFilled: Boolean(filled),
-            filledValueMasked: filled ? filled.maskedValue : '',
+            isHidden,
+            isCsrf: Boolean(
+              isCsrfFieldName(inp.name || inp.id || '') ||
+              (this.csrfFormField && (inp.name === this.csrfFormField || inp.id === this.csrfFormField))
+            ),
+            isFilled: Boolean(filled || (isHidden && hiddenAutoValue)),
+            filledValueMasked: filled
+              ? filled.maskedValue
+              : (isHidden && hiddenAutoValue
+                  ? `${String(hiddenAutoValue).slice(0, 18)}${String(hiddenAutoValue).length > 18 ? '…' : ''} (Auto-Harvested)`
+                  : ''),
             boundVariable: filled ? filled.boundVariable : '',
             isCurrentStepTarget: Boolean(
               activeInput &&
@@ -2905,7 +3120,7 @@ export class AuthSessionManager {
           };
         }),
         buttons: (() => {
-          const mapped = (dom?.buttons || []).slice(0, 20).map(btn => ({
+          const mapped = combinedRawButtons.slice(0, 25).map(btn => ({
             id: btn.id || '',
             name: btn.name || '',
             type: btn.type || 'submit',
@@ -2994,6 +3209,39 @@ export class AuthSessionManager {
       }
       return preInfo;
     };
+
+    // If sequence starts with change_input / fill_otp / click_button without an explicit initial navigate step,
+    // perform an automatic preflight GET to currentPageUrl so form DOM, input names (e.g. LoginForm[username]), and CSRF tokens are loaded.
+    const firstSeqAction = this.loginSequence.actions[0];
+    if (
+      firstSeqAction &&
+      firstSeqAction.type !== 'navigate' &&
+      firstSeqAction.type !== 'custom_request' &&
+      currentPageUrl
+    ) {
+      try {
+        const preUrl = this._resolveAndVerifySequenceUrl(currentPageUrl, currentPageUrl, allowedOrigins);
+        const preRes = await fetchWithRetry(preUrl, {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+          followRedirects: true
+        });
+        if (preRes) {
+          this.ingestResponseHeaders(preRes.headers);
+          if (typeof preRes.url === 'string' && preRes.url) {
+            try {
+              currentPageUrl = this._resolveAndVerifySequenceUrl(preRes.url, preUrl, allowedOrigins);
+            } catch {}
+          }
+          ingestHtmlDomAndCsrf(preRes, currentPageUrl);
+          activeFormIndex = this._pickDefaultFormAndPopulateHidden(currentDom, pendingInputs);
+          lastResponse = preRes;
+          lastStatus = Number(preRes.status ?? 0);
+        }
+      } catch (preErr) {
+        if (isGovernanceOrSsrfError(preErr)) throw preErr;
+      }
+    }
 
     for (const step of this.loginSequence.actions) {
       const stepNum = this.recordedSteps.length + 1;
@@ -3087,7 +3335,7 @@ export class AuthSessionManager {
           finalizeStepRecord(
             stepRecord,
             stepIssues,
-            buildDomSnapshot(currentDom, stepUrl, 0, { pageErrorBanner: errMsg })
+            buildDomSnapshot(currentDom, stepUrl, 0, { pageErrorBanner: null })
           );
           continue;
         }
@@ -3261,7 +3509,19 @@ export class AuthSessionManager {
           pushUnresolvedVarIssues(stepIssues, stepNum, step.step, 'Change Input', unresolvedVars);
         }
 
-        pendingInputs[resolvedFieldName] = resolvedValue;
+        // If a user recorded a change_input step for a dynamic CSRF token field (e.g. YII_CSRF_TOKEN),
+        // prefer the fresh CSRF token harvested from the live GET response so stale recorded tokens do not break login
+        const freshCsrfForField = (
+          isCsrfFieldName(resolvedFieldName) &&
+          !explicitVarName &&
+          resolvedVars.length === 0 &&
+          ((this.csrfFormField === resolvedFieldName && this.csrfFormValue) ||
+           (matchedInput?.type === 'hidden' && matchedInput?.value))
+        )
+          ? (this.csrfFormField === resolvedFieldName && this.csrfFormValue ? this.csrfFormValue : matchedInput.value)
+          : null;
+
+        pendingInputs[resolvedFieldName] = freshCsrfForField || resolvedValue;
         const isSecret = Boolean(
           step.isSecret ||
           step.secretName ||
@@ -3510,11 +3770,30 @@ export class AuthSessionManager {
           ...(activeForm?.hiddenFields || {}),
           ...pendingInputs
         };
+        if (
+          matchedButton?.name &&
+          !FORBIDDEN_KEYS.has(matchedButton.name) &&
+          !Object.hasOwn(submitPayload, matchedButton.name)
+        ) {
+          submitPayload[matchedButton.name] = matchedButton.value || matchedButton.text || 'Submit';
+        }
         if (this.csrfFormField && (this.csrfFormValue || this.csrfHeaderValue) && !Object.hasOwn(submitPayload, this.csrfFormField)) {
           submitPayload[this.csrfFormField] = this.csrfFormValue || this.csrfHeaderValue;
         }
 
         const reqHeaders = this.getAuthHeaders();
+        const refererBase = currentPageUrl || this.loginUrl || '';
+        if (refererBase) {
+          try {
+            const refParsed = new URL(refererBase);
+            if (refParsed.protocol === 'http:' || refParsed.protocol === 'https:') {
+              reqHeaders.Referer = reqHeaders.Referer || refererBase;
+              if (method !== 'GET') {
+                reqHeaders.Origin = reqHeaders.Origin || refParsed.origin;
+              }
+            }
+          } catch {}
+        }
         let requestUrl = submitUrl;
         let requestBody;
 
@@ -3589,7 +3868,7 @@ export class AuthSessionManager {
             stepIssues,
             buildDomSnapshot(preSubmitDom || currentDom, requestUrl, 0, {
               clickedButton: matchedButton,
-              pageErrorBanner: errMsg,
+              pageErrorBanner: null,
               unmatchedSelector: buttonUnmatchedSel
             })
           );
@@ -3646,10 +3925,24 @@ export class AuthSessionManager {
         lastStatus = Number(finalRes?.status ?? 0);
         ingestHtmlDomAndCsrf(finalRes, currentPageUrl);
 
+        if (
+          !gotSubmitAuthArtifact &&
+          this.cookies.size > 0 &&
+          lastStatus >= 200 &&
+          lastStatus < 400 &&
+          (
+            (Boolean(redirectedTo) && (!currentDom || !currentDom.hasPasswordInput)) ||
+            (Boolean(preSubmitDom?.hasPasswordInput) && Boolean(currentDom && !currentDom.hasPasswordInput))
+          )
+        ) {
+          gotSubmitAuthArtifact = true;
+        }
+
         const pageErr = extractLoginErrorFromResponse(finalRes?.text || '', lastStatus);
-        const snapshotDomForClick = (currentDom && (currentDom.inputs.length > 0 || currentDom.buttons.length > 0))
-          ? currentDom
-          : (preSubmitDom || currentDom);
+        // Always preserve the pre-submit form DOM on a click_button step snapshot so the user sees all login inputs that were submitted
+        const snapshotDomForClick = (preSubmitDom && (preSubmitDom.inputs.length > 0 || preSubmitDom.buttons.length > 0))
+          ? preSubmitDom
+          : (currentDom || preSubmitDom);
         const clickDomSnapshot = buildDomSnapshot(snapshotDomForClick, currentPageUrl, lastStatus, {
           clickedButton: matchedButton,
           pageErrorBanner: pageErr,
@@ -3926,7 +4219,7 @@ export class AuthSessionManager {
           finalizeStepRecord(
             stepRecord,
             stepIssues,
-            buildDomSnapshot(currentDom, finalReqUrl, 0, { pageErrorBanner: errMsg })
+            buildDomSnapshot(currentDom, finalReqUrl, 0, { pageErrorBanner: null })
           );
           continue;
         }
@@ -4044,6 +4337,8 @@ export class AuthSessionManager {
     }
     if (authenticated) {
       this.authenticatedAt = new Date().toISOString();
+      this.postLoginUrl = currentPageUrl || this.loginUrl || this.targetUrl || null;
+      this.postLoginHtml = typeof lastResponse?.text === 'string' ? lastResponse.text : null;
     }
 
     this.reauthCount += 1;
@@ -4052,6 +4347,7 @@ export class AuthSessionManager {
       authMethod: 'login_sequence',
       status: lastStatus,
       loginUrl: this.loginUrl || currentPageUrl || null,
+      postLoginUrl: this.postLoginUrl,
       sessionId: this.sessionId,
       authenticatedAt: this.authenticatedAt,
       cookieCount: this.cookies.size,
@@ -4212,6 +4508,18 @@ export class AuthSessionManager {
 
     const sendLoginRequest = async (target, method, contentType, payload, rawStringBody = null) => {
       const reqHeaders = this.getAuthHeaders();
+      const refererBase = this.loginUrl || target || '';
+      if (refererBase) {
+        try {
+          const refParsed = new URL(refererBase);
+          if (refParsed.protocol === 'http:' || refParsed.protocol === 'https:') {
+            reqHeaders.Referer = reqHeaders.Referer || refererBase;
+            if (method !== 'GET') {
+              reqHeaders.Origin = reqHeaders.Origin || refParsed.origin;
+            }
+          }
+        } catch {}
+      }
       let requestUrl = target;
       let requestBody;
 
@@ -4314,6 +4622,8 @@ export class AuthSessionManager {
     const authenticated = this._lastLoginRejected ? false : Boolean(this.bearerToken || this.cookies.size > 0);
     if (authenticated) {
       this.authenticatedAt = new Date().toISOString();
+      this.postLoginUrl = this.loginUrl || this.targetUrl || null;
+      this.postLoginHtml = typeof loginRes?.text === 'string' ? loginRes.text : null;
     }
 
     this.reauthCount += 1;
@@ -4321,6 +4631,7 @@ export class AuthSessionManager {
       authenticated,
       status: loginStatus,
       loginUrl: this.loginUrl,
+      postLoginUrl: this.postLoginUrl,
       sessionId: this.sessionId,
       authenticatedAt: this.authenticatedAt,
       cookieCount: this.cookies.size,
@@ -4354,6 +4665,8 @@ export class AuthSessionManager {
       sessionId: this.sessionId,
       targetUrl: this.targetUrl || this.loginUrl || null,
       loginUrl: this.loginUrl,
+      postLoginUrl: this.postLoginUrl || null,
+      ...(includeSecrets && this.postLoginHtml ? { postLoginHtml: this.postLoginHtml } : {}),
       loginMethod: this.loginMethod,
       loginContentType: this.loginContentType,
       username: this.username || null,

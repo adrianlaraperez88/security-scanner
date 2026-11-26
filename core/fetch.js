@@ -246,13 +246,20 @@ export async function dialPinnedSourceIpRequest(targetUrl, options = {}) {
         : 0;
 
   const allIps = canonicalizeResolvedIps(options.resolvedIps || []);
-  const candidateIps = allIps.filter(ip => {
+  const filteredIps = allIps.filter(ip => {
     const fam = net.isIP(ip);
     if (fam === 0) return false;
     if (wantedFamily === 4 && fam !== 4) return false;
     if (wantedFamily === 6 && fam !== 6) return false;
     return true;
   });
+  // When no explicit family is forced and both IPv4 and IPv6 exist, prefer IPv4 first to avoid dual-stack IPv6 blackhole timeouts
+  const candidateIps = (wantedFamily === 0 && !isIpHost)
+    ? [
+        ...filteredIps.filter(ip => net.isIP(ip) === 4),
+        ...filteredIps.filter(ip => net.isIP(ip) === 6)
+      ]
+    : filteredIps;
 
   if (candidateIps.length === 0) {
     const err = new Error(`no suitable address found for ${cleanHostname} (${allIps.join(', ') || 'none'})`);
@@ -272,6 +279,9 @@ export async function dialPinnedSourceIpRequest(targetUrl, options = {}) {
   const reqTimeout = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
     ? Number(options.timeout)
     : 10000;
+  const perIpTimeout = candidateIps.length > 1
+    ? Math.max(2500, Math.floor(Math.max(reqTimeout - 400, 2500) / Math.min(candidateIps.length, 3)))
+    : reqTimeout;
   const tlsRejectUnauthorized = options.tlsRejectUnauthorized !== undefined
     ? Boolean(options.tlsRejectUnauthorized)
     : false;
@@ -343,7 +353,7 @@ export async function dialPinnedSourceIpRequest(targetUrl, options = {}) {
       path: pathWithQuery,
       headers: reqHeaders,
       agent: pooledAgent,
-      timeout: reqTimeout,
+      timeout: perIpTimeout,
       // Explicitly pin lookup to the already-validated IP literal so Node never queries DNS
       lookup: (_hostname, lookupOpts, cb) => {
         const callback = typeof lookupOpts === 'function' ? lookupOpts : cb;
